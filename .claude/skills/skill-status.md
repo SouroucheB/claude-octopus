@@ -1,5 +1,6 @@
 ---
 name: skill-status
+user-invocable: true
 description: Show project progress dashboard and suggest next actions
 trigger: |
   AUTOMATICALLY ACTIVATE when user asks about:

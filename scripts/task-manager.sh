@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Task Manager Helper - Claude Code v2.1.16+ Task Management Integration
-# Provides task creation, updating, and tracking for multi-phase workflows
+# v8.41.0: Simplified — prefer native TodoWrite for Claude-side task tracking.
+# This script retains only orchestration-specific state (phase→task ID mapping)
+# and cleanup. TaskCreate/TaskUpdate text generation is deprecated in favor of
+# direct TodoWrite calls from within Claude's context.
 
 set -eo pipefail
 
@@ -51,87 +54,15 @@ get_task_id() {
     jq -r --arg phase "$phase" '.[$phase] // ""' "$TASK_STATE_FILE"
 }
 
-# Create workflow tasks for embrace (all 4 phases)
+# DEPRECATED: Use native TodoWrite directly from Claude's context instead.
+# These functions are kept for backward compatibility with orchestrate.sh callers.
 create_embrace_tasks() {
-    local prompt="$1"
-
-    echo -e "${CYAN}Creating workflow tasks...${NC}" >&2
-
-    # Note: Actual TaskCreate calls should be made by Claude in the main context
-    # This function outputs the task creation commands for Claude to execute
-
-    cat <<'EOF'
-# Task creation for Embrace workflow
-# Claude should execute these TaskCreate calls:
-
-TaskCreate({
-  subject: "Discover Phase - Multi-AI Research",
-  description: "Run multi-provider research using Codex, Gemini, and Claude for: PROMPT_PLACEHOLDER",
-  activeForm: "Running Discover phase research"
-})
-
-TaskCreate({
-  subject: "Define Phase - Consensus Building",
-  description: "Build consensus on requirements and approach based on Discover findings",
-  activeForm: "Building consensus in Define phase"
-})
-
-TaskCreate({
-  subject: "Develop Phase - Implementation",
-  description: "Implement solution with quality gates and multi-AI validation",
-  activeForm: "Developing solution with quality checks"
-})
-
-TaskCreate({
-  subject: "Deliver Phase - Final Validation",
-  description: "Validate, review, and deliver final output with quality certification",
-  activeForm: "Validating and delivering final output"
-})
-EOF
+    echo "# v8.41.0: Use TodoWrite directly for task tracking" >&2
+    echo "# Phase tasks: Discover, Define, Develop, Deliver" >&2
 }
 
-# Create a single phase task
 create_phase_task() {
-    local phase="$1"
-    local prompt="$2"
-
-    local subject activeForm description
-
-    case "$phase" in
-        probe|discover)
-            subject="Discover Phase - Multi-AI Research"
-            activeForm="Running multi-provider research"
-            description="Multi-provider research (Codex + Gemini + Claude) for: $prompt"
-            ;;
-        grasp|define)
-            subject="Define Phase - Consensus Building"
-            activeForm="Building consensus on requirements"
-            description="Building consensus on approach for: $prompt"
-            ;;
-        tangle|develop)
-            subject="Develop Phase - Implementation"
-            activeForm="Implementing with quality gates"
-            description="Implementation with multi-AI validation for: $prompt"
-            ;;
-        ink|deliver)
-            subject="Deliver Phase - Final Validation"
-            activeForm="Validating and delivering output"
-            description="Final validation and delivery for: $prompt"
-            ;;
-        *)
-            echo "ERROR: Unknown phase: $phase" >&2
-            return 1
-            ;;
-    esac
-
-    # Output task creation command for Claude to execute
-    cat <<EOF
-TaskCreate({
-  subject: "$subject",
-  description: "$description",
-  activeForm: "$activeForm"
-})
-EOF
+    echo "# v8.41.0: Use TodoWrite directly for phase task: ${1:-unknown}" >&2
 }
 
 # Get task status summary

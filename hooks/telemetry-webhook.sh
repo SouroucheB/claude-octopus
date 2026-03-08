@@ -1,6 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Claude Octopus Telemetry Webhook Hook
 # v8.29.0: PostToolUse hook that POSTs phase completion data to configured webhook URL
+# v8.41.0: HTTP hook alternative available — when SUPPORTS_HTTP_HOOKS=true (CC v2.1.63+),
+#   users can replace this shell hook with an HTTP hook entry in hooks.json:
+#   { "type": "http", "url": "<OCTOPUS_WEBHOOK_URL>", "timeout": 10 }
+#   This shell fallback remains for CC versions without HTTP hook support.
 # Only fires if OCTOPUS_WEBHOOK_URL is set — zero noise when unconfigured
 
 WEBHOOK_URL="${OCTOPUS_WEBHOOK_URL:-}"

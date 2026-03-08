@@ -161,7 +161,7 @@ fi
 # Test 8: Verify key commands exist
 echo ""
 echo "Test 8: Checking for essential commands..."
-ESSENTIAL_COMMANDS=("multi.md" "debate.md" "research.md" "review.md" "setup.md")
+ESSENTIAL_COMMANDS=("multi.md" "review.md" "discover.md" "embrace.md" "sys-setup.md")  # v8.41.0: debate/research/setup consolidated into skills
 MISSING_ESSENTIAL=0
 
 for essential in "${ESSENTIAL_COMMANDS[@]}"; do

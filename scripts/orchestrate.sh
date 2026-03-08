@@ -537,6 +537,8 @@ version_compare() {
 }
 
 detect_claude_code_version() {
+    # v8.41.0: Data-driven flag manifest at config/feature-flags.json
+    # Used by doctor diagnostics for validation. Runtime detection remains inline for speed.
     # v8.36.0: Support Factory AI Droid runtime alongside Claude Code
     if [[ "$OCTOPUS_HOST" == "factory" ]]; then
         if command -v droid &>/dev/null; then
@@ -1748,6 +1750,16 @@ _get_agent_model_raw() {
             provider="perplexity"
             ;;
     esac
+
+    # v8.41.0 Priority 0.5: Check native CC model settings (mixed models integration)
+    # When users configure models through Claude Code's native settings, respect those
+    # for claude-side agent types. This avoids duplicating model config in two places.
+    if [[ "$provider" == "claude" && -n "${CLAUDE_MODEL:-}" ]]; then
+        # CC sets CLAUDE_MODEL when user configures model preferences natively
+        log "DEBUG" "Model from native CC setting: CLAUDE_MODEL=${CLAUDE_MODEL} (tier 0.5)"
+        echo "${CLAUDE_MODEL}"
+        return 0
+    fi
 
     # Priority 1: Check environment variables
     if [[ "$provider" == "codex" && -n "${OCTOPUS_CODEX_MODEL:-}" ]]; then

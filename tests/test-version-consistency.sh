@@ -192,8 +192,8 @@ CORE_COMMANDS=(
     ".claude/commands/plan.md"
     ".claude/commands/embrace.md"
     ".claude/commands/multi.md"
-    ".claude/commands/debate.md"
-)
+    ".claude/commands/discover.md"
+)  # v8.41.0: debate consolidated into skill-debate.md with user-invocable: true
 
 missing_files=0
 for file in "${CORE_COMMANDS[@]}"; do

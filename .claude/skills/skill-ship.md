@@ -1,5 +1,6 @@
 ---
 name: skill-ship
+user-invocable: true
 description: Finalize and deliver completed work with Multi-AI validation
 trigger: |
   AUTOMATICALLY ACTIVATE when user mentions:

@@ -1,5 +1,6 @@
 ---
 name: skill-validate
+user-invocable: true
 description: Multi-AI validation combining debate, quality scoring, and issue extraction
 version: 1.0.0
 category: workflow

@@ -1,5 +1,6 @@
 ---
 name: skill-debate
+user-invocable: true
 aliases:
   - debate
 description: Structured three-way AI debates between Claude, Gemini, and Codex

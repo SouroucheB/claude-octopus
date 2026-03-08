@@ -1,5 +1,6 @@
 ---
 name: skill-issues
+user-invocable: true
 aliases:
   - issues
   - issue-tracking

@@ -1,5 +1,6 @@
 ---
 name: skill-rollback
+user-invocable: true
 description: Rollback to a previous checkpoint using git tags
 trigger: |
   AUTOMATICALLY ACTIVATE when user mentions:

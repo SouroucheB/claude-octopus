@@ -1,5 +1,6 @@
 ---
 name: skill-resume
+user-invocable: true
 description: Restore context from previous session and continue workflow
 trigger: |
   AUTOMATICALLY ACTIVATE when user mentions:

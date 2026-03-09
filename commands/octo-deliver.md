@@ -6,6 +6,12 @@ description: "Delivery phase - Review, validate, and test with multi-AI quality 
 
 ## 🤖 INSTRUCTIONS FOR CLAUDE
 
+### MANDATORY COMPLIANCE — DO NOT SKIP
+
+**When the user explicitly invokes `/octo:deliver`, you MUST execute the structured workflow below.** You are PROHIBITED from doing the task directly, skipping the validation/review phase, or deciding the task is "too simple" for this workflow. The user chose this command deliberately — respect that choice.
+
+---
+
 When the user invokes this command (e.g., `/octo:deliver <arguments>`):
 
 **✓ CORRECT - Use the Skill tool:**
@@ -19,6 +25,29 @@ Task(subagent_type: "octo:deliver", ...)  ❌ Wrong! This is a skill, not an age
 ```
 
 **Why:** This command loads the `flow-deliver` skill. Skills use the `Skill` tool, not `Task`.
+
+### Post-Completion — Interactive Next Steps
+
+**CRITICAL: After the skill completes, you MUST ask the user what to do next. Do NOT end the session silently.**
+
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "Delivery/validation phase complete. What would you like to do next?",
+      header: "Next Steps",
+      multiSelect: false,
+      options: [
+        {label: "Address findings", description: "Fix issues identified in the review"},
+        {label: "Run another review pass", description: "Re-validate after fixes"},
+        {label: "Ship it", description: "Findings are acceptable, proceed to deployment"},
+        {label: "Export the review", description: "Save validation results as a document"},
+        {label: "Done for now", description: "I have what I need"}
+      ]
+    }
+  ]
+})
+```
 
 ---
 
@@ -55,11 +84,6 @@ Use deliver when you need:
 - **Validation**: "Validate Z"
 - **Testing**: "Test the implementation"
 - **Quality Check**: "Check if X works correctly"
-
-**Don't use deliver for:**
-- Implementation tasks (use develop phase)
-- Research tasks (use discover phase)
-- Requirement definition (use define phase)
 
 ## Part of the Full Workflow
 

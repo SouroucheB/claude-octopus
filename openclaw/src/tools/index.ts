@@ -67,6 +67,7 @@ export const SKILL_REGISTRY: SkillRegistryEntry[] = [
   { name: "sys-configure", description: "Configure Claude Octopus providers and preferences", type: "skill", file: "sys-configure.md" },
   { name: "brainstorm", description: "Start a creative thought partner brainstorming session", type: "command", file: "brainstorm.md" },
   { name: "claw", description: "OpenClaw instance administration — manage hosts across macOS, Ubuntu/Debian, Docker, OCI, and Proxmox", type: "command", file: "claw.md" },
+  { name: "debate", description: "AI Debate Hub - Structured three-way debates between Claude, Gemini, and Codex", type: "command", file: "debate.md" },
   { name: "debug", description: "Systematic debugging with methodical problem investigation", type: "command", file: "debug.md" },
   { name: "deck", description: "Generate slide deck presentations from briefs or research", type: "command", file: "deck.md" },
   { name: "define", description: "Definition phase - Clarify and scope problems with multi-AI consensus", type: "command", file: "define.md" },
@@ -92,6 +93,7 @@ export const SKILL_REGISTRY: SkillRegistryEntry[] = [
   { name: "prd-score", description: "Score an existing PRD against the 100-point AI-optimization framework", type: "command", file: "prd-score.md" },
   { name: "prd", description: "Write an AI-optimized PRD using multi-AI orchestration and 100-point scoring framework", type: "command", file: "prd.md" },
   { name: "quick", description: "Quick execution mode for ad-hoc tasks without full workflow overhead", type: "command", file: "quick.md" },
+  { name: "research", description: "Deep research with multi-source synthesis and comprehensive analysis", type: "command", file: "research.md" },
   { name: "review", description: "Expert code review with comprehensive quality assessment and security analysis", type: "command", file: "review.md" },
   { name: "schedule", description: "Manage scheduled workflow jobs (add/list/remove/enable/disable/logs)", type: "command", file: "schedule.md" },
   { name: "scheduler", description: "Manage the scheduled workflow runner daemon (start/stop/status)", type: "command", file: "scheduler.md" },
@@ -103,4 +105,4 @@ export const SKILL_REGISTRY: SkillRegistryEntry[] = [
   { name: "tdd", description: "Test-driven development with red-green-refactor discipline", type: "command", file: "tdd.md" },
 ];
 
-export const REGISTRY_COUNT = 86;
+export const REGISTRY_COUNT = 88;

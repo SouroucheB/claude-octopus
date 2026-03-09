@@ -1,3 +1,38 @@
+## [8.42.0] - 2026-03-08
+
+### Added
+
+- **Mandatory compliance blocks** on all 8 workflow commands (embrace, discover, define,
+  develop, deliver, plan, review, security) — Claude is now explicitly prohibited from
+  skipping workflows it judges "too simple." Addresses user reports of `/octo:embrace`
+  being bypassed for straightforward tasks.
+- **Interactive next-steps** after every workflow completes — all phase commands and embrace
+  now ask the user what to do next via `AskUserQuestion` instead of ending silently.
+- **Anti-injection nonces** (`sanitize_external_content()` in orchestrate.sh) — wraps
+  file-sourced content (memory files, provider history, earned skills) in random hex
+  boundary tokens to prevent prompt injection from untrusted external content.
+- **Session learnings layer** — `session-end.sh` now writes `octopus-learnings.md` to
+  auto-memory with per-session meta-reflection (workflow, phase, agent calls, errors, debate).
+- **Feature gap analysis** — `docs/FEATURE-GAP.md` living document tracks all 72 CC feature
+  flags with Green/Yellow/Red adoption status and gap closure history.
+- **Multi-LLM debate gates** in embrace, plan, review, security, and define commands —
+  optional Claude + Codex + Gemini deliberation at workflow transition points.
+
+### Fixed
+
+- Reinstated `/octo:debate` and `/octo:research` commands wrongly removed in v8.41.0
+  consolidation. These had unique standalone functionality (three-way AI debates and
+  deep multi-AI research respectively).
+- Removed "Don't use for" sections from phase commands that contradicted mandatory
+  compliance blocks and encouraged Claude to skip workflows.
+- Command count corrected: 36 → 38 (debate + research reinstated).
+
+### Changed
+
+- OpenClaw registry updated: 86 → 88 entries (debate + research commands).
+- All debate-related options across commands now explicitly say "Multi-LLM" and name
+  all three models (Claude + Codex + Gemini) so users understand what they're enabling.
+
 ## [8.41.0] - 2026-03-07
 
 ### Added

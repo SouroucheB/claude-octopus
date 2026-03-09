@@ -1,3 +1,11 @@
+## [8.46.0] - 2026-03-09
+
+### Changed
+
+- Skill directive WHY reasoning, improved descriptions for better triggering
+
+---
+
 ## [8.45.0] - 2026-03-09
 
 ### Added

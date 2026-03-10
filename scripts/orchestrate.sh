@@ -1045,6 +1045,8 @@ select_opus_mode() {
 # Note: "API-key only" models require OPENAI_API_KEY; they are NOT available via ChatGPT subscription/OAuth.
 get_agent_command() {
     local agent_type="$1"
+    local phase="${2:-}"
+    local role="${3:-}"
     local model=""
 
     # Configurable sandbox mode (v7.13.1 - Issue #9)
@@ -1067,23 +1069,23 @@ get_agent_command() {
 
     case "$agent_type" in
         codex|codex-standard|codex-max|codex-mini|codex-general)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             echo "codex exec --model ${model} ${sandbox_flag}"
             ;;
         codex-spark)  # v8.9.0: Ultra-fast Spark model (1000+ tok/s)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             echo "codex exec --model ${model} ${sandbox_flag}"
             ;;
         codex-reasoning)  # v8.9.0: Reasoning models (o3, o4-mini)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             echo "codex exec --model ${model} ${sandbox_flag}"
             ;;
         codex-large-context)  # v8.9.0: 1M context models (gpt-4.1)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             echo "codex exec --model ${model} ${sandbox_flag}"
             ;;
         gemini|gemini-fast|gemini-image)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             # v8.10.0: Fixed headless mode (Issue #25)
             # Prompt delivered via stdin by callers (avoids OS arg limits)
             # Callers add -p "" for headless mode trigger
@@ -1113,7 +1115,7 @@ get_agent_command() {
         openrouter-kimi) echo "openrouter_execute_model moonshotai/kimi-k2.5" ;; # v8.11.0: Kimi K2.5 via OpenRouter
         openrouter-deepseek) echo "openrouter_execute_model deepseek/deepseek-r1" ;; # v8.11.0: DeepSeek R1 via OpenRouter
         perplexity|perplexity-fast)  # v8.24.0: Perplexity Sonar — web-grounded research (Issue #22)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             echo "perplexity_execute $model"
             ;;
         *) return 1 ;;
@@ -1127,6 +1129,8 @@ get_agent_command() {
 get_agent_command_array() {
     local agent_type="$1"
     local -n _cmd_array="$2"  # nameref for array output
+    local phase="${3:-}"
+    local role="${4:-}"
     local model=""
 
     # Configurable sandbox mode (v7.13.1 - Issue #9)
@@ -1134,23 +1138,23 @@ get_agent_command_array() {
 
     case "$agent_type" in
         codex|codex-standard|codex-max|codex-mini|codex-general)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             _cmd_array=(codex exec --model "$model" --sandbox "$codex_sandbox")
             ;;
         codex-spark)  # v8.9.0: Ultra-fast Spark model
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             _cmd_array=(codex exec --model "$model" --sandbox "$codex_sandbox")
             ;;
         codex-reasoning)  # v8.9.0: Reasoning models (o3, o4-mini)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             _cmd_array=(codex exec --model "$model" --sandbox "$codex_sandbox")
             ;;
         codex-large-context)  # v8.9.0: 1M context models (gpt-4.1)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             _cmd_array=(codex exec --model "$model" --sandbox "$codex_sandbox")
             ;;
         gemini|gemini-fast|gemini-image)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             # v8.10.0: Fixed headless mode (Issue #25)
             # Prompt delivered via stdin by callers (avoids OS arg limits)
             # Callers add -p "" for headless mode trigger
@@ -1173,7 +1177,7 @@ get_agent_command_array() {
         openrouter-kimi)     _cmd_array=(openrouter_execute_model "moonshotai/kimi-k2.5") ;; # v8.11.0: Kimi K2.5
         openrouter-deepseek) _cmd_array=(openrouter_execute_model "deepseek/deepseek-r1") ;; # v8.11.0: DeepSeek R1
         perplexity|perplexity-fast)  # v8.24.0: Perplexity Sonar (Issue #22)
-            model=$(get_agent_model "$agent_type")
+            model=$(get_agent_model "$agent_type" "$phase" "$role")
             _cmd_array=(perplexity_execute "$model")
             ;;
         *) return 1 ;;
@@ -1265,47 +1269,455 @@ get_model_pricing() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODEL CATALOG (v8.49.0)
+# Centralized metadata: context window, capabilities, provider, tier, status.
+# Used by capability-aware fallbacks and health checks.
+# Format: context_k|tools|images|reasoning|provider|tier|status
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Get model capabilities metadata
+# Returns: context_k|tools|images|reasoning|provider|tier|status
+get_model_catalog() {
+    local model="$1"
+    case "$model" in
+        # OpenAI GPT-5.x
+        gpt-5.4)                echo "400|yes|yes|no|codex|premium|active" ;;
+        gpt-5.4-pro)            echo "400|yes|yes|no|codex|premium|active" ;;
+        gpt-5.3-codex)          echo "400|yes|yes|no|codex|standard|active" ;;
+        gpt-5.3-codex-spark)    echo "128|yes|no|no|codex|standard|active" ;;
+        gpt-5.2-codex)          echo "400|yes|yes|no|codex|standard|active" ;;
+        gpt-5-codex-mini)       echo "400|yes|no|no|codex|budget|active" ;;
+        gpt-5.1-codex-mini)     echo "400|yes|no|no|codex|budget|active" ;;
+        gpt-5.1-codex-max)      echo "400|yes|yes|no|codex|standard|active" ;;
+        # Reasoning models
+        o3)                     echo "200|yes|no|yes|codex|premium|active" ;;
+        o3-pro)                 echo "200|yes|no|yes|codex|premium|active" ;;
+        o4-mini)                echo "200|yes|no|yes|codex|budget|active" ;;
+        o3-mini)                echo "200|yes|no|yes|codex|budget|active" ;;
+        # Large context
+        gpt-4.1)                echo "1000|yes|yes|no|codex|standard|active" ;;
+        gpt-4.1-mini)           echo "1000|yes|no|no|codex|budget|active" ;;
+        # Gemini
+        gemini-3-pro-preview)   echo "1000|yes|yes|no|gemini|premium|active" ;;
+        gemini-3-flash-preview) echo "1000|yes|no|no|gemini|budget|active" ;;
+        gemini-3-pro-image-preview) echo "1000|yes|yes|no|gemini|premium|active" ;;
+        # Claude
+        claude-sonnet-4.6)      echo "200|yes|yes|no|claude|standard|active" ;;
+        claude-opus-4.6)        echo "200|yes|yes|yes|claude|premium|active" ;;
+        claude-opus-4.6-fast)   echo "200|yes|yes|yes|claude|premium|active" ;;
+        # OpenRouter
+        z-ai/glm-5)             echo "203|yes|no|no|openrouter|standard|active" ;;
+        moonshotai/kimi-k2.5)   echo "262|yes|yes|no|openrouter|standard|active" ;;
+        deepseek/deepseek-r1)   echo "164|yes|no|yes|openrouter|standard|active" ;;
+        # Perplexity
+        sonar-pro)              echo "128|no|no|no|perplexity|standard|active" ;;
+        sonar)                  echo "128|no|no|no|perplexity|budget|active" ;;
+        # Unknown
+        *)                      echo "128|yes|no|no|unknown|standard|unknown" ;;
+    esac
+}
+
+# Check if a model is known in the catalog
+is_known_model() {
+    local model="$1"
+    local catalog
+    catalog=$(get_model_catalog "$model")
+    local status="${catalog##*|}"
+    [[ "$status" != "unknown" ]]
+}
+
+# Get a specific capability from the catalog
+# Usage: get_model_capability <model> <field>
+# Fields: context_k, tools, images, reasoning, provider, tier, status
+get_model_capability() {
+    local model="$1"
+    local field="$2"
+    local catalog
+    catalog=$(get_model_catalog "$model")
+
+    case "$field" in
+        context_k) echo "$catalog" | cut -d'|' -f1 ;;
+        tools)     echo "$catalog" | cut -d'|' -f2 ;;
+        images)    echo "$catalog" | cut -d'|' -f3 ;;
+        reasoning) echo "$catalog" | cut -d'|' -f4 ;;
+        provider)  echo "$catalog" | cut -d'|' -f5 ;;
+        tier)      echo "$catalog" | cut -d'|' -f6 ;;
+        status)    echo "$catalog" | cut -d'|' -f7 ;;
+    esac
+}
+
+# List all known models for a provider, optionally filtered by capability
+# Usage: list_models [provider] [--tools] [--images] [--reasoning] [--tier budget|standard|premium]
+list_models() {
+    local filter_provider="${1:-}"
+    shift || true
+    local require_tools="" require_images="" require_reasoning="" require_tier=""
+    for arg in "$@"; do
+        case "$arg" in
+            --tools) require_tools="yes" ;;
+            --images) require_images="yes" ;;
+            --reasoning) require_reasoning="yes" ;;
+            --tier) require_tier="$2"; shift ;;
+        esac
+    done
+
+    local -a all_models=(
+        gpt-5.4 gpt-5.4-pro gpt-5.3-codex gpt-5.3-codex-spark gpt-5.2-codex
+        gpt-5-codex-mini gpt-5.1-codex-max
+        o3 o3-pro o4-mini o3-mini
+        gpt-4.1 gpt-4.1-mini
+        gemini-3-pro-preview gemini-3-flash-preview gemini-3-pro-image-preview
+        claude-sonnet-4.6 claude-opus-4.6 claude-opus-4.6-fast
+        z-ai/glm-5 moonshotai/kimi-k2.5 deepseek/deepseek-r1
+        sonar-pro sonar
+    )
+
+    for model in "${all_models[@]}"; do
+        local catalog
+        catalog=$(get_model_catalog "$model")
+        local ctx tools images reasoning provider tier status
+        IFS='|' read -r ctx tools images reasoning provider tier status <<< "$catalog"
+
+        # Apply filters
+        [[ -n "$filter_provider" && "$provider" != "$filter_provider" ]] && continue
+        [[ -n "$require_tools" && "$tools" != "yes" ]] && continue
+        [[ -n "$require_images" && "$images" != "yes" ]] && continue
+        [[ -n "$require_reasoning" && "$reasoning" != "yes" ]] && continue
+        [[ -n "$require_tier" && "$tier" != "$require_tier" ]] && continue
+
+        local pricing
+        pricing=$(get_model_pricing "$model")
+        local in_price="${pricing%%:*}"
+        local out_price="${pricing##*:}"
+        printf "%-25s %5sK  tools=%-3s img=%-3s rsn=%-3s  \$%s/\$%s MTok  [%s]\n" \
+            "$model" "$ctx" "$tools" "$images" "$reasoning" "$in_price" "$out_price" "$tier"
+    done
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PRE-DISPATCH HEALTH CHECKS (v8.49.0)
+# Verify provider CLI availability and credentials before running agents.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Check if a provider is healthy (CLI available + credentials present)
+# Returns 0 if healthy, 1 if unhealthy. Prints diagnostic to stderr.
+check_provider_health() {
+    local provider="$1"
+    local errors=0
+
+    case "$provider" in
+        codex)
+            if ! command -v codex &>/dev/null; then
+                echo "codex CLI not found in PATH" >&2
+                return 1
+            fi
+            # Check for either OAuth or API key
+            if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+                # Check if OAuth is configured (codex auth status)
+                if ! codex auth status &>/dev/null 2>&1; then
+                    echo "codex: no OPENAI_API_KEY and OAuth not configured" >&2
+                    return 1
+                fi
+            fi
+            ;;
+        gemini)
+            if ! command -v gemini &>/dev/null; then
+                echo "gemini CLI not found in PATH" >&2
+                return 1
+            fi
+            if [[ -z "${GEMINI_API_KEY:-}" ]] && [[ -z "${GOOGLE_API_KEY:-}" ]]; then
+                # Gemini CLI may use gcloud auth
+                if ! command -v gcloud &>/dev/null; then
+                    echo "gemini: no API key and gcloud not available" >&2
+                    return 1
+                fi
+            fi
+            ;;
+        claude)
+            if ! command -v claude &>/dev/null; then
+                echo "claude CLI not found in PATH" >&2
+                return 1
+            fi
+            ;;
+        perplexity)
+            if [[ -z "${PERPLEXITY_API_KEY:-}" ]]; then
+                echo "perplexity: PERPLEXITY_API_KEY not set" >&2
+                return 1
+            fi
+            ;;
+        openrouter)
+            if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+                echo "openrouter: OPENROUTER_API_KEY not set" >&2
+                return 1
+            fi
+            ;;
+    esac
+    return 0
+}
+
+# Run health checks for all configured providers, return summary
+# Usage: check_all_providers
+check_all_providers() {
+    local healthy=0 unhealthy=0
+    local -a results=()
+
+    for provider in codex gemini claude perplexity openrouter; do
+        local diag
+        if diag=$(check_provider_health "$provider" 2>&1); then
+            results+=("  ✓ $provider")
+            ((healthy++))
+        else
+            results+=("  ✗ $provider: $diag")
+            ((unhealthy++))
+        fi
+    done
+
+    echo "Provider Health Check:"
+    printf '%s\n' "${results[@]}"
+    echo "  ($healthy healthy, $unhealthy unavailable)"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CAPABILITY-AWARE FALLBACKS (v8.49.0)
+# When a model is unavailable or blocked, fall back to one with matching
+# capabilities (tool support, image input, reasoning, context window).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Find a fallback model that matches the required capabilities
+# Usage: find_capable_fallback <blocked_model> <provider>
+# Returns: fallback model name or empty if none found
+find_capable_fallback() {
+    local blocked_model="$1"
+    local provider="$2"
+
+    # Get capabilities of the blocked model
+    local catalog
+    catalog=$(get_model_catalog "$blocked_model")
+    local req_ctx req_tools req_images req_reasoning _prov _tier _status
+    IFS='|' read -r req_ctx req_tools req_images req_reasoning _prov _tier _status <<< "$catalog"
+
+    # Get all models for this provider, sorted by cost (cheapest first)
+    local -a candidates=()
+    case "$provider" in
+        codex)
+            candidates=(gpt-5-codex-mini gpt-5.2-codex gpt-5.3-codex gpt-5.4 o4-mini o3 gpt-4.1-mini gpt-4.1) ;;
+        gemini)
+            candidates=(gemini-3-flash-preview gemini-3-pro-preview) ;;
+        claude)
+            candidates=(claude-sonnet-4.6 claude-opus-4.6) ;;
+        openrouter)
+            candidates=(z-ai/glm-5 moonshotai/kimi-k2.5 deepseek/deepseek-r1) ;;
+        perplexity)
+            candidates=(sonar sonar-pro) ;;
+    esac
+
+    for candidate in "${candidates[@]}"; do
+        [[ "$candidate" == "$blocked_model" ]] && continue
+
+        local c_catalog
+        c_catalog=$(get_model_catalog "$candidate")
+        local c_ctx c_tools c_images c_reasoning
+        IFS='|' read -r c_ctx c_tools c_images c_reasoning _ _ _ <<< "$c_catalog"
+
+        # Check capability match
+        [[ "$req_tools" == "yes" && "$c_tools" != "yes" ]] && continue
+        [[ "$req_images" == "yes" && "$c_images" != "yes" ]] && continue
+        [[ "$req_reasoning" == "yes" && "$c_reasoning" != "yes" ]] && continue
+
+        echo "$candidate"
+        return 0
+    done
+
+    # No capable fallback found
+    return 1
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PERFORMANCE: Phase-optimized model tier selection (v8.7.0)
 # Selects budget/standard/premium model tier based on phase, role, and agent type
 # Config: OCTOPUS_COST_MODE=premium|standard|budget (default: standard)
 # ═══════════════════════════════════════════════════════════════════════════════
 OCTOPUS_COST_MODE="${OCTOPUS_COST_MODE:-standard}"
 
-select_model_tier() {
-    local phase="$1"
-    local role="${2:-none}"
-    local agent_type="$3"
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION v3.0: Unified Model Resolver (v8.50.0)
+# Consolidated logic for provider, phase, and role-based model selection.
+# Precedence: Env Var > Session Override > Phase/Role Routing > Capability > Tier > Defaults
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    # Override: if cost mode is explicitly set, use it uniformly
-    if [[ "$OCTOPUS_COST_MODE" == "budget" || "$OCTOPUS_COST_MODE" == "premium" ]]; then
-        echo "$OCTOPUS_COST_MODE"
-        return
+# resolve_octopus_model <provider> <agent_type> <phase> <role>
+resolve_octopus_model() {
+    local provider="$1"
+    local agent_type="$2"
+    local phase="${3:-}"
+    local role="${4:-}"
+    local config_file="${HOME}/.claude-octopus/config/providers.json"
+    local resolved_model=""
+
+    # 0. Session Cache (v8.51.0)
+    # Uses a process-local memory cache + optional file-based cache for cross-process speed
+    local cache_key
+    # v8.49.0: Field-delimited cache key prevents collisions
+    # (e.g., provider="codex" + type="spark" must differ from type="codex-spark")
+    local safe_p="${provider//[^a-zA-Z0-9]/_}"
+    local safe_a="${agent_type//[^a-zA-Z0-9]/_}"
+    local safe_ph="${phase//[^a-zA-Z0-9]/_}"
+    local safe_r="${role//[^a-zA-Z0-9]/_}"
+    cache_key="MC_${safe_p}_A_${safe_a}_P_${safe_ph}_R_${safe_r}"
+    local cached_val
+    eval "cached_val=\"\${_OCTO_MODEL_CACHE_${cache_key}:-}\""
+    if [[ -n "$cached_val" ]]; then
+        echo "$cached_val"
+        return 0
     fi
 
-    # Standard mode: phase-aware tier selection
-    case "$phase" in
-        probe|discover)
-            case "$agent_type" in
-                claude*) echo "standard" ;;
-                *)       echo "budget" ;;
-            esac
-            ;;
-        tangle|develop)
-            case "$agent_type" in
-                claude*) echo "premium" ;;
-                *)       echo "standard" ;;
-            esac
-            ;;
-        ink|deliver)
-            echo "standard"
-            ;;
-        grasp|define)
-            echo "standard"
-            ;;
-        *)
-            echo "standard"
-            ;;
-    esac
+    # Persistent File Cache (optional, for parallel execution speed)
+    local persistent_cache="/tmp/octo-model-cache-${USER}-${CLAUDE_CODE_SESSION:-global}.json"
+    # v8.49.0: Invalidate cache if config file changed since cache was written
+    if [[ -f "$persistent_cache" && -f "$config_file" && "$config_file" -nt "$persistent_cache" ]]; then
+        rm -f "$persistent_cache"
+    fi
+    if [[ -f "$persistent_cache" ]] && command -v jq &>/dev/null; then
+        cached_val=$(jq -r ".\"$cache_key\" // empty" "$persistent_cache" 2>/dev/null)
+        if [[ -n "$cached_val" && "$cached_val" != "null" ]]; then
+            eval "_OCTO_MODEL_CACHE_${cache_key}=\"$cached_val\""
+            echo "$cached_val"
+            return 0
+        fi
+    fi
+
+    # v8.49.0: Resolution trace for debugging model selection
+    local _trace="${OCTOPUS_TRACE_MODELS:-}"
+    [[ -n "$_trace" ]] && echo "[model-trace] Resolving: provider=$provider type=$agent_type phase=${phase:-<none>} role=${role:-<none>}" >&2
+
+    # 1. Force/Session Overrides (Env vars)
+    local env_var="OCTOPUS_$(echo "$provider" | tr '[:lower:]' '[:upper:]' | tr '-' '_')_MODEL"
+    if [[ -n "${!env_var:-}" ]]; then
+        resolved_model="${!env_var}"
+        [[ -n "$_trace" ]] && echo "[model-trace] Tier 1 (env $env_var): ${!env_var} ← SELECTED" >&2
+    elif [[ -n "$_trace" ]]; then
+        echo "[model-trace] Tier 1 (env $env_var): —" >&2
+    fi
+
+    # v8.41.0 Priority 0.5: Check native CC model settings
+    if [[ -z "$resolved_model" && "$provider" == "claude" && -n "${CLAUDE_MODEL:-}" ]]; then
+        resolved_model="${CLAUDE_MODEL}"
+        [[ -n "$_trace" ]] && echo "[model-trace] Tier 0.5 (CC native CLAUDE_MODEL): $CLAUDE_MODEL ← SELECTED" >&2
+    fi
+
+    # Config file lookups
+    if [[ -z "$resolved_model" && -f "$config_file" ]] && command -v jq &> /dev/null; then
+        # Load config once for this resolution tree
+        local config_data
+        config_data=$(cat "$config_file")
+
+        # Priority 1b: Session-only config overrides
+        resolved_model=$(echo "$config_data" | jq -r ".overrides.${provider} // empty" 2>/dev/null)
+        if [[ -n "$resolved_model" && "$resolved_model" != "null" ]]; then
+            [[ -n "$_trace" ]] && echo "[model-trace] Tier 2 (session override): $resolved_model ← SELECTED" >&2
+        else
+            [[ -n "$_trace" ]] && echo "[model-trace] Tier 2 (session override): —" >&2
+        fi
+
+        # 2. Phase/Role Routing
+        if [[ -z "$resolved_model" || "$resolved_model" == "null" ]]; then
+            local routed=""
+            if [[ -n "$phase" ]]; then
+                routed=$(echo "$config_data" | jq -r ".routing.phases.\"${phase}\" // empty" 2>/dev/null)
+            fi
+            if [[ -z "$routed" || "$routed" == "null" ]] && [[ -n "$role" ]]; then
+                routed=$(echo "$config_data" | jq -r ".routing.roles.\"${role}\" // empty" 2>/dev/null)
+            fi
+
+            # Handle recursive reference (e.g. "codex:spark")
+            if [[ -n "$routed" && "$routed" != "null" ]]; then
+                if [[ "$routed" == *:* ]]; then
+                    local ref_provider="${routed%%:*}"
+                    local ref_type="${routed#*:}"
+                    resolved_model=$(resolve_octopus_model "$ref_provider" "$ref_type" "" "")
+                else
+                    resolved_model="$routed"
+                fi
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 3 (phase/role routing): $resolved_model ← SELECTED (route: $routed)" >&2
+            else
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 3 (phase/role routing): —" >&2
+            fi
+        fi
+
+        # 3. Capability Mapping (providers.codex.spark, etc)
+        if [[ -z "$resolved_model" || "$resolved_model" == "null" ]]; then
+            local capability=""
+            if [[ "$agent_type" == *-* ]]; then
+                capability="${agent_type#*-}"
+            else
+                capability="$agent_type"
+            fi
+
+            if [[ -n "$capability" && "$capability" != "$provider" ]]; then
+                # Support both short capability (spark) and full model aliases (spark_model)
+                resolved_model=$(echo "$config_data" | jq -r ".providers.${provider}.\"${capability}\" // .providers.${provider}.\"${capability}_model\" // empty" 2>/dev/null)
+            fi
+            if [[ -n "$resolved_model" && "$resolved_model" != "null" ]]; then
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 4 (capability map): $resolved_model ← SELECTED (cap: ${capability:-none})" >&2
+            else
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 4 (capability map): —" >&2
+            fi
+        fi
+
+        # 4. Tier Mapping
+        if [[ -z "$resolved_model" || "$resolved_model" == "null" ]]; then
+            if [[ -n "${OCTOPUS_COST_MODE:-}" && "${OCTOPUS_COST_MODE:-}" != "standard" ]]; then
+                resolved_model=$(echo "$config_data" | jq -r ".tiers.\"${OCTOPUS_COST_MODE}\".\"${provider}\" // empty" 2>/dev/null)
+                if [[ -n "$resolved_model" && "$resolved_model" =~ ^[a-z_]+$ ]]; then
+                    # Capability ref in tier map
+                    local tier_mapped_model
+                    tier_mapped_model=$(echo "$config_data" | jq -r ".providers.\"${provider}\".\"${resolved_model}\" // .providers.\"${provider}\".\"${resolved_model}_model\" // empty" 2>/dev/null)
+                    [[ -n "$tier_mapped_model" && "$tier_mapped_model" != "null" ]] && resolved_model="$tier_mapped_model"
+                fi
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 5 (cost mode ${OCTOPUS_COST_MODE}): ${resolved_model:-—}" >&2
+            fi
+        fi
+
+        # 5. Global Defaults
+        if [[ -z "$resolved_model" || "$resolved_model" == "null" ]]; then
+            resolved_model=$(echo "$config_data" | jq -r ".providers.${provider}.default // .providers.${provider}.model // empty" 2>/dev/null)
+            if [[ -n "$resolved_model" && "$resolved_model" != "null" ]]; then
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 6 (config default): $resolved_model ← SELECTED" >&2
+            else
+                [[ -n "$_trace" ]] && echo "[model-trace] Tier 6 (config default): —" >&2
+            fi
+        fi
+    fi
+
+    # Fallback to hard-coded defaults (Priority 7)
+    if [[ -z "$resolved_model" || "$resolved_model" == "null" ]]; then
+        case "$agent_type" in
+            codex*)          resolved_model="gpt-5.4" ;;
+            gemini-fast|gemini-flash) resolved_model="gemini-3-flash-preview" ;;
+            gemini*)         resolved_model="gemini-3-pro-preview" ;;
+            claude-opus*)    resolved_model="claude-opus-4.6" ;;
+            claude*)         resolved_model="claude-sonnet-4.6" ;;
+            perplexity-fast)  resolved_model="sonar" ;;
+            perplexity*)       resolved_model="sonar-pro" ;;
+            openrouter-glm*)  resolved_model="z-ai/glm-5" ;;
+            openrouter-kimi*) resolved_model="moonshotai/kimi-k2.5" ;;
+            openrouter-deepseek*) resolved_model="deepseek/deepseek-r1" ;;
+            *)              resolved_model="gpt-5.4" ;; # Safest universal fallback
+        esac
+        [[ -n "$_trace" ]] && echo "[model-trace] Tier 7 (hardcoded fallback): $resolved_model ← SELECTED" >&2
+    fi
+
+    [[ -n "$_trace" ]] && echo "[model-trace] ► Result: $resolved_model" >&2
+
+    # Update memory and persistent cache
+    eval "_OCTO_MODEL_CACHE_${cache_key}=\"$resolved_model\""
+    if command -v jq &>/dev/null; then
+        local cache_json="{}"
+        [[ -f "$persistent_cache" ]] && cache_json=$(cat "$persistent_cache")
+        echo "$cache_json" | jq --arg key "$cache_key" --arg val "$resolved_model" '.[$key] = $val' > "${persistent_cache}.tmp.$$" && mv "${persistent_cache}.tmp.$$" "$persistent_cache"
+    fi
+
+    echo "$resolved_model"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1378,59 +1790,6 @@ get_effort_level() {
     echo "$effort"
 }
 
-get_tier_model() {
-    local tier="$1"
-    local agent_type="$2"
-
-    case "$agent_type" in
-        codex-spark)  # v8.9.0: Spark always uses spark model
-            echo "gpt-5.4-codex-spark"
-            ;;
-        codex-reasoning)  # v8.9.0: Reasoning tier
-            case "$tier" in
-                budget)   echo "o4-mini" ;;
-                standard) echo "o4-mini" ;;
-                premium)  echo "o3" ;;
-                *)        echo "o4-mini" ;;
-            esac
-            ;;
-        codex-large-context)  # v8.9.0: Large context tier (1M tokens)
-            case "$tier" in
-                budget)   echo "gpt-4.1-mini" ;;
-                standard) echo "gpt-4.1" ;;
-                premium)  echo "gpt-4.1" ;;
-                *)        echo "gpt-4.1" ;;
-            esac
-            ;;
-        codex*)
-            case "$tier" in
-                budget)   echo "gpt-5-codex-mini" ;;
-                standard) echo "gpt-5.4" ;;
-                premium)  echo "gpt-5.4" ;;
-                *)        echo "gpt-5.4" ;;
-            esac
-            ;;
-        gemini*)
-            case "$tier" in
-                budget)   echo "gemini-3-flash-preview" ;;
-                standard) echo "gemini-3-pro-preview" ;;
-                premium)  echo "gemini-3-pro-preview" ;;
-                *)        echo "gemini-3-pro-preview" ;;
-            esac
-            ;;
-        claude-opus*)
-            echo "" ;; # Don't override opus selection
-        claude*)
-            case "$tier" in
-                premium)  echo "" ;; # Let caller decide on opus
-                *)        echo "" ;; # Use default
-            esac
-            ;;
-        *)
-            echo ""
-            ;;
-    esac
-}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PERFORMANCE: Convergence-based early termination (v8.7.0)
@@ -1647,8 +2006,8 @@ enforce_context_budget() {
     fi
 }
 
-# Migrate stale model names in providers.json to current defaults (Issue #39)
-# Runs once per session; rewrites config file in-place if stale models found.
+# Migrate stale model names and structural config changes
+# Runs once per session; rewrites config file in-place if migration needed.
 _PROVIDER_CONFIG_MIGRATED="${_PROVIDER_CONFIG_MIGRATED:-false}"
 migrate_provider_config() {
     [[ "$_PROVIDER_CONFIG_MIGRATED" == "true" ]] && return 0
@@ -1658,52 +2017,104 @@ migrate_provider_config() {
     [[ -f "$config_file" ]] || return 0
     command -v jq &>/dev/null || return 0
 
+    local version
+    version=$(jq -r '.version // "1.0"' "$config_file" 2>/dev/null)
+
+    # v3.0 Migration (structural refactor)
+    if [[ "$version" != "3.0" ]]; then
+        log "INFO" "Migrating provider config from v$version to v3.0 schema"
+        local tmp_file="${config_file}.tmp.$$"
+        
+        # Extract existing model preferences to seed v3.0
+        local codex_model gemini_model
+        codex_model=$(jq -r '.providers.codex.model // .providers.codex.default // "gpt-5.4"' "$config_file")
+        gemini_model=$(jq -r '.providers.gemini.model // .providers.gemini.default // "gemini-3-pro-preview"' "$config_file")
+        
+        cat > "$tmp_file" << EOF
+{
+  "version": "3.0",
+  "providers": {
+    "codex": {
+      "default": "$codex_model",
+      "fallback": "gpt-5.2-codex",
+      "spark": "gpt-5.3-codex-spark",
+      "mini": "gpt-5-codex-mini",
+      "reasoning": "o3",
+      "large_context": "gpt-4.1"
+    },
+    "gemini": {
+      "default": "$gemini_model",
+      "fallback": "gemini-3-flash-preview",
+      "flash": "gemini-3-flash-preview",
+      "image": "gemini-3-pro-image-preview"
+    }
+  },
+  "routing": {
+    "phases": {
+      "deliver": "codex:spark",
+      "review": "codex:spark",
+      "security": "codex:reasoning",
+      "research": "gemini:default"
+    },
+    "roles": {
+      "researcher": "perplexity"
+    }
+  },
+  "tiers": {
+    "budget": { "codex": "mini", "gemini": "flash" },
+    "standard": { "codex": "default", "gemini": "default" },
+    "premium": { "codex": "default", "gemini": "default" }
+  },
+  "overrides": {}
+}
+EOF
+        # Preserve overrides if they exist (v8.49.0: use --argjson for safe merge)
+        local overrides
+        overrides=$(jq -c '.overrides // {}' "$config_file")
+        jq --argjson ovr "$overrides" '.overrides = $ovr' "$tmp_file" > "${tmp_file}.2" && mv "${tmp_file}.2" "$config_file"
+        rm -f "$tmp_file"
+        log "INFO" "Migration to v3.0 complete"
+
+        # v8.49.0: Clear stale model cache after migration
+        rm -f "/tmp/octo-model-cache-${USER}-${CLAUDE_CODE_SESSION:-global}.json"
+    fi
+
     local changed=false
     local tmp_file="${config_file}.tmp.$$"
+    local content
+    content=$(cat "$config_file")
 
-    # Map of deprecated model names → current replacements
-    # Codex stale models (pre-GPT-5 era and wrong-provider models)
-    local -a stale_models=(
-        '.providers.codex.model'
+    # Map of paths to check for stale models
+    local -a stale_paths=(
+        '.providers.codex.default'
         '.providers.codex.fallback'
-        '.providers.gemini.model'
+        '.providers.gemini.default'
         '.providers.gemini.fallback'
         '.overrides.codex'
         '.overrides.gemini'
     )
 
-    local content
-    content=$(cat "$config_file")
-
-    for path in "${stale_models[@]}"; do
+    for path in "${stale_paths[@]}"; do
         local current_val
         current_val=$(echo "$content" | jq -r "$path // empty" 2>/dev/null) || continue
-        [[ -z "$current_val" ]] && continue
+        [[ -z "$current_val" || "$current_val" == "null" ]] && continue
 
         local replacement=""
         case "$current_val" in
-            # Codex models that are actually Claude models (wrong provider)
             claude-sonnet-4-5|claude-sonnet-4-5-20250514|claude-3-5-sonnet*|claude-sonnet-4*)
-                if [[ "$path" == *codex* ]]; then
-                    replacement="gpt-5.4"
-                fi
-                ;;
-            # Expired Gemini preview models
+                if [[ "$path" == *codex* ]]; then replacement="gpt-5.4"; fi ;;
             gemini-2.0-flash-thinking*|gemini-2.0-flash-exp*|gemini-exp-*)
-                replacement="gemini-3-flash-preview"
-                ;;
+                replacement="gemini-3-flash-preview" ;;
             gemini-2.0-pro*|gemini-1.5-pro*|gemini-pro)
-                replacement="gemini-3-pro-preview"
-                ;;
-            # Old GPT models for Codex
+                replacement="gemini-3-pro-preview" ;;
             gpt-4o*|gpt-4-turbo*|gpt-4-*|o1-*|chatgpt-*)
-                replacement="gpt-5.4"
-                ;;
+                replacement="gpt-5.4" ;;
         esac
 
         if [[ -n "$replacement" ]]; then
             log "WARN" "Migrating stale model in config: ${path} '${current_val}' → '${replacement}'"
-            content=$(echo "$content" | jq "${path} = \"${replacement}\"" 2>/dev/null) || continue
+            # v8.49.0: Use --arg to prevent injection via model names
+            content=$(echo "$content" | jq --arg val "$replacement" "${path} = \$val" 2>/dev/null) || continue
             changed=true
         fi
     done
@@ -1711,28 +2122,34 @@ migrate_provider_config() {
     if [[ "$changed" == "true" ]]; then
         echo "$content" > "$tmp_file" && mv "$tmp_file" "$config_file"
         log "INFO" "Updated ${config_file} with current model names"
+        # v8.49.0: Clear model cache after stale name migration
+        rm -f "/tmp/octo-model-cache-${USER}-${CLAUDE_CODE_SESSION:-global}.json"
     fi
 }
 
-# Get model for agent type with 4-tier precedence
-# Priority 1: Environment variables (OCTOPUS_CODEX_MODEL, OCTOPUS_GEMINI_MODEL)
-# Priority 2: Config file overrides (~/.claude-octopus/config/providers.json -> overrides)
-# Priority 3: Config file defaults (~/.claude-octopus/config/providers.json -> providers)
-# Priority 4: Hard-coded defaults (existing case statement)
+# Get model for agent type with v3.0 unified precedence
 get_agent_model() {
     local agent_type="$1"
-    local resolved_model
-    resolved_model=$(_get_agent_model_raw "$agent_type")
+    local phase="${2:-}"
+    local role="${3:-}"
+    
+    # Auto-migrate stale model names on first call
+    migrate_provider_config
 
-    # v8.31.0: Apply model restriction service if configured
+    # Determine base provider type
     local provider=""
     case "$agent_type" in
-        codex*) provider="codex" ;;
-        gemini*) provider="gemini" ;;
-        claude*) provider="claude" ;;
+        codex*)      provider="codex" ;;
+        gemini*)     provider="gemini" ;;
+        claude*)     provider="claude" ;;
         openrouter*) provider="openrouter" ;;
         perplexity*) provider="perplexity" ;;
     esac
+
+    local resolved_model
+    resolved_model=$(resolve_octopus_model "$provider" "$agent_type" "$phase" "$role")
+
+    # v8.31.0: Apply model restriction service if configured
     if [[ -n "$provider" ]]; then
         local fallback
         fallback=$(validate_model_allowed "$provider" "$resolved_model")
@@ -1742,111 +2159,6 @@ get_agent_model() {
         fi
     fi
     echo "$resolved_model"
-}
-
-_get_agent_model_raw() {
-    local agent_type="$1"
-    local config_file="${HOME}/.claude-octopus/config/providers.json"
-    local model=""
-
-    # Auto-migrate stale model names on first call (Issue #39)
-    migrate_provider_config
-
-    # Determine base provider type
-    local provider=""
-    case "$agent_type" in
-        codex|codex-standard|codex-max|codex-mini|codex-general|codex-review|codex-spark|codex-reasoning|codex-large-context)
-            provider="codex"
-            ;;
-        gemini|gemini-fast|gemini-image)
-            provider="gemini"
-            ;;
-        claude|claude-sonnet|claude-opus)
-            provider="claude"
-            ;;
-        openrouter|openrouter-glm5|openrouter-kimi|openrouter-deepseek)
-            provider="openrouter"
-            ;;
-        perplexity|perplexity-fast)
-            provider="perplexity"
-            ;;
-    esac
-
-    # v8.41.0 Priority 0.5: Check native CC model settings (mixed models integration)
-    # When users configure models through Claude Code's native settings, respect those
-    # for claude-side agent types. This avoids duplicating model config in two places.
-    if [[ "$provider" == "claude" && -n "${CLAUDE_MODEL:-}" ]]; then
-        # CC sets CLAUDE_MODEL when user configures model preferences natively
-        log "DEBUG" "Model from native CC setting: CLAUDE_MODEL=${CLAUDE_MODEL} (tier 0.5)"
-        echo "${CLAUDE_MODEL}"
-        return 0
-    fi
-
-    # Priority 1: Check environment variables
-    if [[ "$provider" == "codex" && -n "${OCTOPUS_CODEX_MODEL:-}" ]]; then
-        log "DEBUG" "Model from env var: OCTOPUS_CODEX_MODEL=${OCTOPUS_CODEX_MODEL} (tier 1)"
-        echo "${OCTOPUS_CODEX_MODEL}"
-        return 0
-    fi
-    if [[ "$provider" == "gemini" && -n "${OCTOPUS_GEMINI_MODEL:-}" ]]; then
-        log "DEBUG" "Model from env var: OCTOPUS_GEMINI_MODEL=${OCTOPUS_GEMINI_MODEL} (tier 1)"
-        echo "${OCTOPUS_GEMINI_MODEL}"
-        return 0
-    fi
-    if [[ "$provider" == "perplexity" && -n "${OCTOPUS_PERPLEXITY_MODEL:-}" ]]; then
-        log "DEBUG" "Model from env var: OCTOPUS_PERPLEXITY_MODEL=${OCTOPUS_PERPLEXITY_MODEL} (tier 1)"
-        echo "${OCTOPUS_PERPLEXITY_MODEL}"
-        return 0
-    fi
-
-    # Priority 2 & 3: Check config file (if jq is available)
-    if [[ -f "$config_file" ]] && command -v jq &> /dev/null; then
-        # Priority 2: Check overrides
-        if [[ -n "$provider" ]]; then
-            model=$(jq -r ".overrides.${provider} // empty" "$config_file" 2>/dev/null || true)
-            if [[ -n "$model" && "$model" != "null" ]]; then
-                log "DEBUG" "Model from config override: $model (tier 2)"
-                echo "$model"
-                return 0
-            fi
-
-            # Priority 3: Check provider defaults
-            model=$(jq -r ".providers.${provider}.model // empty" "$config_file" 2>/dev/null || true)
-            if [[ -n "$model" && "$model" != "null" ]]; then
-                log "DEBUG" "Model from config default: $model (tier 3)"
-                echo "$model"
-                return 0
-            fi
-        fi
-    fi
-
-    # Priority 4: Hard-coded defaults (existing behavior)
-    log "DEBUG" "Using hard-coded default model (tier 4)"
-    case "$agent_type" in
-        codex)          echo "gpt-5.4" ;;                     # v8.39.0: GPT-5.4 (was gpt-5.3-codex)
-        codex-standard) echo "gpt-5.2-codex" ;;
-        codex-max)      echo "gpt-5.4" ;;                     # v8.39.0: GPT-5.4 (was gpt-5.3-codex)
-        codex-mini)     echo "gpt-5-codex-mini" ;;            # v8.39.0: renamed (was gpt-5.1-codex-mini)
-        codex-general)  echo "gpt-5.2" ;;
-        codex-spark)    echo "gpt-5.3-codex-spark" ;;       # v8.9.0: Ultra-fast (1000+ tok/s)
-        codex-reasoning) echo "o3" ;;                        # v8.9.0: Deep reasoning (API-key only)
-        codex-large-context) echo "gpt-4.1" ;;              # v8.9.0: 1M context window (API-key only)
-        gemini)         echo "gemini-3-pro-preview" ;;
-        gemini-fast)    echo "gemini-3-flash-preview" ;;
-        gemini-image)   echo "gemini-3-pro-image-preview" ;;
-        codex-review)   echo "gpt-5.4" ;;                     # v8.39.0: GPT-5.4 (was gpt-5.3-codex)
-        claude)         echo "claude-sonnet-4.6" ;;   # v8.17: Sonnet 4.6 default
-        claude-sonnet)  echo "claude-sonnet-4.6" ;;   # v8.17: Sonnet 4.6 explicit
-        claude-opus)    echo "claude-opus-4.6" ;;
-        claude-opus-fast) echo "claude-opus-4.6-fast" ;;  # v8.4: Fast Opus
-        openrouter)       echo "anthropic/claude-sonnet-4" ;;  # Generic OpenRouter
-        openrouter-glm5)  echo "z-ai/glm-5" ;;                # v8.11.0: GLM-5 (77.8% SWE-bench)
-        openrouter-kimi)  echo "moonshotai/kimi-k2.5" ;;      # v8.11.0: Kimi K2.5 (262K ctx)
-        openrouter-deepseek) echo "deepseek/deepseek-r1" ;;   # v8.11.0: DeepSeek R1 (reasoning)
-        perplexity)       echo "sonar-pro" ;;                # v8.24.0: Sonar Pro — web-grounded research
-        perplexity-fast)  echo "sonar" ;;                    # v8.24.0: Sonar — fast web search
-        *)              echo "unknown" ;;
-    esac
 }
 
 # v8.31.0: Model restriction service — per-provider allowlists for cost/compliance control
@@ -1875,109 +2187,26 @@ validate_model_allowed() {
     fi
 
     log WARN "Model '$model' blocked by $allowlist_var (allowed: $allowlist)"
-    # Return the first allowed model as fallback
-    local fallback
-    fallback=$(echo "$allowlist" | cut -d',' -f1)
-    log WARN "Falling back to: $fallback"
+    # v8.49.0: Use capability-aware fallback instead of naive first-in-list
+    local fallback=""
+    if command -v find_capable_fallback &>/dev/null 2>&1; then
+        # Try to find a model with matching capabilities that IS in the allowlist
+        local capable
+        capable=$(find_capable_fallback "$model" "$provider" 2>/dev/null) || true
+        if [[ -n "$capable" ]] && echo ",$allowlist," | grep -Fc ",$capable," >/dev/null 2>&1; then
+            fallback="$capable"
+            log WARN "Capability-aware fallback: $fallback (matches blocked model's capabilities)"
+        fi
+    fi
+    # Final fallback: first allowed model if capability match not found
+    if [[ -z "$fallback" ]]; then
+        fallback=$(echo "$allowlist" | cut -d',' -f1)
+        log WARN "Falling back to first allowed: $fallback"
+    fi
     echo "$fallback"
     return 1
 }
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CONTEXTUAL MODEL ROUTING (v8.9.0)
-# Selects the best Codex model based on workflow phase and task context.
-# Precedence: OCTOPUS_CODEX_MODEL env var > phase_routing config > defaults
-# User can configure per-phase routing in ~/.claude-octopus/config/providers.json
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Select the best codex model for a given workflow context
-# Usage: select_codex_model_for_context <phase> [task_hint]
-# Phase values: discover, define, develop, deliver, quick, debate, review, security, research
-# Task hints: fast, deep, large-codebase, reasoning, budget
-select_codex_model_for_context() {
-    local phase="${1:-develop}"
-    local task_hint="${2:-}"
-    local config_file="${HOME}/.claude-octopus/config/providers.json"
-
-    # Priority 1: Environment variable override (always wins)
-    if [[ -n "${OCTOPUS_CODEX_MODEL:-}" ]]; then
-        log "DEBUG" "Contextual routing: env override OCTOPUS_CODEX_MODEL=${OCTOPUS_CODEX_MODEL}"
-        echo "${OCTOPUS_CODEX_MODEL}"
-        return 0
-    fi
-
-    # Priority 2: Task hint override (explicit caller request)
-    case "$task_hint" in
-        fast|spark)
-            echo "gpt-5.4-codex-spark"
-            return 0
-            ;;
-        deep|complex|security)
-            echo "gpt-5.4"
-            return 0
-            ;;
-        large-codebase|large-context)
-            echo "gpt-4.1"
-            return 0
-            ;;
-        reasoning)
-            echo "o3"
-            return 0
-            ;;
-        budget|cheap)
-            echo "gpt-5.1-codex-mini"
-            return 0
-            ;;
-    esac
-
-    # Priority 3: User-configured phase routing
-    if [[ -f "$config_file" ]] && command -v jq &> /dev/null; then
-        local phase_model
-        phase_model=$(jq -r ".phase_routing.${phase} // empty" "$config_file" 2>/dev/null || true)
-        if [[ -n "$phase_model" && "$phase_model" != "null" ]]; then
-            log "DEBUG" "Contextual routing: config phase_routing.$phase = $phase_model"
-            echo "$phase_model"
-            return 0
-        fi
-    fi
-
-    # Priority 4: Intelligent defaults based on phase characteristics
-    case "$phase" in
-        discover|probe|research)
-            # Research needs deep analysis → full codex
-            echo "gpt-5.4"
-            ;;
-        define|grasp)
-            # Requirements analysis needs precision → full codex
-            echo "gpt-5.4"
-            ;;
-        develop|tangle)
-            # Implementation needs capability → full codex
-            # (Users can override to spark for iteration via config)
-            echo "gpt-5.4"
-            ;;
-        deliver|ink|review)
-            # Code review benefits from fast feedback → spark
-            echo "gpt-5.4-codex-spark"
-            ;;
-        quick)
-            # Quick tasks prioritize speed → spark
-            echo "gpt-5.4-codex-spark"
-            ;;
-        debate)
-            # Debate needs deep reasoning for arguments → full codex
-            echo "gpt-5.4"
-            ;;
-        security)
-            # Security audits need thorough analysis → full codex
-            echo "gpt-5.4"
-            ;;
-        *)
-            # Default to full codex for unknown phases
-            echo "gpt-5.4"
-            ;;
-    esac
-}
 
 # Get the recommended agent type for a codex task in a given phase
 # Maps phase context to the appropriate codex-* agent type
@@ -2005,6 +2234,26 @@ get_codex_agent_for_phase() {
     esac
 }
 
+# Validate model name to prevent shell injection and other malformed inputs
+validate_model_name() {
+    local model="$1"
+    
+    # Reject empty names
+    [[ -z "$model" ]] && return 1
+    
+    # Reject names with shell meta-characters (v8.50.0 Security hardening)
+    if [[ "$model" =~ [[:space:]\;\|\&\$\`\'\"()\<\>\!*?\[\]\{\}$'\n'$'\r'] ]]; then
+        return 1
+    fi
+    
+    # Reject names that look like absolute paths
+    if [[ "$model" == /* ]]; then
+        return 1
+    fi
+    
+    return 0
+}
+
 # Set provider model in config file
 # Usage: set_provider_model <provider> <model> [--session]
 set_provider_model() {
@@ -2013,49 +2262,71 @@ set_provider_model() {
     local session_only="${3:-}"
     local config_file="${HOME}/.claude-octopus/config/providers.json"
 
-    # Validate provider
-    if [[ ! "$provider" =~ ^(codex|gemini)$ ]]; then
-        echo "ERROR: Invalid provider. Must be 'codex' or 'gemini'" >&2
+    # v8.49.0: Provider whitelist validation
+    case "$provider" in
+        codex|gemini|claude|perplexity|openrouter) ;;
+        *)
+            if [[ "${4:-}" != "--force" ]]; then
+                echo "ERROR: Unknown provider '$provider'. Valid: codex, gemini, claude, perplexity, openrouter" >&2
+                echo "  Use --force to set a custom provider (e.g., for local proxies)" >&2
+                return 1
+            fi
+            # With --force, still validate format
+            if [[ ! "$provider" =~ ^[a-z0-9-]+$ ]]; then
+                echo "ERROR: Invalid provider name format (must be lowercase alphanumeric with hyphens)" >&2
+                return 1
+            fi
+            ;;
+    esac
+
+    # Validate model name (v8.49.0 hardened)
+    if ! validate_model_name "$model"; then
+        echo "ERROR: Invalid model name: '$model'" >&2
+        echo "  Model names must not contain shell metacharacters (spaces, ;, |, &, \$, \`, quotes)" >&2
+        echo "  Examples: gpt-5.4, gemini-3-pro-preview, claude-opus-4.6" >&2
         return 1
     fi
 
-    # Validate model name (basic check - not empty, no special characters)
-    if [[ -z "$model" || "$model" =~ [[:space:]\;\|\&\$\`\'\"()\<\>] ]]; then
-        echo "ERROR: Invalid model name" >&2
-        return 1
-    fi
-
-    # Ensure config file exists
+    # Ensure config file exists and is v3.0
     if [[ ! -f "$config_file" ]]; then
         mkdir -p "$(dirname "$config_file")"
         cat > "$config_file" << 'EOF'
 {
-  "version": "2.0",
+  "version": "3.0",
   "providers": {
     "codex": {
-      "model": "gpt-5.3-codex",
+      "default": "gpt-5.4",
       "fallback": "gpt-5.2-codex",
-      "spark_model": "gpt-5.3-codex-spark",
-      "mini_model": "gpt-5.1-codex-mini",
-      "reasoning_model": "o3",
-      "large_context_model": "gpt-4.1"
+      "spark": "gpt-5.3-codex-spark",
+      "mini": "gpt-5-codex-mini",
+      "reasoning": "o3",
+      "large_context": "gpt-4.1"
     },
-    "gemini": {"model": "gemini-3-pro-preview", "fallback": "gemini-3-flash-preview"}
+    "gemini": {
+      "default": "gemini-3-pro-preview",
+      "fallback": "gemini-3-flash-preview",
+      "flash": "gemini-3-flash-preview",
+      "image": "gemini-3-pro-image-preview"
+    }
   },
-  "phase_routing": {
-    "discover": "gpt-5.3-codex",
-    "define":   "gpt-5.3-codex",
-    "develop":  "gpt-5.3-codex",
-    "deliver":  "gpt-5.3-codex-spark",
-    "quick":    "gpt-5.3-codex-spark",
-    "debate":   "gpt-5.3-codex",
-    "review":   "gpt-5.3-codex-spark",
-    "security": "gpt-5.3-codex",
-    "research": "gpt-5.3-codex"
+  "routing": {
+    "phases": {
+      "deliver": "codex:spark",
+      "review": "codex:spark",
+      "security": "codex:reasoning",
+      "research": "gemini:default"
+    }
+  },
+  "tiers": {
+    "budget": { "codex": "mini", "gemini": "flash" },
+    "standard": { "codex": "default", "gemini": "default" },
+    "premium": { "codex": "default", "gemini": "default" }
   },
   "overrides": {}
 }
 EOF
+    else
+        migrate_provider_config
     fi
 
     # Check if jq is available
@@ -2064,16 +2335,18 @@ EOF
         return 1
     fi
 
-    # Update config file
+    # Update config file (v8.49.0: atomic + jq --arg for injection safety)
     if [[ "$session_only" == "--session" ]]; then
-        # Set session-level override
-        jq ".overrides.${provider} = \"${model}\"" "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+        atomic_json_update "$config_file" '.overrides[$p] = $m' --arg p "$provider" --arg m "$model"
         echo "✓ Set session override: $provider → $model"
     else
-        # Set persistent default
-        jq ".providers.${provider}.model = \"${model}\"" "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+        atomic_json_update "$config_file" '.providers[$p].default = $m' --arg p "$provider" --arg m "$model"
         echo "✓ Set default model: $provider → $model"
     fi
+
+    # v8.49.0: Clear model resolution cache after config change
+    local persistent_cache="/tmp/octo-model-cache-${USER}-${CLAUDE_CODE_SESSION:-global}.json"
+    rm -f "$persistent_cache"
 }
 
 # Reset provider model to defaults
@@ -2093,17 +2366,21 @@ reset_provider_model() {
     fi
 
     if [[ "$provider" == "all" ]]; then
-        # Clear all overrides
-        jq '.overrides = {}' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+        # Clear all overrides (v8.49.0: atomic)
+        atomic_json_update "$config_file" '.overrides = {}'
         echo "✓ Cleared all model overrides"
-    elif [[ "$provider" =~ ^(codex|gemini)$ ]]; then
-        # Clear specific override
-        jq "del(.overrides.${provider})" "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+    elif [[ "$provider" =~ ^(codex|gemini|claude|perplexity|openrouter)$ ]]; then
+        # Clear specific override (v8.49.0: atomic + jq --arg)
+        atomic_json_update "$config_file" 'del(.overrides[$p])' --arg p "$provider"
         echo "✓ Cleared $provider override"
     else
-        echo "ERROR: Invalid provider. Use 'codex', 'gemini', or 'all'" >&2
+        echo "ERROR: Invalid provider '$provider'. Use 'codex', 'gemini', 'claude', 'perplexity', 'openrouter', or 'all'" >&2
         return 1
     fi
+
+    # v8.49.0: Clear model resolution cache after config change
+    local persistent_cache="/tmp/octo-model-cache-${USER}-${CLAUDE_CODE_SESSION:-global}.json"
+    rm -f "$persistent_cache"
 }
 
 # Session usage tracking file
@@ -2233,7 +2510,7 @@ calculate_agent_cost() {
     fi
 
     local model
-    model=$(get_agent_model "$agent_type")
+    model=$(get_agent_model "$agent_type" "$phase" "$role")
 
     local input_tokens
     input_tokens=$(estimate_tokens "$(printf '%*s' "$prompt_length" '')")
@@ -2635,6 +2912,126 @@ generate_usage_table() {
     echo ""
     echo -e "${YELLOW}Note:${NC} Token counts are estimates (~4 chars/token). Actual costs may vary."
     echo ""
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# POST-RUN USAGE DISPLAY (v8.49.0)
+# Functions called by embrace_full_workflow after all phases complete.
+# Wires the existing generate_usage_table() into the embrace end-of-run output.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# v8.49.0: Display session-level metrics (totals + per-model + per-phase)
+display_session_metrics() {
+    if [[ ! -f "${USAGE_FILE}.log" ]]; then
+        log DEBUG "No usage data for session metrics"
+        return 0
+    fi
+    generate_usage_table
+}
+
+# v8.49.0: Display per-provider breakdown (codex/gemini/claude)
+display_provider_breakdown() {
+    local log_file="${USAGE_FILE}.log"
+    [[ -f "$log_file" ]] || return 0
+
+    echo -e "${CYAN}Provider Breakdown:${NC}"
+    awk -F'|' '
+        {
+            # Extract provider from agent type (e.g., codex-spark -> codex)
+            provider = $2
+            gsub(/-.*/, "", provider)
+            tokens[provider] += $8
+            cost[provider] += $9
+            calls[provider]++
+        }
+        END {
+            for (p in calls) {
+                printf "  %-12s  %6d calls  %8d tokens  $%.4f est.\n", p, calls[p], tokens[p], cost[p]
+            }
+        }
+    ' "$log_file"
+    echo ""
+}
+
+# v8.49.0: Display per-phase cost table with model used
+display_per_phase_cost_table() {
+    local log_file="${USAGE_FILE}.log"
+    [[ -f "$log_file" ]] || return 0
+
+    echo -e "${CYAN}Per-Phase Cost Breakdown:${NC}"
+    printf "  %-12s  %-25s  %8s  %s\n" "Phase" "Model" "Tokens" "Est. Cost"
+    echo "  ──────────────────────────────────────────────────────────────"
+    awk -F'|' '
+        {
+            phase = $4
+            model = $3
+            key = phase "|" model
+            tokens[key] += $8
+            cost[key] += $9
+            calls[key]++
+            # Track which model was used per phase (last one wins for display)
+            phase_model[phase] = model
+            phase_tokens[phase] += $8
+            phase_cost[phase] += $9
+        }
+        END {
+            # Sort by phase name
+            n = asorti(phase_tokens, sorted)
+            for (i = 1; i <= n; i++) {
+                p = sorted[i]
+                printf "  %-12s  %-25s  %8d  $%.4f\n", p, phase_model[p], phase_tokens[p], phase_cost[p]
+            }
+        }
+    ' "$log_file"
+    echo ""
+}
+
+# v8.49.0: Record agent start (returns metrics ID for correlation)
+record_agent_start() {
+    local agent_type="$1"
+    local model="$2"
+    local prompt="$3"
+    local phase="${4:-unknown}"
+    local metrics_id="m-$(date +%s)-$$-${RANDOM}"
+    echo "$metrics_id"
+}
+
+# v8.49.0: Record agent completion with actual parsed metrics
+# Updates the usage log with actual token counts when available
+record_agent_complete() {
+    local metrics_id="$1"
+    local agent_type="$2"
+    local model="$3"
+    local output="$4"
+    local phase="${5:-unknown}"
+    local actual_tokens="${6:-}"
+    local tool_uses="${7:-}"
+    local duration_ms="${8:-0}"
+
+    [[ "$DRY_RUN" == "true" ]] && return 0
+
+    # If we have actual token data from <usage> block, record a completion entry
+    if [[ -n "$actual_tokens" && "$actual_tokens" =~ ^[0-9]+$ ]]; then
+        local timestamp
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        # Calculate cost with actual tokens
+        local pricing
+        pricing=$(get_model_pricing "$model")
+        local input_price="${pricing%%:*}"
+        local output_price="${pricing##*:}"
+        # Assume 40% input, 60% output split for actual tokens
+        local input_tokens=$(( actual_tokens * 40 / 100 ))
+        local output_tokens=$(( actual_tokens * 60 / 100 ))
+        local cost
+        cost=$(awk "BEGIN {printf \"%.6f\", ($input_tokens * $input_price + $output_tokens * $output_price) / 1000000}")
+
+        # Append actual metrics (suffixed with :actual to distinguish from estimates)
+        if [[ -f "${USAGE_FILE}.log" ]]; then
+            echo "${timestamp}|${agent_type}|${model}|${phase}|actual|${input_tokens}|${output_tokens}|${actual_tokens}|${cost}|${duration_ms}|${metrics_id}" >> "${USAGE_FILE}.log"
+            log DEBUG "Recorded actual metrics: agent=$agent_type tokens=$actual_tokens cost=\$$cost duration=${duration_ms}ms"
+        fi
+    fi
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -6271,6 +6668,236 @@ cleanup_cache() {
     done
 
     [[ $cleaned -gt 0 ]] && log "INFO" "Cleaned $cleaned expired cache entries"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESULT FILE CLEANUP (v8.49.0)
+# Age-based cleanup of per-agent result files after synthesis.
+# Keeps synthesis files; removes ephemeral per-agent outputs older than retention.
+# Config: OCTOPUS_RESULT_RETENTION_HOURS (default: 24)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+cleanup_old_results() {
+    [[ "$DRY_RUN" == "true" ]] && return 0
+    [[ ! -d "$RESULTS_DIR" ]] && return 0
+
+    local retention_hours="${OCTOPUS_RESULT_RETENTION_HOURS:-24}"
+    local retention_mins=$((retention_hours * 60))
+    local cleaned=0
+
+    # Clean per-agent result files (not synthesis files)
+    while IFS= read -r -d '' file; do
+        local basename
+        basename=$(basename "$file")
+        # Keep synthesis, consensus, validation, delivery files
+        case "$basename" in
+            probe-synthesis-*|grasp-consensus-*|tangle-validation-*|delivery-*) continue ;;
+            .session-id|.created-at) continue ;;
+        esac
+        rm -f "$file"
+        ((cleaned++)) || true
+    done < <(find "$RESULTS_DIR" -name "*.md" -mmin "+$retention_mins" -print0 2>/dev/null)
+
+    # Clean marker files
+    find "$RESULTS_DIR" -name "*.marker" -mmin "+$retention_mins" -delete 2>/dev/null || true
+
+    [[ $cleaned -gt 0 ]] && log "INFO" "Cleaned $cleaned expired result files (retention: ${retention_hours}h)"
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROJECT QUALITY COMMAND DETECTION (v8.49.0)
+# Auto-detects lint, typecheck, and test commands from project config files.
+# Aligns with CC mandate: "MUST run lint and typecheck after completing a task."
+# ═══════════════════════════════════════════════════════════════════════════════
+
+detect_project_quality_commands() {
+    local project_dir="${1:-.}"
+    local -a commands=()
+
+    # Node.js / package.json
+    if [[ -f "$project_dir/package.json" ]]; then
+        local scripts
+        scripts=$(jq -r '.scripts // {} | keys[]' "$project_dir/package.json" 2>/dev/null)
+        for script in lint typecheck type-check tsc check; do
+            if echo "$scripts" | grep -qw "$script"; then
+                commands+=("npm run $script")
+            fi
+        done
+    fi
+
+    # Python / pyproject.toml / setup.cfg
+    if [[ -f "$project_dir/pyproject.toml" ]] || [[ -f "$project_dir/setup.cfg" ]]; then
+        command -v ruff &>/dev/null && commands+=("ruff check $project_dir")
+        command -v mypy &>/dev/null && commands+=("mypy $project_dir")
+    fi
+
+    # Rust / Cargo.toml
+    if [[ -f "$project_dir/Cargo.toml" ]]; then
+        commands+=("cargo clippy --quiet" "cargo test --no-run --quiet")
+    fi
+
+    # Go / go.mod
+    if [[ -f "$project_dir/go.mod" ]]; then
+        commands+=("go vet ./...")
+    fi
+
+    # Makefile with lint target
+    if [[ -f "$project_dir/Makefile" ]]; then
+        if grep -q '^lint:' "$project_dir/Makefile" 2>/dev/null; then
+            commands+=("make lint")
+        fi
+    fi
+
+    # Output as newline-separated list
+    printf '%s\n' "${commands[@]}"
+}
+
+# Run detected quality commands, return pass/fail summary
+# Usage: run_project_quality_checks [project_dir]
+run_project_quality_checks() {
+    local project_dir="${1:-.}"
+    local commands
+    commands=$(detect_project_quality_commands "$project_dir")
+
+    [[ -z "$commands" ]] && { echo "No quality commands detected"; return 0; }
+
+    local passed=0 failed=0 total=0
+    local -a failures=()
+
+    while IFS= read -r cmd; do
+        [[ -z "$cmd" ]] && continue
+        ((total++))
+        if eval "$cmd" &>/dev/null; then
+            ((passed++))
+        else
+            ((failed++))
+            failures+=("$cmd")
+        fi
+    done <<< "$commands"
+
+    echo "Quality checks: $passed/$total passed"
+    if [[ $failed -gt 0 ]]; then
+        echo "Failed:"
+        printf '  - %s\n' "${failures[@]}"
+        return 1
+    fi
+    return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPACT BANNER MODE (v8.49.0)
+# Condenses workflow banners when OCTOPUS_COMPACT_BANNERS=true.
+# Full banners (default): 8-12 lines with provider details, cost estimates.
+# Compact banners: 2-3 lines with essential info only.
+# ═══════════════════════════════════════════════════════════════════════════════
+OCTOPUS_COMPACT_BANNERS="${OCTOPUS_COMPACT_BANNERS:-false}"
+
+format_workflow_banner() {
+    local workflow="$1"
+    local description="$2"
+    local phase_emoji="${3:-🐙}"
+
+    if [[ "$OCTOPUS_COMPACT_BANNERS" == "true" ]]; then
+        # Compact: 2 lines
+        local providers=""
+        command -v codex &>/dev/null && providers+="🔴"
+        command -v gemini &>/dev/null && providers+="🟡"
+        [[ -n "${PERPLEXITY_API_KEY:-}" ]] && providers+="🟣"
+        providers+="🔵"
+        echo "🐙 ${workflow} — ${description} | ${providers}"
+    else
+        # Full: standard verbose banner (existing behavior, unchanged)
+        echo "🐙 **CLAUDE OCTOPUS ACTIVATED** - ${workflow}"
+        echo "${phase_emoji} ${description}"
+    fi
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESULT RANKING (v8.49.0)
+# Ranks result files by quality signals WITHOUT deleting any content.
+# Inspired by Crawl4AI's content filtering but adapted for multi-AI synthesis:
+# rank by signals, present best first, let the synthesis LLM do the weighting.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Score a single result file by quality signals (higher = more valuable)
+# Returns score on stdout. Factors:
+#   - Word count (log scale, max 40 pts): longer ≠ better, but extremely short = low value
+#   - Code block count (max 20 pts): concrete examples signal actionable content
+#   - Specificity (max 20 pts): named files/functions/URLs vs vague prose
+#   - Structure (max 20 pts): headers, lists, tables signal organized thinking
+score_result_file() {
+    local file="$1"
+    [[ ! -f "$file" ]] && echo "0" && return
+
+    local content
+    content=$(cat "$file")
+    local score=0
+
+    # Factor 1: Word count (log scale, 0-40 pts)
+    # 100 words=20pts, 500=30pts, 2000=40pts; <50 words=5pts
+    local word_count
+    word_count=$(wc -w <<< "$content" | tr -d ' ')
+    if [[ $word_count -lt 50 ]]; then
+        score=$((score + 5))
+    elif [[ $word_count -lt 200 ]]; then
+        score=$((score + 20))
+    elif [[ $word_count -lt 1000 ]]; then
+        score=$((score + 30))
+    else
+        score=$((score + 40))
+    fi
+
+    # Factor 2: Code blocks (0-20 pts, 5 pts each up to 4)
+    local code_blocks
+    code_blocks=$(grep -c '```' <<< "$content" 2>/dev/null || echo "0")
+    # Each pair of ``` = 1 code block, so divide by 2
+    local block_count=$(( code_blocks / 2 ))
+    [[ $block_count -gt 4 ]] && block_count=4
+    score=$((score + block_count * 5))
+
+    # Factor 3: Specificity (0-20 pts) — file paths, function names, URLs
+    local specifics=0
+    grep -cE '\.(ts|js|py|sh|rs|go|md|json)[ :\)]|/[a-z]+/' <<< "$content" &>/dev/null && specifics=$((specifics + $(grep -cE '\.(ts|js|py|sh|rs|go|md|json)[ :\)]|/[a-z]+/' <<< "$content" 2>/dev/null || echo "0")))
+    [[ $specifics -gt 20 ]] && specifics=20
+    score=$((score + specifics))
+
+    # Factor 4: Structure (0-20 pts) — markdown headers, bullet lists, tables
+    local structure=0
+    local headers
+    headers=$(grep -c '^#' <<< "$content" 2>/dev/null || echo "0")
+    [[ $headers -gt 5 ]] && headers=5
+    structure=$((structure + headers * 2))
+    local bullets
+    bullets=$(grep -c '^[[:space:]]*[-*]' <<< "$content" 2>/dev/null || echo "0")
+    [[ $bullets -gt 5 ]] && bullets=5
+    structure=$((structure + bullets * 2))
+    [[ $structure -gt 20 ]] && structure=20
+    score=$((score + structure))
+
+    echo "$score"
+}
+
+# Rank result files and return them ordered best-first (one path per line)
+# Usage: rank_results_by_signals /path/to/results [filter]
+rank_results_by_signals() {
+    local results_dir="$1"
+    local filter="${2:-}"
+    local -a scored=()
+
+    for result in "$results_dir"/*.md; do
+        [[ -f "$result" ]] || continue
+        [[ "$result" == *aggregate* ]] && continue
+        [[ "$result" == *.raw-concat* ]] && continue
+        [[ "$result" == *.partial-* ]] && continue
+        [[ -n "$filter" && "$result" != *"$filter"* ]] && continue
+
+        local score
+        score=$(score_result_file "$result")
+        scored+=("${score}|${result}")
+    done
+
+    # Sort descending by score, output paths only
+    printf '%s\n' "${scored[@]}" | sort -t'|' -k1 -rn | cut -d'|' -f2
 }
 
 # v7.19.0 P2.4: Progressive synthesis - start synthesis as results become available
@@ -10937,7 +11564,7 @@ ${skill_context}"
     fi
 
     local cmd
-    if ! cmd=$(get_agent_command "$agent_type"); then
+    if ! cmd=$(get_agent_command "$agent_type" "${phase:-}" "${role:-}"); then
         log ERROR "Unknown agent type: $agent_type"
         log INFO "Available agents: $AVAILABLE_AGENTS"
         return 1
@@ -11033,21 +11660,10 @@ ${earned_skills_ctx}"
     # Previously called before injections, causing final prompt to exceed budget (Issue #25)
     enhanced_prompt=$(enforce_context_budget "$enhanced_prompt")
 
-    # Record usage (get model from agent type, with tier override)
+    # Record usage (get model from agent type, with phase/role context)
     local model
-    model=$(get_agent_model "$agent_type")
-    # v8.7.0: Phase-optimized model tier selection
-    if [[ "$OCTOPUS_COST_MODE" != "standard" || -n "${phase:-}" ]]; then
-        local tier
-        tier=$(select_model_tier "${phase:-unknown}" "${role:-none}" "$agent_type")
-        local tier_model
-        tier_model=$(get_tier_model "$tier" "$agent_type")
-        if [[ -n "$tier_model" ]]; then
-            log "DEBUG" "Model tier: $tier -> $tier_model (overriding $model)"
-            model="$tier_model"
-        fi
-    fi
-    log "DEBUG" "Model selected: $model (from agent_type=$agent_type)"
+    model=$(get_agent_model "$agent_type" "${phase:-}" "${role:-}")
+    log "DEBUG" "Model selected: $model (from agent_type=$agent_type, phase=${phase:-none})"
 
     # v8.35.0: Adaptive reasoning effort per phase
     # get_effort_level() maps phase+complexity to low/medium/high effort
@@ -12398,38 +13014,69 @@ Output as a simple numbered list. Task: $main_prompt"
 
 aggregate_results() {
     local filter="${1:-}"
+    local user_query="${2:-}"  # v8.49.0: Optional user query for relevance-aware synthesis
     local aggregate_file="${RESULTS_DIR}/aggregate-$(date +%s).md"
     local raw_concat="${RESULTS_DIR}/.raw-concat-$$.md"
 
     log INFO "Aggregating results..."
 
-    # Phase 1: Collect raw results
+    # Phase 1: Collect results ranked by quality signals (v8.49.0)
+    # Results are ordered best-first so the synthesis LLM sees highest-quality content first
     local result_count=0
     > "$raw_concat"
-    for result in "$RESULTS_DIR"/*.md; do
-        [[ -f "$result" ]] || continue
-        [[ "$result" == *aggregate* ]] && continue
-        [[ "$result" == *.raw-concat* ]] && continue
-        [[ -n "$filter" && "$result" != *"$filter"* ]] && continue
+    local ranked_files
+    ranked_files=$(rank_results_by_signals "$RESULTS_DIR" "$filter")
 
+    if [[ -z "$ranked_files" ]]; then
+        # Fallback: no ranked results, use original glob order
+        for result in "$RESULTS_DIR"/*.md; do
+            [[ -f "$result" ]] || continue
+            [[ "$result" == *aggregate* ]] && continue
+            [[ "$result" == *.raw-concat* ]] && continue
+            [[ -n "$filter" && "$result" != *"$filter"* ]] && continue
+            ranked_files+="$result"$'\n'
+        done
+    fi
+
+    while IFS= read -r result; do
+        [[ -z "$result" ]] && continue
+        local score
+        score=$(score_result_file "$result")
         echo "---" >> "$raw_concat"
-        echo "## Source: $(basename "$result")" >> "$raw_concat"
+        echo "## Source: $(basename "$result") [Quality: ${score}/100]" >> "$raw_concat"
         echo "" >> "$raw_concat"
         cat "$result" >> "$raw_concat"
         echo "" >> "$raw_concat"
         ((result_count++)) || true
-    done
+    done <<< "$ranked_files"
 
     # Phase 2: Synthesize if we have a provider available and multiple results
     if [[ $result_count -gt 1 ]] && command -v gemini &> /dev/null && [[ "$DRY_RUN" != "true" ]]; then
-        log INFO "Synthesizing $result_count results (not just concatenating)..."
+        log INFO "Synthesizing $result_count results (ranked by quality, not just concatenating)..."
+
+        # v8.49.0: Enhanced synthesis prompt with relevance awareness and structured output
+        local query_context=""
+        if [[ -n "$user_query" ]]; then
+            query_context="
+Original User Query: $user_query
+Weight content by relevance to this query. Sources are pre-ranked by quality (best first)."
+        fi
+
         local synthesis_prompt
         synthesis_prompt="Synthesize these $result_count subtask results into ONE coherent output.
+${query_context}
 Rules:
+- Sources are ordered by quality score (best first); weight accordingly
 - Merge overlapping content; preserve distinct contributions from each source
+- Short but critical findings (minority opinions, edge cases, warnings) are EQUALLY important as verbose analysis — do NOT dismiss them for brevity
 - If sources conflict, state the conflict and your resolution
 - The output must stand alone — a reader should get the complete picture without seeing the inputs
-- Structure the output logically, not by source
+
+Structure the output as:
+1. **Key Findings** — Top 3-5 actionable insights
+2. **Detailed Analysis** — Organized by topic, not by source
+3. **Conflicts & Trade-offs** — Where sources disagreed and why
+4. **Recommendations** — Prioritized next steps
 
 Subtask results:
 $(cat "$raw_concat")"
@@ -12439,7 +13086,8 @@ $(cat "$raw_concat")"
             echo "# Claude Octopus - Synthesized Results" > "$aggregate_file"
             echo "" >> "$aggregate_file"
             echo "Generated: $(date)" >> "$aggregate_file"
-            echo "Sources: $result_count subtask outputs" >> "$aggregate_file"
+            echo "Sources: $result_count subtask outputs (ranked by quality)" >> "$aggregate_file"
+            [[ -n "$user_query" ]] && echo "Query: $user_query" >> "$aggregate_file"
             echo "" >> "$aggregate_file"
             echo "$synthesis_result" >> "$aggregate_file"
             rm -f "$raw_concat"
@@ -14851,7 +15499,27 @@ ${earned_skills_ctx}"
 
     # Record usage (get model from agent type)
     local model
-    model=$(get_agent_model "$agent_type")
+    model=$(get_agent_model "$agent_type" "$phase" "$role")
+
+    # v8.49.0: Pre-dispatch health check — verify provider is reachable
+    local _provider_for_health=""
+    case "$agent_type" in
+        codex*)      _provider_for_health="codex" ;;
+        gemini*)     _provider_for_health="gemini" ;;
+        claude*)     _provider_for_health="claude" ;;
+        openrouter*) _provider_for_health="openrouter" ;;
+        perplexity*) _provider_for_health="perplexity" ;;
+    esac
+    if [[ -n "$_provider_for_health" ]]; then
+        local _health_diag
+        if ! _health_diag=$(check_provider_health "$_provider_for_health" 2>&1); then
+            log WARN "Provider '$_provider_for_health' health check failed: $_health_diag"
+            log WARN "Skipping agent dispatch for $agent_type (provider unavailable)"
+            echo "[Provider $_provider_for_health unavailable: $_health_diag]"
+            return 1
+        fi
+    fi
+
     record_agent_call "$agent_type" "$model" "$enhanced_prompt" "${phase:-unknown}" "${role:-none}" "0"
 
     # v7.25.0: Record metrics start
@@ -14861,7 +15529,7 @@ ${earned_skills_ctx}"
     fi
 
     local cmd
-    cmd=$(get_agent_command "$agent_type") || return 1
+    cmd=$(get_agent_command "$agent_type" "$phase" "$role") || return 1
 
     # SECURITY: Use array-based execution to prevent word-splitting vulnerabilities
     local -a cmd_array
@@ -15723,17 +16391,42 @@ synthesize_probe_results() {
         log INFO "All $result_count results available for synthesis ($(numfmt --to=iec-i --suffix=B $total_content_size 2>/dev/null || echo "${total_content_size}B"))"
     fi
 
+    # v8.49.0: Rank results by quality signals before synthesis
+    # Re-collect results in ranked order so the synthesis LLM sees best content first
+    local ranked_results=""
+    local ranked_file
+    while IFS= read -r ranked_file; do
+        [[ -z "$ranked_file" ]] && continue
+        [[ ! -f "$ranked_file" ]] && continue
+        local file_size
+        file_size=$(wc -c < "$ranked_file" 2>/dev/null || echo "0")
+        [[ $file_size -le 500 ]] && continue
+        local score
+        score=$(score_result_file "$ranked_file")
+        ranked_results+="--- [Quality: ${score}/100] ---\n$(cat "$ranked_file")\n\n"
+    done < <(rank_results_by_signals "$RESULTS_DIR" "probe-${task_group}")
+    # Use ranked results if available, fall back to original collection
+    [[ -n "$ranked_results" ]] && results="$ranked_results"
+
     # Use Gemini for intelligent synthesis
+    # v8.49.0: Enhanced prompt with structured output, minority opinion preservation,
+    # and relevance-aware weighting (inspired by Crawl4AI content filtering patterns)
     local synthesis_prompt="Synthesize these research findings into a coherent discovery summary.
 
 Original Question: $original_prompt
 
-Identify:
-1. Key insights and patterns across all perspectives
-2. Conflicting perspectives that need resolution
-3. Gaps in understanding that need more research
-4. Priority Matrix — rank findings by impact (High/Medium/Low) and effort (Low/Medium/High) in a table
-5. Recommended approach based on findings
+Sources are pre-ranked by quality score (best first). However:
+- Short but specific findings may be MORE valuable than lengthy general analysis
+- Minority opinions and dissenting views MUST be preserved — they often contain critical insights
+- Concrete examples (code, file paths, commands) outweigh abstract discussion
+
+Structure your synthesis as:
+1. **Key Findings** — Top 3-5 actionable insights, ranked by relevance to the original question
+2. **Patterns & Consensus** — Where multiple sources agree
+3. **Conflicts & Trade-offs** — Where sources disagree, with your reasoned resolution
+4. **Gaps** — What's still unknown and needs more research
+5. **Priority Matrix** — Rank findings by impact (High/Medium/Low) and effort (Low/Medium/High) in a table
+6. **Recommended Approach** — Specific next steps based on findings
 
 Research findings:
 $results"
@@ -16447,6 +17140,9 @@ embrace_full_workflow() {
     echo ""
 
     log INFO "Starting complete Double Diamond workflow"
+
+    # v8.49.0: Clean up expired results from prior runs
+    cleanup_old_results
 
     # v8.5: Show compact cost estimate in banner
     show_cost_estimate "embrace" "${#prompt}"
@@ -19870,17 +20566,21 @@ validate_claude_code_task_features 2>/dev/null || true
 # Check UX feature dependencies (v7.16.0)
 check_ux_dependencies 2>/dev/null || true
 
-# Cleanup old progress files (v7.16.0)
-cleanup_old_progress_files 2>/dev/null || true
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN EXECUTION ENTRY POINT
+# ═══════════════════════════════════════════════════════════════════════════════
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Cleanup old progress files (v7.16.0)
+    cleanup_old_progress_files 2>/dev/null || true
 
-# Handle autonomy mode aliases
-if [[ "$AUTONOMY_MODE" == "loop-until-approved" ]]; then
-    LOOP_UNTIL_APPROVED=true
-fi
+    # Handle autonomy mode aliases
+    if [[ "$AUTONOMY_MODE" == "loop-until-approved" ]]; then
+        LOOP_UNTIL_APPROVED=true
+    fi
 
-# Main command dispatch
-COMMAND="${1:-help}"
-shift || true
+    # Main command dispatch
+    COMMAND="${1:-help}"
+    shift || true
 
 # Check for first-run on commands that need setup (skip for help/setup/preflight)
 if [[ "$COMMAND" != "help" && "$COMMAND" != "setup" && "$COMMAND" != "preflight" && "$COMMAND" != "-h" && "$COMMAND" != "--help" ]]; then
@@ -20560,3 +21260,4 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
+fi

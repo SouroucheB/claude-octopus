@@ -783,6 +783,14 @@ The ink phase automatically runs comprehensive quality checks via `.claude/hooks
 ./hooks/quality-gate.sh
 ```
 
+**v8.49.0: Project-specific lint/typecheck** (before quality scoring):
+
+Before running conceptual quality gates, detect and run the project's actual lint/typecheck commands:
+- Check `package.json` for `lint`, `typecheck`, `tsc`, `check` scripts
+- Check for `ruff`, `mypy`, `cargo clippy`, `go vet`, `make lint`
+- Report pass/fail results alongside quality gate scores
+- If quality commands are discovered but not in CLAUDE.md, suggest adding them
+
 **Quality Dimensions**:
 
 | Dimension | Weight | Criteria |

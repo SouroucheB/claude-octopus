@@ -737,10 +737,12 @@ After writing code, ensure:
 
 - [ ] All files created/updated
 - [ ] Code follows recommended patterns from synthesis
+- [ ] Code follows the project's existing commenting conventions (do not add comments unless asked or required by project style)
 - [ ] Security concerns addressed
 - [ ] Error handling implemented
 - [ ] Tests written (if applicable)
-- [ ] Documentation added
+- [ ] Lint/typecheck commands run (detect from package.json, pyproject.toml, Cargo.toml, Makefile; if not found, ask the user)
+- [ ] If lint/test commands were discovered and not documented in CLAUDE.md, suggest adding them
 - [ ] User notified of completion
 - [ ] Suggest running ink-workflow for validation
 

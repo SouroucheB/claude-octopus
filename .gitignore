@@ -78,6 +78,10 @@ temp/
 
 # Development working files (should not be in public repo)
 docs/IMPLEMENTATION-PLAN*.md
+docs/superpowers/plans/
+docs/superpowers/specs/
+docs/FEATURE-GAP.md
+docs/monthly-agent-review.md
 
 # Development working files (root-level only, not skills/*/SKILL.md)
 /skill.md

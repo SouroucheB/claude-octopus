@@ -19,7 +19,7 @@ When the user invokes this command (e.g., `/octo:review <arguments>`):
 
 **CRITICAL: Before starting the review, use the AskUserQuestion tool to gather context:**
 
-Ask 3 clarifying questions to ensure focused review:
+Ask clarifying questions to ensure focused review:
 
 ```javascript
 AskUserQuestion({
@@ -43,7 +43,8 @@ AskUserQuestion({
         {label: "Security vulnerabilities", description: "OWASP, authentication, data protection"},
         {label: "Performance issues", description: "Speed, efficiency, scalability"},
         {label: "Code maintainability", description: "Readability, complexity, structure"},
-        {label: "Test coverage", description: "Testing adequacy and quality"}
+        {label: "Test coverage", description: "Testing adequacy and quality"},
+        {label: "TDD discipline", description: "Verify failing-test-first evidence and minimal implementation"}
       ]
     },
     {
@@ -55,6 +56,17 @@ AskUserQuestion({
         {label: "Team review", description: "Preparing for team code review"},
         {label: "Production release", description: "Pre-deployment quality gate"},
         {label: "External audit", description: "Client or compliance review"}
+      ]
+    },
+    {
+      question: "How was this change produced, and how aggressively should we check for codegen drift?",
+      header: "Implementation Mode",
+      multiSelect: false,
+      options: [
+        {label: "Human-authored", description: "Standard review of manually written code"},
+        {label: "AI-assisted", description: "Review for prompt-shaped code, over-abstraction, and weak tests"},
+        {label: "Autonomous / Dark Factory", description: "Treat as autonomy-heavy output; verify tests, wiring, and operational safety more aggressively"},
+        {label: "Legacy / unclear provenance", description: "Assume less context and verify behavior from code and tests only"}
       ]
     },
     {
@@ -73,12 +85,27 @@ AskUserQuestion({
 ```
 
 **After receiving answers, incorporate them into the review focus and depth.**
+If the user selects `AI-assisted`, `Autonomous / Dark Factory`, or `TDD discipline`, explicitly tell the review skill to audit for failing-test-first evidence, speculative abstractions, placeholder logic, and missing verification artifacts.
 
-### Step 2: Execute Review with Skill Tool
+### Step 2: Execute Review via Backend
+
+This command dispatches to the multi-LLM `code-review` pipeline (`review_run`) in `orchestrate.sh`.
+
+If a `REVIEW.md` file exists at the repo root, the pipeline will automatically load its
+customization rules (always-check items, style rules, skip patterns) — matching CC Code Review's
+REVIEW.md convention so repos configured for CC work seamlessly with `/octo:review`.
 
 **✓ CORRECT - Use the Skill tool:**
 ```
 Skill(skill: "octo:review", args: "<user's arguments + context>")
+```
+
+**Direct backend dispatch (for advanced use):**
+```bash
+# orchestrate.sh code-review '<json-profile>'
+# Profile fields: target, focus, provenance, autonomy, publish, debate
+# Example:
+orchestrate.sh code-review '{"target":"staged","provenance":"ai-assisted","publish":"ask","debate":"auto"}'
 ```
 
 **✗ INCORRECT - Do NOT use Task tool:**
@@ -86,7 +113,8 @@ Skill(skill: "octo:review", args: "<user's arguments + context>")
 Task(subagent_type: "octo:review", ...)  ❌ Wrong! This is a skill, not an agent type
 ```
 
-**Why:** This command loads the `skill-code-review` skill. Skills use the `Skill` tool, not `Task`.
+**Why:** This command invokes the `review_run` backend (code-review dispatch) which runs a
+3-round parallel fleet (Codex + Gemini + Claude + Perplexity) and posts inline PR comments.
 
 ---
 
@@ -132,6 +160,8 @@ Just use natural language:
 - Performance issues and optimizations
 - Architecture and design patterns
 - Test coverage and quality
+- TDD compliance and test-first evidence
+- Autonomous code generation risk patterns
 - Error handling and edge cases
 
 ## Review Types

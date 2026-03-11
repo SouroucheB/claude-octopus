@@ -415,7 +415,7 @@ check_ux_dependencies() {
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLAUDE CODE VERSION DETECTION (v7.12.0, updated v8.48.0)
-# Detects Claude Code v2.1.12+ through v2.1.72+ features.
+# Detects Claude Code v2.1.12+ through v2.1.73+ features.
 #
 # Flag usage patterns:
 #   - GATED: Flag is checked in if-conditionals to enable/disable behavior
@@ -504,6 +504,12 @@ SUPPORTS_HIDDEN_HTML_COMMENTS=false    # v8.48: Claude Code v2.1.72+ (HTML comme
 SUPPORTS_BASH_ALLOWLIST_V2=false       # v8.48: Claude Code v2.1.72+ (lsof/pgrep/tput/ss/fd/fdfind auto-allowed)
 SUPPORTS_CLEAR_PRESERVES_BG=false      # v8.48: Claude Code v2.1.72+ (/clear no longer kills background tasks)
 SUPPORTS_TEAM_MODEL_INHERIT_FIX=false  # v8.48: Claude Code v2.1.72+ (team agents inherit leader model fix)
+SUPPORTS_MODEL_OVERRIDES=false         # v8.52: Claude Code v2.1.73+ (modelOverrides setting for custom provider model IDs e.g. Bedrock ARNs)
+SUPPORTS_LOOP_ENTERPRISE_FIX=false     # v8.52: Claude Code v2.1.73+ (/loop now works on Bedrock/Vertex/Foundry + telemetry-disabled)
+SUPPORTS_SUBAGENT_MODEL_FIX=false      # v8.52: Claude Code v2.1.73+ (model: opus/sonnet/haiku no longer downgraded on Bedrock/Vertex/Foundry)
+SUPPORTS_SESSION_RESUME_HOOK_FIX=false # v8.52: Claude Code v2.1.73+ (SessionStart hooks fire once on --resume, not twice)
+SUPPORTS_BG_PROCESS_CLEANUP=false      # v8.52: Claude Code v2.1.73+ (background bash from subagents cleaned up on agent exit)
+SUPPORTS_SKILL_DEADLOCK_FIX=false      # v8.52: Claude Code v2.1.73+ (no deadlock with large .claude/skills/ during git pull)
 SUPPORTS_CONTINUATION=false           # v8.30: Agent resume/continuation for iterative retries
 OCTOPUS_BACKEND="api"              # v8.16: Detected backend (api|bedrock|vertex|foundry)
 AGENT_TEAMS_ENABLED="${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-0}"
@@ -756,6 +762,16 @@ detect_claude_code_version() {
         SUPPORTS_TEAM_MODEL_INHERIT_FIX=true
     fi
 
+    # Check for v2.1.73+ features (modelOverrides, loop enterprise, subagent model fix, session resume hook fix, bg cleanup, skill deadlock fix)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.73" ">="; then
+        SUPPORTS_MODEL_OVERRIDES=true
+        SUPPORTS_LOOP_ENTERPRISE_FIX=true
+        SUPPORTS_SUBAGENT_MODEL_FIX=true
+        SUPPORTS_SESSION_RESUME_HOOK_FIX=true
+        SUPPORTS_BG_PROCESS_CLEANUP=true
+        SUPPORTS_SKILL_DEADLOCK_FIX=true
+    fi
+
     log "INFO" "Claude Code v$CLAUDE_CODE_VERSION detected"
     log "INFO" "Task Management: $SUPPORTS_TASK_MANAGEMENT | Fork Context: $SUPPORTS_FORK_CONTEXT | Agent Teams: $SUPPORTS_AGENT_TEAMS"
     log "INFO" "Persistent Memory: $SUPPORTS_PERSISTENT_MEMORY | Hook Events: $SUPPORTS_HOOK_EVENTS | Agent Type Routing: $SUPPORTS_AGENT_TYPE_ROUTING"
@@ -779,6 +795,8 @@ detect_claude_code_version() {
     log "INFO" "Exit Worktree: $SUPPORTS_EXIT_WORKTREE | Agent Model Override: $SUPPORTS_AGENT_MODEL_OVERRIDE | Effort Redesign: $SUPPORTS_EFFORT_REDESIGN"
     log "INFO" "Disable Cron Env: $SUPPORTS_DISABLE_CRON_ENV | Hidden HTML Comments: $SUPPORTS_HIDDEN_HTML_COMMENTS | Bash Allowlist V2: $SUPPORTS_BASH_ALLOWLIST_V2"
     log "INFO" "Clear Preserves BG: $SUPPORTS_CLEAR_PRESERVES_BG | Team Model Inherit Fix: $SUPPORTS_TEAM_MODEL_INHERIT_FIX"
+    log "INFO" "Model Overrides: $SUPPORTS_MODEL_OVERRIDES | Loop Enterprise Fix: $SUPPORTS_LOOP_ENTERPRISE_FIX | Subagent Model Fix: $SUPPORTS_SUBAGENT_MODEL_FIX"
+    log "INFO" "Session Resume Hook Fix: $SUPPORTS_SESSION_RESUME_HOOK_FIX | BG Process Cleanup: $SUPPORTS_BG_PROCESS_CLEANUP | Skill Deadlock Fix: $SUPPORTS_SKILL_DEADLOCK_FIX"
 
     # v8.29.0: Context window control
     OCTOPUS_CONTEXT_WINDOW="${OCTOPUS_CONTEXT_WINDOW:-auto}"
@@ -12008,6 +12026,12 @@ ${skill_context}"
     local log_file="${LOGS_DIR}/${agent_type}-${task_id}.log"
     local result_file="${RESULTS_DIR}/${agent_type}-${task_id}.md"
 
+    # v8.52: Warn if spawning Claude agent on enterprise without subagent model fix (CC < v2.1.73)
+    # Prior to v2.1.73, model: opus/sonnet/haiku in agent frontmatter was silently downgraded on Bedrock/Vertex/Foundry
+    if [[ "$agent_type" == "claude"* ]] && [[ "$OCTOPUS_BACKEND" != "api" ]] && [[ "$SUPPORTS_SUBAGENT_MODEL_FIX" != "true" ]]; then
+        log "WARN" "Enterprise backend ($OCTOPUS_BACKEND) + CC < v2.1.73: agent model frontmatter may be silently downgraded. Upgrade to CC v2.1.73+ to fix."
+    fi
+
     log INFO "Spawning $agent_type agent (task: $task_id, role: ${role:-none})"
     log DEBUG "Command: $cmd"
     log DEBUG "Phase: ${phase:-none}, Role: ${role:-none}"
@@ -15513,6 +15537,31 @@ doctor_check_skills() {
     if [[ $cmd_missing -eq 0 ]]; then
         doctor_add "commands-all" "skills" "pass" \
             "All $cmd_total command files present" ""
+    fi
+
+    # v8.52: Warn about skill deadlock risk on CC < v2.1.73 (50 skill files)
+    if [[ "$SUPPORTS_SKILL_DEADLOCK_FIX" != "true" ]]; then
+        doctor_add "skill-deadlock-risk" "skills" "warn" \
+            "CC < v2.1.73: git pull with $skill_total skills may cause deadlock/freeze" \
+            "Upgrade to Claude Code v2.1.73+ to fix the deadlock with large .claude/skills/ directories"
+    fi
+
+    # v8.52: Surface modelOverrides setting if CC v2.1.73+ and user may benefit
+    if [[ "$SUPPORTS_MODEL_OVERRIDES" == "true" ]] && [[ "$OCTOPUS_BACKEND" != "api" ]]; then
+        local settings_file="${HOME}/.claude/settings.json"
+        local has_overrides="false"
+        if [[ -f "$settings_file" ]] && command -v jq &>/dev/null; then
+            has_overrides=$(jq 'has("modelOverrides")' "$settings_file" 2>/dev/null || echo "false")
+        fi
+        if [[ "$has_overrides" == "true" ]]; then
+            doctor_add "model-overrides-active" "skills" "pass" \
+                "CC modelOverrides configured (${OCTOPUS_BACKEND} backend)" \
+                "Custom model IDs will be used by CC's model picker"
+        else
+            doctor_add "model-overrides-tip" "skills" "info" \
+                "CC v2.1.73 modelOverrides available for ${OCTOPUS_BACKEND} inference profiles" \
+                "Set modelOverrides in ~/.claude/settings.json to map model names to Bedrock ARNs/Vertex endpoints"
+        fi
     fi
 }
 

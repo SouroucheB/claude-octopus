@@ -1,3 +1,17 @@
+## [8.52.0] - 2026-03-11
+
+### Added
+
+- CC v2.1.73 feature sync — 6 new detection flags (86 total, 28 version_compare blocks):
+  - `SUPPORTS_MODEL_OVERRIDES` — CC `modelOverrides` setting for custom provider model IDs (e.g. Bedrock inference profile ARNs). `/octo:doctor` surfaces this on enterprise backends.
+  - `SUPPORTS_LOOP_ENTERPRISE_FIX` — `/loop` now works on Bedrock/Vertex/Foundry and when telemetry is disabled
+  - `SUPPORTS_SUBAGENT_MODEL_FIX` — `model: opus/sonnet/haiku` frontmatter no longer silently downgraded on enterprise. `spawn_agent()` warns when running on enterprise without this fix.
+  - `SUPPORTS_SESSION_RESUME_HOOK_FIX` — `SessionStart` hooks fire exactly once on `--resume`/`--continue` (was double-firing)
+  - `SUPPORTS_BG_PROCESS_CLEANUP` — background bash processes spawned by subagents are cleaned up on agent exit
+  - `SUPPORTS_SKILL_DEADLOCK_FIX` — no deadlock when 50 skill files load during `git pull`. `/octo:doctor` warns on CC < v2.1.73.
+
+---
+
 ## [8.50.0] - 2026-03-11
 
 ### Changed

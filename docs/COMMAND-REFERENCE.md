@@ -1,18 +1,18 @@
-# Command Reference
+# Command and Usage Reference
 
-Complete reference for all 38 Claude Octopus commands.
+Complete reference for all 38 Claude Octopus slash commands, plus activation rules, provider indicators, and the project-lifecycle features that are triggered by natural language rather than slash commands.
 
 ---
 
 ## Quick Reference
 
-All commands use the `/octo:` namespace.
+All slash commands use the `/octo:` namespace. The smart router command is `/octo:octo`, and the plain-language trigger remains `octo ...`.
 
 ### Smart Router
 
 | Command | Description |
 |---------|-------------|
-| `/octo` | Natural language router — detects intent and routes to the right workflow |
+| `/octo:octo` | Smart router — detects intent and routes to the right workflow |
 
 ### System Commands
 
@@ -107,17 +107,21 @@ These are invoked via natural language or skill triggers — not slash commands.
 
 ## Smart Router
 
-### `/octo`
+### `/octo:octo`
 
 Single entry point with natural language intent detection. Analyzes your request and routes to the optimal workflow automatically.
 
+**You can invoke the router in two ways:**
+- Slash command: `/octo:octo <request>`
+- Plain language: `octo <request>`
+
 **Usage:**
 ```
-/octo research OAuth authentication patterns
-/octo build user authentication system
-/octo validate src/auth.ts
-/octo should we use Redis or Memcached?
-/octo create a complete e-commerce platform
+/octo:octo research OAuth authentication patterns
+/octo:octo build user authentication system
+/octo:octo validate src/auth.ts
+/octo:octo should we use Redis or Memcached?
+/octo:octo create a complete e-commerce platform
 ```
 
 **Routing table:**
@@ -167,7 +171,7 @@ Providers:
   Codex CLI: ready
   Gemini CLI: ready
 
-You're all set! Try: /octo research OAuth patterns
+You're all set! Try: /octo:octo research OAuth patterns
 ```
 
 **Troubleshooting:** If you see "Failed to update: Plugin 'octo' not found", run `/octo:setup` for reinstall instructions, or see [issue #17](https://github.com/nyldn/claude-octopus/issues/17).
@@ -218,8 +222,8 @@ Configure which AI models are used across Claude Octopus workflows.
 /octo:model-config                          # View current config
 /octo:model-config show phases              # Show per-phase routing table
 /octo:model-config codex gpt-5.4            # Set Codex model
-/octo:model-config codex gpt-5.3-codex-spark  # Fast Spark model
-/octo:model-config gemini gemini-3-pro-preview  # Set Gemini model
+/octo:model-config codex gpt-5.4  # Fast Spark model
+/octo:model-config gemini gemini-3.1-pro-preview  # Set Gemini model
 /octo:model-config cost-mode budget         # Use cheaper models
 /octo:model-config cost-mode premium        # Use best models
 /octo:model-config trace                    # Debug model resolution
@@ -230,9 +234,9 @@ Configure which AI models are used across Claude Octopus workflows.
 
 | Mode | Codex | Gemini | Best for |
 |------|-------|--------|----------|
-| `budget` | gpt-5.3-codex-spark | gemini-3-flash | High-volume, quick feedback |
-| `standard` | gpt-5.4 | gemini-3-pro-preview | Default — balanced cost/quality |
-| `premium` | gpt-5.4-pro | gemini-3-ultra | Critical decisions, maximum quality |
+| `budget` | gpt-5.4 | gemini-3-flash | High-volume, quick feedback |
+| `standard` | gpt-5.4 | gemini-3.1-pro-preview | Default — balanced cost/quality |
+| `premium` | gpt-5.4-pro | gemini-3.1-pro-preview | Critical decisions, maximum quality |
 
 **Per-phase routing:** Different models can be configured for Discover, Define, Develop, and Deliver phases. Use `show phases` to view the current routing table.
 
@@ -713,7 +717,7 @@ Force multi-provider parallel execution for any task — manual override mode.
 
 **Cost:** Uses external API credits (Codex + Gemini). Confirms before running.
 
-**When to use:** High-stakes decisions, cross-checking important work, comparing model perspectives. For most tasks, the router (`/octo`) or specific workflow commands are better.
+**When to use:** High-stakes decisions, cross-checking important work, comparing model perspectives. For most tasks, the router (`/octo:octo` or `octo ...`) or specific workflow commands are better.
 
 ---
 
@@ -1020,7 +1024,7 @@ OpenClaw instance administration across five platforms.
 
 These features are triggered by natural language — they are not slash commands. Claude auto-activates them based on context.
 
-### `/octo:status`
+### `Status`
 
 Show where you are in the workflow and what to do next.
 
@@ -1034,7 +1038,7 @@ Show where you are in the workflow and what to do next.
 
 ---
 
-### `/octo:resume`
+### `Resume`
 
 Pick up where you left off from a previous session.
 
@@ -1048,7 +1052,7 @@ Pick up where you left off from a previous session.
 
 ---
 
-### `/octo:ship`
+### `Ship`
 
 Package and finalize completed work for delivery.
 
@@ -1063,7 +1067,7 @@ Package and finalize completed work for delivery.
 
 ---
 
-### `/octo:issues`
+### `Issues`
 
 Track blockers, bugs, and gaps across sessions.
 
@@ -1081,7 +1085,7 @@ Track blockers, bugs, and gaps across sessions.
 
 ---
 
-### `/octo:rollback`
+### `Rollback`
 
 Roll back to a previous checkpoint via git.
 
@@ -1108,6 +1112,11 @@ When Claude Octopus activates external CLIs, you'll see visual indicators:
 | 🟣 | Perplexity Sonar search | Your PERPLEXITY_API_KEY |
 | 🔵 | Claude subagent | Included with Claude Code |
 
+**Rule of thumb:**
+- `/octo:*` commands and `octo ...` natural-language requests can activate external providers
+- Simple file reads, git commands, shell commands, and small edits stay Claude-only
+- `/octo:multi` is the manual override when you want all providers on a task that would normally stay single-model
+
 **Example:**
 ```
 🐙 **CLAUDE OCTOPUS ACTIVATED** - Multi-provider research mode
@@ -1119,13 +1128,11 @@ Providers:
 🔵 Claude - Strategic synthesis
 ```
 
-📖 See [Visual Indicators Guide](./VISUAL-INDICATORS.md) for details.
-
 ---
 
 ## Natural Language Triggers
 
-Instead of slash commands, you can use natural language with the "octo" prefix:
+Instead of slash commands, you can use natural language with the `octo` prefix:
 
 | You Say | Equivalent Command |
 |---------|--------------------|
@@ -1135,16 +1142,27 @@ Instead of slash commands, you can use natural language with the "octo" prefix:
 | `octo debate X vs Y` | `/octo:debate X vs Y` |
 | `octo plan a new feature` | `/octo:plan new feature` |
 | `octo spec out the chat system` | `/octo:spec chat system` |
+| `run this with all providers: review auth.ts` | `/octo:multi "review auth.ts"` |
 
-**Why "octo"?** Common words like "research" or "review" may conflict with Claude's built-in behaviors. The "octo" prefix ensures reliable activation.
+**Reliable activators:**
+- `octo research ...`, `octo discover ...`, `/octo:discover ...`
+- `octo define ...`, `octo scope ...`, `/octo:define ...`
+- `octo build ...`, `octo implement ...`, `/octo:develop ...`
+- `octo review ...`, `octo validate ...`, `/octo:review ...`
+- `/octo:multi ...` or "run this with all providers ..." for forced parallel mode
 
-📖 See [Triggers Guide](./TRIGGERS.md) for the complete list.
+**Usually Claude-only:**
+- "read `file.ts`", "show git status", "find all routes", "fix this typo"
+- factual questions or small edits that do not benefit from multi-provider orchestration
+
+**Why `octo`?** Common words like "research" or "review" may conflict with Claude's built-in behaviors. The `octo` prefix ensures reliable activation.
+
+**Need a quick shortcut?** The most common wrappers are still `/octo:research`, `/octo:review`, and `/octo:security`; they are regular commands, not a separate doc set.
 
 ---
 
 ## See Also
 
-- **[Visual Indicators Guide](./VISUAL-INDICATORS.md)** — Understanding what's running and what it costs
-- **[Triggers Guide](./TRIGGERS.md)** — What activates each workflow
+- **[Documentation Guide](./README.md)** — Pick the right doc quickly
 - **[CLI Reference](./CLI-REFERENCE.md)** — Direct CLI usage (advanced)
 - **[README](../README.md)** — Main documentation

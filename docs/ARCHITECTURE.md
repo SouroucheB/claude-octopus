@@ -37,7 +37,7 @@ Claude Octopus coordinates **three AI providers** to give you multi-perspective 
 | Provider | CLI Tool | Underlying Model | Cost Source |
 |----------|----------|------------------|-------------|
 | **Codex CLI** | `codex exec --model gpt-5.3-codex` | GPT-5.3-Codex (high-capability) | Your `OPENAI_API_KEY` |
-| **Gemini CLI** | `gemini -y -m gemini-3-pro-preview` | Gemini 3.0 Pro Preview | Your `GEMINI_API_KEY` |
+| **Gemini CLI** | `gemini -y -m gemini-3.1-pro-preview` | Gemini 3.0 Pro Preview | Your `GEMINI_API_KEY` |
 | **Claude** | Built-in | Claude Sonnet 4.6 / Opus 4.6 | Your Claude Code subscription |
 
 > **Note:** Models are as of February 2026. The orchestrate.sh script uses the latest available models.
@@ -453,7 +453,7 @@ The plugin wraps these commands and provides:
 
 ## See Also
 
-- **[Visual Indicators Guide](./VISUAL-INDICATORS.md)** - Visual feedback system
-- **[Triggers Guide](./TRIGGERS.md)** - What activates each workflow
+- **[Command and Usage Reference](./COMMAND-REFERENCE.md)** - Commands, triggers, and provider indicators
 - **[CLI Reference](./CLI-REFERENCE.md)** - Direct CLI usage
+- **[Documentation Guide](./README.md)** - Docs landing page
 - **[Command Reference](./COMMAND-REFERENCE.md)** - All available commands

@@ -2,7 +2,7 @@
 
 This guide documents direct CLI usage of orchestrate.sh for advanced users and automation scenarios.
 
-**Note:** For plugin users, natural language triggers (documented in [TRIGGERS.md](./TRIGGERS.md)) are the recommended way to use Claude Octopus. This CLI reference is for:
+**Note:** For plugin users, natural language triggers are documented in the [Command and Usage Reference](./COMMAND-REFERENCE.md#natural-language-triggers). This CLI reference is for:
 - Automation scripts
 - CI/CD pipelines
 - Direct command-line usage outside Claude Code
@@ -376,6 +376,121 @@ The configuration wizard sets your subscription tier for each provider:
 
 ---
 
+## Execution Modes
+
+### Async Mode
+
+Async mode improves progress tracking and background coordination for longer workflows.
+
+```bash
+./scripts/orchestrate.sh probe "research auth patterns" --async
+```
+
+**Benefits:**
+- Better elapsed-time and progress reporting
+- Cleaner console output during multi-agent runs
+- Lower waiting overhead during parallel phases
+
+**Best for:**
+- Multi-agent workflows such as `discover`/`probe` and `develop`/`tangle`
+- Long-running interactive work
+- Resource-constrained environments where cleaner buffering helps
+
+### Tmux Visualization
+
+Tmux mode shows live agent output in separate panes.
+
+```bash
+./scripts/orchestrate.sh embrace "implement auth system" --tmux
+```
+
+**What you get:**
+- Live agent output in separate tmux panes
+- Auto-balancing layouts as agents start and finish
+- Better visibility into long-running workflows without blocking the shell
+
+**Requirements:**
+- `tmux` installed
+- `--tmux` automatically enables async mode
+
+**Attach to a background session:**
+
+```bash
+tmux attach -t claude-octopus-<pid>
+```
+
+### Environment Variables
+
+```bash
+export OCTOPUS_ASYNC_MODE=true
+export OCTOPUS_TMUX_MODE=true
+./scripts/orchestrate.sh probe "research caching strategies"
+```
+
+### Disable These Features Explicitly
+
+```bash
+./scripts/orchestrate.sh probe "..." --no-async
+./scripts/orchestrate.sh probe "..." --no-tmux
+```
+
+### Standard vs Async vs Tmux
+
+| Feature | Standard | Async | Tmux |
+|---------|----------|-------|------|
+| Progress tracking | Basic | Detailed | Visual/live |
+| Output | Buffered | Buffered | Live panes |
+| Performance | Good | Better for long waits | Good with slight overhead |
+| Best for | CI/CD, scripts | Interactive runs | Debugging and development |
+
+---
+
+## Debug Mode
+
+Use debug mode when you need full execution details for troubleshooting.
+
+### Enable Debug Logging
+
+```bash
+# Environment variable
+export OCTOPUS_DEBUG=true
+./scripts/orchestrate.sh <command>
+
+# One-off inline
+OCTOPUS_DEBUG=true ./scripts/orchestrate.sh <command>
+
+# Flag form
+./scripts/orchestrate.sh --debug <command>
+```
+
+### What Debug Mode Shows
+
+- Startup information and resolved workspace paths
+- Provider detection and auth status
+- Agent execution details, timing, and exit codes
+- Workflow transitions and task group IDs
+- Richer error context
+
+### Example
+
+```bash
+OCTOPUS_DEBUG=true ./scripts/orchestrate.sh detect-providers
+```
+
+### Notes
+
+- `--debug` also enables verbose output
+- Use this for provider issues, unexpected routing, failing workflows, and bug reports
+- Never paste secrets from your environment when sharing logs
+
+### Disable Debug Logging
+
+```bash
+unset OCTOPUS_DEBUG
+```
+
+---
+
 ## Quality Gates
 
 Quality gates ensure minimum standards before delivery:
@@ -579,6 +694,19 @@ mkdir -p ~/.claude-octopus/debates
 # Maximum timeout is 1800 seconds (30 minutes)
 ```
 
+### Debugging a Failing Run
+
+```bash
+OCTOPUS_DEBUG=true ./scripts/orchestrate.sh --dry-run probe "test debug flow"
+./scripts/orchestrate.sh --debug detect-providers
+```
+
+**Use when:**
+- Providers are not being detected
+- Workflow routing seems wrong
+- Async or tmux behavior is unclear
+- You need richer logs for a bug report
+
 ---
 
 ## Integration with CI/CD
@@ -623,11 +751,11 @@ jobs:
 
 ## See Also
 
-- **[Visual Indicators Guide](./VISUAL-INDICATORS.md)** - Understanding what's running in plugin mode
-- **[Triggers Guide](./TRIGGERS.md)** - Natural language triggers for plugin users
+- **[Command and Usage Reference](./COMMAND-REFERENCE.md)** - Slash commands, natural-language triggers, and provider indicators
 - **[Plugin Architecture](./PLUGIN-ARCHITECTURE.md)** - How the plugin works internally
+- **[Documentation Guide](./README.md)** - Docs landing page
 - **[README](../README.md)** - Main documentation
 
 ---
 
-**For plugin users:** The natural language interface (documented in [TRIGGERS.md](./TRIGGERS.md)) is the recommended way to use Claude Octopus. Use this CLI reference for automation, CI/CD, or advanced power-user scenarios.
+**For plugin users:** The natural language interface is the recommended way to use Claude Octopus. Use this CLI reference for automation, CI/CD, or advanced power-user scenarios.

@@ -1,3 +1,11 @@
+## [8.54.0] - 2026-03-12
+
+### Changed
+
+- Multi-agentic /octo:research — parallel Agent dispatch replaces single Bash subprocess, user-configurable intensity, Claude in-conversation synthesis
+
+---
+
 ## [8.53.0] - 2026-03-11
 
 ### Added

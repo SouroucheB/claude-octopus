@@ -1,3 +1,13 @@
+## [9.7.4] - 2026-03-19
+
+### Changed
+
+- **3-tier adaptive statusline**: Tier 1 (Node 16+ HUD with smart columns), Tier 2 (bash + jq with context bar/cost/phase), Tier 3 (pure bash with grep/cut — zero external dependencies). Works on any POSIX system regardless of installed tools.
+- **Node version check**: Verifies Node >= 16 before attempting ESM HUD delegation. Node 14-15 users gracefully fall to Tier 2 instead of crashing on `node:` protocol imports.
+- **Removed unnecessary timeout from statusline**: Claude Code cancels in-flight statusline scripts on new updates per [official docs](https://code.claude.com/docs/en/statusline), so `timeout` guard is unnecessary (kept on hooks where it's still needed).
+
+---
+
 ## [9.7.3] - 2026-03-19
 
 ### Fixed

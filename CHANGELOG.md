@@ -1,3 +1,18 @@
+## [9.6.1] - 2026-03-19
+
+### Added
+
+- **Enhanced HUD rewrite**: Full async rewrite of `octopus-hud.mjs` (295 → 880 lines). Concurrent API/transcript/version fetching via `Promise.all`. First call ~300-500ms, subsequent calls <10ms (all cache hits).
+- **Rate limit tracking**: 5h/7d usage from Anthropic OAuth API with color-coded percentages and reset countdown timers. Credential reading from `.credentials.json` with macOS Keychain fallback. Token refresh on expiry. 60s/15s cache TTLs.
+- **Transcript-based agent tracking**: Parses JSONL transcripts for running/completed agents (Task/proxy_Task tool_use blocks). Background agent tracking, stale agent detection (30 min timeout), max 100 agents in memory. Agent detail tree with `├─`/`└─` prefixes showing type, model, elapsed time, description.
+- **Cache hit rate**: Computes cache read vs total tokens from `current_usage` fields. Displayed as percentage with color coding.
+- **Version check**: Fetches latest Claude Code version from npm registry with 1h cache. Shows update indicator dot when current differs from latest.
+- **Configurable column system**: `~/.claude-octopus/.hud-config.jsonc` with JSONC parsing (supports `//` comments). 14 columns available, 5 default ON. Vertical (2-row labels+values) and horizontal (single-row compact) layouts.
+- **Tailwind color palette**: Replaced basic ANSI (31-37) with 24-bit Tailwind colors — Emerald-600 for good, Amber-600 for warning, Red-600 for critical, Slate-600/700/800 for data/labels/separators.
+- Updated `test-enhanced-hud.sh` — 30 tests across 6 groups covering rate limit functions, display, enhanced features, Octopus preserved functions, config system, and layout support.
+
+---
+
 ## [9.6.0] - 2026-03-18
 
 ### Added

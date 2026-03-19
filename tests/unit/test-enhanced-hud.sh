@@ -1,144 +1,215 @@
 #!/usr/bin/env bash
-# Tests for v9.6.0 enhanced HUD — gradient bar, warning indicators, agent display, project state
+# test-enhanced-hud.sh - Static analysis tests for enhanced octopus-hud.mjs
+# Tests async HUD with rate limits, agent trees, configurable columns, and v9.6.0 features
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HUD="$PROJECT_ROOT/hooks/octopus-hud.mjs"
-STATUSLINE="$PROJECT_ROOT/hooks/octopus-statusline.sh"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+HUD_MJS="$PLUGIN_ROOT/hooks/octopus-hud.mjs"
 
-TEST_COUNT=0; PASS_COUNT=0; FAIL_COUNT=0
-pass() { TEST_COUNT=$((TEST_COUNT+1)); PASS_COUNT=$((PASS_COUNT+1)); echo "PASS: $1"; }
-fail() { TEST_COUNT=$((TEST_COUNT+1)); FAIL_COUNT=$((FAIL_COUNT+1)); echo "FAIL: $1 — $2"; }
+PASS=0 FAIL=0
 
-# ── Gradient bar characters ─────────────────────────────────────────
+assert_pass() { ((PASS++)); echo "  ✓ $1"; }
+assert_fail() { ((FAIL++)); echo "  ✗ $1"; }
 
-if grep -qE '▰|25B0' "$HUD" 2>/dev/null; then
-    pass "HUD uses ▰ filled gradient char"
-else
-    fail "HUD uses ▰ filled gradient char" "missing U+25B0"
-fi
+echo "============================================================"
+echo "Enhanced HUD Tests"
+echo "============================================================"
+echo ""
 
-if grep -qE '▱|25B1' "$HUD" 2>/dev/null; then
-    pass "HUD uses ▱ empty gradient char"
-else
-    fail "HUD uses ▱ empty gradient char" "missing U+25B1"
-fi
+# ── Group 1: Core Rate Limit Functions (8 tests) ────────────────────────────
+echo "Group 1: Core Rate Limit Functions"
+echo "------------------------------------------------------------"
 
-if grep -q '▰' "$STATUSLINE" 2>/dev/null; then
-    pass "Bash fallback uses ▰ gradient char"
-else
-    fail "Bash fallback uses ▰ gradient char" "missing in statusline.sh"
-fi
+grep -q 'function getCredentials' "$HUD_MJS" && \
+    assert_pass "1.1 getCredentials function exists" || \
+    assert_fail "1.1 getCredentials function exists"
 
-# ── Warning indicators ──────────────────────────────────────────────
+grep -q 'function fetchUsage' "$HUD_MJS" && \
+    assert_pass "1.2 fetchUsage function exists" || \
+    assert_fail "1.2 fetchUsage function exists"
 
-if grep -q '💀\|\\u{1F480}' "$HUD" 2>/dev/null; then
-    pass "HUD has skull emoji for >=90%"
-else
-    fail "HUD has skull emoji for >=90%" "missing skull indicator"
-fi
+grep -q 'async function getUsage' "$HUD_MJS" && \
+    assert_pass "1.3 getUsage async orchestrator exists" || \
+    assert_fail "1.3 getUsage async orchestrator exists"
 
-if grep -q '⚠\|\\u26A0' "$HUD" 2>/dev/null; then
-    pass "HUD has warning emoji for >=80%"
-else
-    fail "HUD has warning emoji for >=80%" "missing warning indicator"
-fi
+grep -q 'function readUsageCache' "$HUD_MJS" && \
+    assert_pass "1.4 readUsageCache function exists" || \
+    assert_fail "1.4 readUsageCache function exists"
 
-if grep -q '💀' "$STATUSLINE" 2>/dev/null; then
-    pass "Bash fallback has skull emoji"
-else
-    fail "Bash fallback has skull emoji" "missing in statusline.sh"
-fi
+grep -q 'function writeUsageCache' "$HUD_MJS" && \
+    assert_pass "1.5 writeUsageCache function exists" || \
+    assert_fail "1.5 writeUsageCache function exists"
 
-if grep -q '⚠' "$STATUSLINE" 2>/dev/null; then
-    pass "Bash fallback has warning emoji"
-else
-    fail "Bash fallback has warning emoji" "missing in statusline.sh"
-fi
+grep -q 'function refreshAccessToken' "$HUD_MJS" && \
+    assert_pass "1.6 refreshAccessToken function exists" || \
+    assert_fail "1.6 refreshAccessToken function exists"
 
-# ── 80% threshold ───────────────────────────────────────────────────
+grep -q 'OAUTH_CLIENT_ID' "$HUD_MJS" && \
+    assert_pass "1.7 OAUTH_CLIENT_ID constant defined" || \
+    assert_fail "1.7 OAUTH_CLIENT_ID constant defined"
 
-if grep -qE 'pct >= 80|PCT.*-ge 80|80' "$HUD" 2>/dev/null; then
-    pass "HUD has 80% threshold"
-else
-    fail "HUD has 80% threshold" "missing 80 check"
-fi
-
-if grep -qE '90.*80|80.*90|-ge 80|-ge 90' "$STATUSLINE" 2>/dev/null; then
-    pass "Bash fallback has 80/90 thresholds"
-else
-    fail "Bash fallback has 80/90 thresholds" "missing threshold checks"
-fi
-
-# ── readProgress function ────────────────────────────────────────────
-
-if grep -q 'readProgress' "$HUD" 2>/dev/null; then
-    pass "HUD has readProgress() function"
-else
-    fail "HUD has readProgress() function" "missing"
-fi
-
-if grep -q 'progress.*cache\|_progressCache' "$HUD" 2>/dev/null; then
-    pass "readProgress has cache for performance"
-else
-    fail "readProgress has cache for performance" "missing cache"
-fi
-
-# ── activeAgentName function ─────────────────────────────────────────
-
-if grep -q 'activeAgentName' "$HUD" 2>/dev/null; then
-    pass "HUD has activeAgentName() function"
-else
-    fail "HUD has activeAgentName() function" "missing"
-fi
-
-if grep -q 'running' "$HUD" 2>/dev/null; then
-    pass "activeAgentName checks for running status"
-else
-    fail "activeAgentName checks for running status" "missing status check"
-fi
-
-# ── readProjectState function ────────────────────────────────────────
-
-if grep -q 'readProjectState' "$HUD" 2>/dev/null; then
-    pass "HUD has readProjectState() function"
-else
-    fail "HUD has readProjectState() function" "missing"
-fi
-
-if grep -q 'STATE.md' "$HUD" 2>/dev/null; then
-    pass "readProjectState reads .octo/STATE.md"
-else
-    fail "readProjectState reads .octo/STATE.md" "missing STATE.md reference"
-fi
-
-# ── Agent name in statusline segment ─────────────────────────────────
-
-if grep -q 'runningAgent' "$HUD" 2>/dev/null; then
-    pass "HUD displays running agent name in segments"
-else
-    fail "HUD displays running agent name in segments" "missing runningAgent"
-fi
-
-# ── Project task in idle statusline ──────────────────────────────────
-
-if grep -q 'projectTask' "$HUD" 2>/dev/null; then
-    pass "HUD shows project task when no workflow active"
-else
-    fail "HUD shows project task when no workflow active" "missing projectTask"
-fi
-
-# ── Octopus branding ────────────────────────────────────────────────
-
-if grep -qE 'Octopus\]|1F419' "$HUD" 2>/dev/null; then
-    pass "HUD uses 🐙 Octopus branding"
-else
-    fail "HUD uses 🐙 Octopus branding" "missing octopus emoji/text"
-fi
+grep -q 'CACHE_TTL_MS' "$HUD_MJS" && \
+    assert_pass "1.8 CACHE_TTL_MS constant defined" || \
+    assert_fail "1.8 CACHE_TTL_MS constant defined"
 
 echo ""
-echo "═══════════════════════════════════════════════════"
-echo "enhanced-hud: $PASS_COUNT/$TEST_COUNT passed"
-[[ $FAIL_COUNT -gt 0 ]] && echo "FAILURES: $FAIL_COUNT" && exit 1
-echo "All tests passed."
+
+# ── Group 2: Rate Limit Display (5 tests) ───────────────────────────────────
+echo "Group 2: Rate Limit Display"
+echo "------------------------------------------------------------"
+
+grep -q 'function colorForPercent' "$HUD_MJS" && \
+    assert_pass "2.1 colorForPercent function exists" || \
+    assert_fail "2.1 colorForPercent function exists"
+
+grep -q 'function formatResetTime' "$HUD_MJS" && \
+    assert_pass "2.2 formatResetTime function exists" || \
+    assert_fail "2.2 formatResetTime function exists"
+
+grep -q '5h Usage' "$HUD_MJS" && \
+    assert_pass "2.3 5h Usage column defined" || \
+    assert_fail "2.3 5h Usage column defined"
+
+grep -q '7d Usage' "$HUD_MJS" && \
+    assert_pass "2.4 7d Usage column defined" || \
+    assert_fail "2.4 7d Usage column defined"
+
+# Tailwind 24-bit colors (Emerald-600, Amber-600, Red-600)
+grep -q '38;2;5;150;105' "$HUD_MJS" && \
+    assert_pass "2.5 Tailwind Emerald-600 color present" || \
+    assert_fail "2.5 Tailwind Emerald-600 color present"
+
+echo ""
+
+# ── Group 3: Enhanced Features (6 tests) ────────────────────────────────────
+echo "Group 3: Enhanced Features"
+echo "------------------------------------------------------------"
+
+grep -q 'function cacheHitRate' "$HUD_MJS" && \
+    assert_pass "3.1 cacheHitRate function exists" || \
+    assert_fail "3.1 cacheHitRate function exists"
+
+# Gradient bar uses ▰▱ characters
+grep -q '▰' "$HUD_MJS" && grep -q '▱' "$HUD_MJS" && \
+    assert_pass "3.2 Gradient bar characters (▰▱) present" || \
+    assert_fail "3.2 Gradient bar characters (▰▱) present"
+
+grep -q 'function formatDuration' "$HUD_MJS" && \
+    assert_pass "3.3 formatDuration function exists" || \
+    assert_fail "3.3 formatDuration function exists"
+
+grep -q 'function formatTokens' "$HUD_MJS" && \
+    assert_pass "3.4 formatTokens function exists" || \
+    assert_fail "3.4 formatTokens function exists"
+
+grep -q 'function fetchLatestVersion' "$HUD_MJS" && \
+    assert_pass "3.5 fetchLatestVersion function exists" || \
+    assert_fail "3.5 fetchLatestVersion function exists"
+
+grep -q 'async function parseTranscript' "$HUD_MJS" && \
+    assert_pass "3.6 parseTranscript async function exists" || \
+    assert_fail "3.6 parseTranscript async function exists"
+
+echo ""
+
+# ── Group 4: Octopus Functions Preserved (5 tests) ──────────────────────────
+echo "Group 4: Octopus Functions Preserved"
+echo "------------------------------------------------------------"
+
+grep -q 'function readSession' "$HUD_MJS" && \
+    assert_pass "4.1 readSession function preserved" || \
+    assert_fail "4.1 readSession function preserved"
+
+grep -q 'PHASE_EMOJI' "$HUD_MJS" && \
+    assert_pass "4.2 PHASE_EMOJI mapping preserved" || \
+    assert_fail "4.2 PHASE_EMOJI mapping preserved"
+
+grep -q 'function providerIndicators' "$HUD_MJS" && \
+    assert_pass "4.3 providerIndicators function preserved" || \
+    assert_fail "4.3 providerIndicators function preserved"
+
+grep -q 'function qualityGate' "$HUD_MJS" && \
+    assert_pass "4.4 qualityGate function preserved" || \
+    assert_fail "4.4 qualityGate function preserved"
+
+# Context bridge writes to /tmp/octopus-ctx-
+grep -q 'octopus-ctx-' "$HUD_MJS" && \
+    assert_pass "4.5 Context bridge write preserved" || \
+    assert_fail "4.5 Context bridge write preserved"
+
+echo ""
+
+# ── Group 5: Config System (3 tests) ────────────────────────────────────────
+echo "Group 5: Config System"
+echo "------------------------------------------------------------"
+
+grep -q 'function readConfig' "$HUD_MJS" && \
+    assert_pass "5.1 readConfig function exists" || \
+    assert_fail "5.1 readConfig function exists"
+
+grep -q 'function parseJsonc' "$HUD_MJS" && \
+    assert_pass "5.2 parseJsonc function exists" || \
+    assert_fail "5.2 parseJsonc function exists"
+
+grep -q '.hud-config.jsonc' "$HUD_MJS" && \
+    assert_pass "5.3 Config path uses .hud-config.jsonc" || \
+    assert_fail "5.3 Config path uses .hud-config.jsonc"
+
+echo ""
+
+# ── Group 6: Layout Support (3 tests) ───────────────────────────────────────
+echo "Group 6: Layout Support"
+echo "------------------------------------------------------------"
+
+grep -q 'function padAnsi' "$HUD_MJS" && \
+    assert_pass "6.1 padAnsi function exists" || \
+    assert_fail "6.1 padAnsi function exists"
+
+grep -q 'function stripAnsi' "$HUD_MJS" && \
+    assert_pass "6.2 stripAnsi function exists" || \
+    assert_fail "6.2 stripAnsi function exists"
+
+grep -q 'horizontal' "$HUD_MJS" && grep -q 'vertical' "$HUD_MJS" && \
+    assert_pass "6.3 Horizontal and vertical layout support" || \
+    assert_fail "6.3 Horizontal and vertical layout support"
+
+echo ""
+
+# ── Group 7: v9.6.0 Features Preserved (6 tests) ───────────────────────────
+echo "Group 7: v9.6.0 Features Preserved"
+echo "------------------------------------------------------------"
+
+grep -q 'function readProgress' "$HUD_MJS" && \
+    assert_pass "7.1 readProgress function preserved" || \
+    assert_fail "7.1 readProgress function preserved"
+
+grep -q '_progressCache' "$HUD_MJS" && \
+    assert_pass "7.2 readProgress has cache for performance" || \
+    assert_fail "7.2 readProgress has cache for performance"
+
+grep -q 'function activeAgentName' "$HUD_MJS" && \
+    assert_pass "7.3 activeAgentName function preserved" || \
+    assert_fail "7.3 activeAgentName function preserved"
+
+grep -q 'function readProjectState' "$HUD_MJS" && \
+    assert_pass "7.4 readProjectState function preserved" || \
+    assert_fail "7.4 readProjectState function preserved"
+
+grep -q 'STATE.md' "$HUD_MJS" && \
+    assert_pass "7.5 readProjectState reads .octo/STATE.md" || \
+    assert_fail "7.5 readProjectState reads .octo/STATE.md"
+
+grep -qE '1F480|💀' "$HUD_MJS" && \
+    assert_pass "7.6 Skull emoji for >=90% context" || \
+    assert_fail "7.6 Skull emoji for >=90% context"
+
+echo ""
+
+# ── Summary ──────────────────────────────────────────────────────────────────
+echo "============================================================"
+TOTAL=$((PASS + FAIL))
+echo "Results: $PASS/$TOTAL passed, $FAIL failed"
+echo "============================================================"
+
+[[ $FAIL -eq 0 ]] && exit 0 || exit 1

@@ -11,8 +11,8 @@
     {
       "name": "octo",
       "source": "./",
-      "description": "v9.6.0 - Polished presence + session intelligence. Gradient statusline with active agent names, workflow-aware context warnings (3 levels), session handoff files, enhanced intent detection with persona injection. 32 personas, 40 commands, 50 skills. Run /octo:setup.",
-      "version": "9.6.0",
+      "description": "v9.6.1 - Enhanced HUD with rate limit tracking, agent trees, and configurable columns. Async statusline with 5h/7d usage from Anthropic OAuth API, cache hit rate, version check, transcript-based agent tracking, Tailwind color palette, vertical/horizontal layouts. 32 personas, 40 commands, 50 skills. Run /octo:setup.",
+      "version": "9.6.1",
       "author": {
         "name": "nyldn"
       },

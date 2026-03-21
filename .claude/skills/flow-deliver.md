@@ -5,7 +5,7 @@ aliases:
   - deliver-workflow
   - ink
   - ink-workflow
-description: Multi-AI validation and review using Codex and Gemini CLIs (Double Diamond Deliver phase)
+description: Multi-AI validation, scoring, and review using Codex and Gemini CLIs (Double Diamond Deliver phase)
 
 # Claude Code v2.1.12+ Integration
 agent: general-purpose
@@ -21,8 +21,9 @@ validation_gates:
   - orchestrate_sh_executed
   - validation_file_exists
 trigger: |
-  AUTOMATICALLY ACTIVATE when user requests validation or review:
+  AUTOMATICALLY ACTIVATE when user requests validation, scoring, or review:
   - "review X" or "validate Y" or "test Z"
+  - "score this", "quality check", "validate before shipping"
   - "check if X works correctly"
   - "verify the implementation of Y"
   - "find issues in Z"

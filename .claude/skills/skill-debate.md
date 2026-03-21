@@ -638,6 +638,35 @@ Knowledge mode "deliberate" phase → Run /debate to get multiple perspectives
 
 ---
 
+## Quality Gates for Responses
+
+Each advisor response is scored before proceeding:
+
+| Metric | Weight | Criteria |
+|--------|--------|----------|
+| Length | 25 pts | 50-1000 words (substantive but concise) |
+| Citations | 25 pts | References, links, or sources present |
+| Code Examples | 25 pts | Technical examples or code snippets |
+| Engagement | 25 pts | Addresses other advisors' specific points |
+
+Score >= 75: proceed. Score 50-74: proceed with warning. Score < 50: re-prompt for elaboration.
+
+## Cost Tracking
+
+Typical costs (default word limits):
+- Quick (1 round): $0.02 - $0.05
+- Thorough (3 rounds): $0.10 - $0.20
+- Adversarial (5 rounds): $0.25 - $0.50
+
+Cost tracking integrates with `~/.claude-octopus/analytics/` logs.
+
+## Export
+
+After debate completes, export results via document-delivery skill:
+- PPTX: stakeholder presentations from synthesis
+- DOCX: detailed documentation from full transcript
+- PDF: archival with metadata (topic, participants, cost)
+
 ## Attribution
 
 - **Original Skill**: AI Debate Hub by wolverin0

@@ -1,7 +1,7 @@
 {
   "name": "octo",
   "version": "9.7.7",
-  "description": "Multi-tentacled orchestrator using Double Diamond methodology. (v9.7.7) Fixed broken Skill() dispatch in 9 commands, scoped PostToolUse hook to reduce overhead, MCP Node version guard. 3-tier adaptive statusline, smart HUD. 32 expert personas, 40 commands, 50 skills. Commands use '/octo:*', including the '/octo:auto' smart router. Run /octo:setup for guided setup.",
+  "description": "Multi-tentacled orchestrator using Double Diamond methodology. (v9.7.7) Fixed broken Skill() dispatch in 9 commands, scoped PostToolUse hook to reduce overhead, MCP Node version guard. 3-tier adaptive statusline, smart HUD. 32 expert personas, 40 commands, 45 skills. Commands use '/octo:*', including the '/octo:auto' smart router. Run /octo:setup for guided setup.",
   "author": {
     "name": "nyldn"
   },
@@ -55,12 +55,12 @@
     "./.claude/skills/flow-deliver.md",
     "./.claude/skills/sys-configure.md",
     "./.claude/skills/skill-debate.md",
-    "./.claude/skills/skill-debate-integration.md",
+
     "./.claude/skills/skill-code-review.md",
     "./.claude/skills/skill-architecture.md",
     "./.claude/skills/skill-security-audit.md",
-    "./.claude/skills/skill-quick-review.md",
-    "./.claude/skills/skill-adversarial-security.md",
+
+
     "./.claude/skills/skill-deep-research.md",
     "./.claude/skills/skill-writing-plans.md",
     "./.claude/skills/skill-tdd.md",
@@ -68,7 +68,7 @@
     "./.claude/skills/skill-doc-delivery.md",
     "./.claude/skills/skill-finish-branch.md",
     "./.claude/skills/skill-verify.md",
-    "./.claude/skills/skill-validate.md",
+
     "./.claude/skills/skill-parallel-agents.md",
     "./.claude/skills/skill-knowledge-work.md",
     "./.claude/skills/skill-task-management-v2.md",
@@ -83,7 +83,7 @@
     "./.claude/skills/skill-issues.md",
     "./.claude/skills/skill-rollback.md",
     "./.claude/skills/skill-resume.md",
-    "./.claude/skills/skill-resume-enhanced.md",
+
     "./.claude/skills/skill-ship.md",
     "./.claude/skills/skill-deck.md",
     "./.claude/skills/flow-spec.md",

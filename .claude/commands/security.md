@@ -93,7 +93,7 @@ Apply the user's answers from Step 1 as the audit scope and severity thresholds.
    ```
    One provider plays attacker, the other plays defender. Claude synthesizes.
 
-2. **"Full adversarial cycle"**: Run the `octopus-security` (squeeze) workflow which already
+2. **"Full adversarial cycle"**: Run the `octopus-security-audit` (squeeze) workflow which already
    implements Blue→Red→Remediate→Validate, but add debate transitions between each phase:
    - After Blue Team: debate whether defense is sufficient
    - After Red Team: debate severity and exploitability of findings

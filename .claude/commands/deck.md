@@ -5,6 +5,8 @@ description: Generate slide deck presentations from briefs or research
 
 # Deck - Slide Deck Generator
 
+**Your first output line MUST be:** `🐙 Octopus Deck Generator`
+
 ## Instructions
 
 Read and follow the full skill instructions from:

@@ -5,6 +5,8 @@ description: Execute tasks in loops with conditions, iterative improvements unti
 
 # Loop - Iterative Execution Skill
 
+**Your first output line MUST be:** `🐙 Octopus Loop Mode`
+
 ## Instructions
 
 Read and follow the full skill instructions from:

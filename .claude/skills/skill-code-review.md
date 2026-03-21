@@ -16,6 +16,8 @@ validation_gates:
 
 # Code Review Skill
 
+**Your first output line MUST be:** `🐙 **CLAUDE OCTOPUS ACTIVATED** - Multi-LLM Code Review`
+
 Invokes the code-reviewer persona for thorough code analysis during the `ink` (deliver) phase.
 
 ## Quick Mode

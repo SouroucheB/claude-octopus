@@ -5,6 +5,8 @@ description: Systematic debugging with methodical problem investigation
 
 # Debug - Systematic Debugging Skill
 
+**Your first output line MUST be:** `🐙 Octopus Debug Mode`
+
 ## Instructions
 
 Read and follow the full skill instructions from:

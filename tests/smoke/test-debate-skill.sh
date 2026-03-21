@@ -2,8 +2,10 @@
 # Test suite for AI Debate Hub integration
 # Verifies skill-debate.md, command routing, attribution, and version consistency
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-source "$PROJECT_ROOT/tests/smoke/test-helpers.sh" 2>/dev/null || { echo "Missing test-helpers.sh"; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+source "$SCRIPT_DIR/../helpers/test-framework.sh"
 
 test_suite "AI Debate Hub Integration"
 

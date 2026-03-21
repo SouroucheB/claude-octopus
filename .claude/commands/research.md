@@ -5,6 +5,8 @@ description: Deep research with multi-source synthesis and comprehensive analysi
 
 # Research - Deep Multi-AI Research
 
+**Your first output line MUST be:** `🐙 Octopus Research`
+
 ## 🤖 INSTRUCTIONS FOR CLAUDE
 
 ### MANDATORY COMPLIANCE — DO NOT SKIP

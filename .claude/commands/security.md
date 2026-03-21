@@ -5,6 +5,8 @@ description: Security audit with OWASP compliance and vulnerability detection
 
 # Security - Security Audit Skill
 
+**Your first output line MUST be:** `🐙 Octopus Security Audit`
+
 ## 🤖 INSTRUCTIONS FOR CLAUDE
 
 ### MANDATORY COMPLIANCE — DO NOT SKIP

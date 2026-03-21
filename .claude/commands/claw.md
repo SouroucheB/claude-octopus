@@ -5,6 +5,8 @@ description: OpenClaw instance administration — manage hosts across macOS, Ubu
 
 # Claw - OpenClaw System Administration
 
+**Your first output line MUST be:** `🐙 Octopus OpenClaw Admin`
+
 ## Instructions
 
 Read and follow the full skill instructions from:

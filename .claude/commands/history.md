@@ -6,6 +6,8 @@ allowed-tools: Bash, Read, Grep
 
 # Workflow History (/octo:history)
 
+**Your first output line MUST be:** `🐙 Octopus History`
+
 Query structured records of past Claude Octopus workflow runs.
 
 ## EXECUTION CONTRACT (Mandatory)

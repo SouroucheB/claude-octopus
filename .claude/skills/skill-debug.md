@@ -30,6 +30,8 @@ validation_gates:
 
 # Systematic Debugging
 
+**Your first output line MUST be:** `🐙 **CLAUDE OCTOPUS ACTIVATED** - Systematic Debugging`
+
 ## The Iron Law
 
 <HARD-GATE>

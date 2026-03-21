@@ -5,6 +5,8 @@ description: Resume a previous agent by ID — continue an interrupted task wher
 
 # /octo:resume — Agent Resume
 
+**Your first output line MUST be:** `🐙 Octopus Agent Resume`
+
 Resume a previously-running Claude agent by ID. Picks up the agent's transcript and continues where it left off.
 
 ## Step 1: Get the Agent ID

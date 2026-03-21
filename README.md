@@ -7,7 +7,7 @@ A Claude Code plugin that turns one model into three. Orchestrates Codex, Gemini
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-9.7.8-blue" alt="Version 9.7.8">
+  <img src="https://img.shields.io/badge/Version-9.8.0-blue" alt="Version 9.8.0">
   <img src="https://img.shields.io/badge/Claude_Code-v2.1.50+-blueviolet" alt="Requires Claude Code v2.1.50+">
   <img src="https://img.shields.io/badge/Factory_AI-Compatible-orange" alt="Factory AI Compatible">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
@@ -33,7 +33,8 @@ A Claude Code plugin that turns one model into three. Orchestrates Codex, Gemini
 
 | Version | What shipped |
 |---------|-------------|
-| **9.5–9.6** | **Context awareness** — workflow-aware warnings at 65/75/80% with phase-specific advice. **Polished statusline** — gradient bar, active agent name, auto-compact indicators (⚠/💀). **Session handoff** — `.octo-continue.md` preserves multi-LLM workflow state across sessions. **Smart router renamed** `/octo:auto`. **Intent pre-loading** — high-confidence prompts inject persona context before workflow starts. |
+| **9.8.0** | **Adversarial debate everywhere** — 9 workflows now use multi-LLM cross-checking (multi, spec, define, factory, develop, prd, staged-review, parallel, tdd). **Visual indicators on all commands** — every `/octo:*` command shows a 🐙 activation line so you always know what's running. **CI fixes** — test-debate-skill.sh and test-packaging-integrity.sh smoke tests repaired. |
+| **9.5–9.7** | **Context awareness** — workflow-aware warnings at 65/75/80% with phase-specific advice. **Polished statusline** — gradient bar, active agent name, auto-compact indicators (⚠/💀). **Session handoff** — `.octo-continue.md` preserves multi-LLM workflow state across sessions. **Smart router renamed** `/octo:auto`. **Intent pre-loading** — high-confidence prompts inject persona context before workflow starts. |
 | **9.0–9.4** | **92% fewer subshell forks** (9.4) — two rounds cut orchestrate.sh from ~900 forks/workflow to ~70. **Four-way debates** — Sonnet joins as permanent 4th participant. **Auto code review** after dev workflows. **claude-mem integration** — persistent cross-session memory. **Monolith decomposition** — 7 modules extracted to lib/. |
 | **8.55** | **Smart router v2.0** — just say what you need and `/octo:auto` routes to the right workflow. 17 supported workflows, learns your preferences over time |
 | **8.54** | **Multi-agentic research** — `/octo:research` now runs perspectives in parallel with configurable intensity (Quick / Standard / Deep) |
@@ -249,7 +250,7 @@ Everything except multi-AI features. You get all 32 personas, structured workflo
 
 **No telemetry** — No usage data collected. No phone-home. Fully open source.
 
-**Provider transparency** — Visual indicators (colored dots) show exactly which providers are running and when external APIs are called. You always know what's happening.
+**Provider transparency** — Every command shows a 🐙 activation indicator on launch. Colored dots (🔴 🟡 🟣 🔵) show exactly which providers are running and when external APIs are called. You always know what's happening.
 
 **Clean uninstall** — Run `claude plugin uninstall octo` from your terminal. If you see a scope error, add `--scope project`. No residual config changes.
 

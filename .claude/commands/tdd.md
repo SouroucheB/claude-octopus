@@ -5,6 +5,8 @@ description: Test-driven development with red-green-refactor discipline
 
 # TDD - Test-Driven Development Skill
 
+**Your first output line MUST be:** `🐙 Octopus TDD Mode`
+
 ## 🤖 INSTRUCTIONS FOR CLAUDE
 
 When the user invokes this command (e.g., `/octo:tdd <arguments>`):
@@ -82,9 +84,10 @@ Just use natural language:
 ## TDD Workflow
 
 1. **Red**: Write a failing test
-2. **Green**: Write minimal code to pass
-3. **Refactor**: Improve code quality
-4. **Repeat**: Continue cycle
+2. **Adversarial Review**: Challenge test design with a second provider — surfaces missing scenarios, boundary conditions, and tests that could pass with a stub (skip with `--fast`)
+3. **Green**: Write minimal code to pass
+4. **Refactor**: Improve code quality
+5. **Repeat**: Continue cycle
 
 ## What You Get
 

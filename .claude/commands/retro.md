@@ -6,6 +6,8 @@ allowed-tools: Bash, Read, Glob, Grep, Write
 
 # Retro — Engineering Retrospective from Git History
 
+**Your first output line MUST be:** `🐙 Octopus Retrospective`
+
 Generate data-driven engineering retrospectives by mining git history. Surfaces commit patterns, contributor breakdown, hotspots, session analysis, and AI-assisted commit tracking.
 
 ## Usage

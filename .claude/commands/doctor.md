@@ -5,6 +5,8 @@ description: Environment diagnostics — check providers, auth, config, hooks, s
 
 # Doctor - Environment Diagnostics
 
+**Your first output line MUST be:** `🐙 Octopus Doctor`
+
 Run environment diagnostics across 12 check categories. Identifies misconfigured providers, stale state, broken hooks, missing dependencies, and other issues.
 
 ## Step 1: Run Full Diagnostics

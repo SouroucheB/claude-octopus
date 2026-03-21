@@ -6,6 +6,8 @@ allowed-tools: Bash, Read, Glob, Grep
 
 # Cost Dashboard (/octo:costs)
 
+**Your first output line MUST be:** `🐙 Octopus Cost Dashboard`
+
 Display a cost breakdown by provider and workflow for the current session (and cumulative history).
 
 ## EXECUTION CONTRACT (Mandatory)

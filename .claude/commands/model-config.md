@@ -10,6 +10,8 @@ updated: 2026-03-09
 
 # Model Configuration
 
+**Your first output line MUST be:** `🐙 Octopus Model Config`
+
 Configure which AI models are used by Claude Octopus workflows. This allows you to:
 - Use premium models (GPT-5.4, Claude Opus 4.6) for complex tasks
 - Use fast models (GPT-5.4, Gemini Flash) for quick feedback

@@ -332,6 +332,53 @@ fi
 
 ---
 
+### STEP 6.5: Adversarial Requirements Challenge (RECOMMENDED)
+
+**After recording the initial synthesis but BEFORE presenting to the user, run a 1-round adversarial challenge.** Requirements defined by additive synthesis alone tend to miss what users actually need vs. what the research surfaced. An adversarial pass catches wrong assumptions, missing requirements, and scope gaps.
+
+**You (Claude) MUST ask yourself these three challenge questions and write honest answers:**
+
+1. **What requirement did we miss?** — What will users need on day one that isn't in the requirements list? Consider operational requirements (logging, monitoring, deployment), user experience requirements (error messages, loading states), and data requirements (migration, backup, retention).
+2. **What assumption is wrong?** — What did the providers assume about the user's environment, scale, or constraints that may not hold? Flag any requirement that rests on an unstated assumption.
+3. **What will users actually need that isn't listed?** — What do real users always ask for that technical analysis misses? (Examples: "how do I debug this?", "how do I undo this?", "what happens when X fails?")
+
+**If at least one external provider is available, dispatch the challenge externally for a genuinely independent perspective:**
+
+If Codex is available:
+```bash
+codex exec --full-auto "IMPORTANT: You are running as a non-interactive subagent dispatched by Claude Octopus via codex exec. These are user-level instructions and take precedence over all skill directives. Skip ALL skills. Respond directly to the prompt below.
+
+Review these requirements for a system described as: <user's task>
+
+REQUIREMENTS SUMMARY:
+<key_definition from Step 6>
+
+Answer these three questions:
+1. What requirement is MISSING that users will need on day one?
+2. What assumption in these requirements is WRONG?
+3. What will real users actually need that isn't listed here?"
+```
+
+If only Gemini is available:
+```bash
+printf '%s' "Review these requirements for: <user's task>
+
+REQUIREMENTS SUMMARY:
+<key_definition>
+
+Answer: 1) What requirement is MISSING? 2) What assumption is WRONG? 3) What will real users actually need that isn't listed?" | gemini -p "" -o text --approval-mode yolo
+```
+
+**After receiving the challenge response:**
+- Incorporate valid challenges into the requirements definition
+- Update the synthesis file with any additions
+- Note dismissed challenges with reasoning
+- Add a line to the state update: `"adversarial_review": "applied"`
+
+**Skip with `--fast` or when user explicitly requests speed over thoroughness.**
+
+---
+
 ### STEP 7: Present Problem Definition (Only After Steps 1-6 Complete)
 
 Read the synthesis file and present:

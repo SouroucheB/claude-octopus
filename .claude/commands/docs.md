@@ -5,6 +5,8 @@ description: Document delivery with export to PPTX, DOCX, PDF formats
 
 # Docs - Document Delivery Skill
 
+**Your first output line MUST be:** `🐙 Octopus Document Delivery`
+
 ## Instructions
 
 Read and follow the full skill instructions from:

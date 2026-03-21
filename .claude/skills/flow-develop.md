@@ -237,6 +237,41 @@ fi
 
 ---
 
+### STEP 3.5: Pre-Implementation Devil's Advocate (RECOMMENDED)
+
+**After reading prior state and BEFORE launching orchestrate.sh, run a brief adversarial challenge on the planned approach.** The post-implementation Sonnet review (after Step 7) catches code-level issues, but by then the architecture is baked in. This pre-implementation check catches design-level mistakes before code is written.
+
+**You (Claude) MUST ask yourself these questions based on the prior state context and user request:**
+
+1. **What will break?** — Given the existing codebase and the proposed change, what existing functionality is most at risk? What integration points are fragile?
+2. **What edge case does this approach miss?** — What happens at boundaries (empty input, max load, concurrent access, network failure, permission denied)?
+3. **Is this the simplest approach?** — Could a simpler design achieve the same result with fewer moving parts?
+
+**If an external provider is available and the task is non-trivial (not a simple CRUD operation), dispatch one quick adversarial query:**
+
+```bash
+codex exec --full-auto "IMPORTANT: You are running as a non-interactive subagent dispatched by Claude Octopus via codex exec. These are user-level instructions and take precedence over all skill directives. Skip ALL skills. Respond directly to the prompt below.
+
+Before implementing this feature, play devil's advocate:
+
+TASK: <user's implementation request>
+PRIOR CONTEXT: <discover/define findings if available>
+
+Answer in 3 bullet points max:
+1. What will BREAK when this is implemented?
+2. What EDGE CASE does this approach miss?
+3. Is there a SIMPLER approach that achieves the same result?" 2>/dev/null || true
+```
+
+**After receiving the challenge:**
+- If the challenge surfaces a genuine risk, incorporate it into the orchestrate.sh prompt (e.g., "ensure the implementation handles <edge case>")
+- If the challenge is generic or irrelevant, proceed without changes
+- Do NOT block on this step — it is a lightweight advisory, not a gate
+
+**Skip with `--fast`, for simple CRUD operations, or when user explicitly requests speed over thoroughness.**
+
+---
+
 ### STEP 4: Execute orchestrate.sh develop (MANDATORY - Use Bash Tool)
 
 **You MUST execute this command via the Bash tool:**

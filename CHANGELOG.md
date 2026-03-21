@@ -1,3 +1,17 @@
+## [9.8.0] - 2026-03-22
+
+### Added
+
+- **Adversarial debate in 9 workflows**: Multi-LLM cross-checking now wired into `/octo:multi` (mandatory synthesis with disagreement surfacing), `/octo:spec` (completeness challenge), `/octo:define` (requirements challenge), `/octo:factory` (pre-embrace scenario coverage gate), `/octo:develop` (pre-implementation devil's advocate), `/octo:prd` (draft adversarial review), `/octo:staged-review` (multi-LLM Stage 2 with Codex logic + Gemini security), `/octo:parallel` (WBS decomposition cross-check), `/octo:tdd` (test design review). All skippable with `--fast`.
+- **Visual activation indicators on all commands**: Every `/octo:*` command now shows a 🐙 indicator line when activated. 19 commands and 10 skills that were missing indicators now have them. 7 skills that falsely claimed `visual_indicators_displayed` in their contract now actually display one. 4 existing banners missing the 🐙 emoji prefix now include it.
+
+### Fixed
+
+- **test-debate-skill.sh CI failure**: Wrong helper path (`tests/smoke/test-helpers.sh` → `tests/helpers/test-framework.sh`) caused "Missing test-helpers.sh" on every CI run.
+- **test-packaging-integrity.sh CI failure**: `set -euo pipefail` + `eval "source ..."` subshell broke on CI when sourced scripts referenced unset runtime variables. Replaced with file-existence check that doesn't require executing sourced code.
+
+---
+
 ## [9.7.8] - 2026-03-21
 
 ### Fixed

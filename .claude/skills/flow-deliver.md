@@ -243,6 +243,41 @@ These spinner verb updates happen automatically - orchestrate.sh calls `update_t
 
 ---
 
+### STEP 4.5: Scope Drift Detection (Informational)
+
+Before verifying execution, compare the actual diff against stated intent to catch scope creep and missing requirements. This step is **informational only** — it never blocks the review.
+
+**Gather intent signals:**
+1. Check for `TODOS.md` or task description in the project
+2. Read PR description (if a PR exists: `gh pr view --json title,body 2>/dev/null`)
+3. Read recent commit messages: `git log --oneline -10`
+
+**Compare against the diff:**
+```bash
+git diff --stat HEAD~1  # or appropriate range
+```
+
+**Check for scope drift:**
+- **Scope creep**: Files changed that are unrelated to the stated intent (different module, different feature)
+- **Missing requirements**: Items mentioned in TODOS.md/PR description that don't appear in the diff
+- **"While I was in there" changes**: Unrelated refactoring, formatting, or cleanup bundled with the feature
+
+**Report format:**
+```
+Scope Check: [CLEAN / DRIFT DETECTED / REQUIREMENTS MISSING]
+
+Intent: [summary from TODOS/PR/commits]
+Delivered: [summary from diff]
+
+Drift items (if any):
+- [file/change that doesn't match intent]
+- [requirement not addressed in diff]
+```
+
+**This is a signal, not a gate.** Some drift is intentional ("I saw a bug while working"). The goal is awareness — surface the information so the reviewer can make an informed judgment.
+
+---
+
 ### STEP 5: Verify Execution (MANDATORY - Verification Gate)
 
 **IRON LAW: NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE.**

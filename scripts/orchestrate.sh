@@ -408,7 +408,7 @@ CODEX_SUBAGENT_PREAMBLE="IMPORTANT: You are running as a non-interactive subagen
 
 "
 
-AVAILABLE_AGENTS="codex codex-standard codex-max codex-mini codex-general codex-spark codex-reasoning codex-large-context gemini gemini-fast gemini-image codex-review claude claude-sonnet claude-opus claude-opus-fast openrouter openrouter-glm5 openrouter-kimi openrouter-deepseek perplexity perplexity-fast copilot copilot-research"
+AVAILABLE_AGENTS="codex codex-standard codex-max codex-mini codex-general codex-spark codex-reasoning codex-large-context gemini gemini-fast gemini-image codex-review claude claude-sonnet claude-opus claude-opus-fast openrouter openrouter-glm5 openrouter-kimi openrouter-deepseek perplexity perplexity-fast ollama copilot copilot-research"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # USAGE TRACKING & COST REPORTING (v4.1)

@@ -19,7 +19,7 @@ structured Double Diamond workflows.
 - Shell scripts use `set -euo pipefail` and bash 3.x compatibility (no associative arrays)
 - Tests are in `tests/unit/` using a custom `test-framework.sh` (test_case/test_pass/test_fail)
 - All provider detection is graceful — missing providers are silently skipped
-- Version bumps require ALL 5 files updated together: package.json, plugin.json, marketplace.json, README.md, CHANGELOG.md
+- Version bumps require ALL 5 files updated together: package.json, .claude-plugin/plugin.json, .claude-plugin/marketplace.json, README.md, CHANGELOG.md
 
 ## Testing
 

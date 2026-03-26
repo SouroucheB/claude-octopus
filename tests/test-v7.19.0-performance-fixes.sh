@@ -6,6 +6,10 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ORCHESTRATE="$PLUGIN_ROOT/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE" "$(dirname "$ORCHESTRATE")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 
 # Colors for output
 RED='\033[0;31m'
@@ -100,13 +104,13 @@ test_p01_result_file_pipeline() {
     test_case "spawn_agent creates result files with content"
 
     # Check if spawn_agent function exists
-    if ! grep -q "^spawn_agent()" "$ORCHESTRATE"; then
+    if ! grep -q "^spawn_agent()" "$ALL_SRC"; then
         skip_test "spawn_agent function not found"
         return
     fi
 
     # Check for tee usage in spawn_agent (real-time streaming)
-    if grep -q "tee.*raw_output" "$ORCHESTRATE"; then
+    if grep -q "tee.*raw_output" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found tee for real-time output streaming"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -115,7 +119,7 @@ test_p01_result_file_pipeline() {
     fi
 
     # Check for raw output backup
-    if grep -q "raw_output=.*\.raw-.*\.out" "$ORCHESTRATE"; then
+    if grep -q "raw_output=.*\.raw-.*\.out" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found raw output backup mechanism"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -124,7 +128,7 @@ test_p01_result_file_pipeline() {
     fi
 
     # Check for file size verification
-    if grep -q "result_size.*wc -c.*result_file" "$ORCHESTRATE"; then
+    if grep -q "result_size.*wc -c.*result_file" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found result file size verification"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -143,7 +147,7 @@ test_p02_timeout_preservation() {
     test_case "Partial output preserved on timeout"
 
     # Check for timeout exit code handling (124, 143)
-    if grep -q "exit_code -eq 124.*exit_code -eq 143" "$ORCHESTRATE"; then
+    if grep -q "exit_code -eq 124.*exit_code -eq 143" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found timeout exit code handling (124, 143)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -152,7 +156,7 @@ test_p02_timeout_preservation() {
     fi
 
     # Check for "TIMEOUT - PARTIAL RESULTS" status
-    if grep -q "TIMEOUT - PARTIAL RESULTS" "$ORCHESTRATE"; then
+    if grep -q "TIMEOUT - PARTIAL RESULTS" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found timeout status marker"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -161,7 +165,7 @@ test_p02_timeout_preservation() {
     fi
 
     # Check for partial output processing on timeout
-    if grep -A 10 "exit_code -eq 124" "$ORCHESTRATE" | grep -q "awk.*temp_output"; then
+    if grep -A 10 "exit_code -eq 124" "$ALL_SRC" | grep -q "awk.*temp_output"; then
         echo -e "${GREEN}✓${NC} Found partial output processing on timeout"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -179,7 +183,7 @@ test_p03_agent_status_tracking() {
     test_case "Agent status categorization with file size checks"
 
     # Check for status indicators in output (check individually)
-    if grep -q '✓' "$ORCHESTRATE" && grep -q '✗\|❌' "$ORCHESTRATE"; then
+    if grep -q '✓' "$ALL_SRC" && grep -q '✗\|❌' "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found status indicators"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -188,7 +192,7 @@ test_p03_agent_status_tracking() {
     fi
 
     # Check for file size categorization
-    if grep -q "file_size\|result_size" "$ORCHESTRATE" && grep -q "success_count\|usable_results" "$ORCHESTRATE"; then
+    if grep -q "file_size\|result_size" "$ALL_SRC" && grep -q "success_count\|usable_results" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found file size-based categorization"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -197,7 +201,7 @@ test_p03_agent_status_tracking() {
     fi
 
     # Check for summary display
-    if grep -q "Results summary\|WORKFLOW SUMMARY\|results summary" "$ORCHESTRATE"; then
+    if grep -q "Results summary\|WORKFLOW SUMMARY\|results summary" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found results summary display"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -216,7 +220,7 @@ test_p11_graceful_degradation() {
     test_case "Synthesis proceeds with partial results (2+ agents)"
 
     # Check for usable_results parameter
-    if grep -q "usable_results=.*3.*-" "$ORCHESTRATE"; then
+    if grep -q "usable_results=.*3.*-" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found usable_results parameter"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -225,7 +229,7 @@ test_p11_graceful_degradation() {
     fi
 
     # Check for content size filtering (>500 bytes)
-    if grep -q "file_size.*gt 500" "$ORCHESTRATE"; then
+    if grep -q "file_size.*gt 500" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found content size filtering (>500 bytes)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -234,7 +238,7 @@ test_p11_graceful_degradation() {
     fi
 
     # Check for warning when proceeding with partial results
-    if grep -q "Proceeding with.*usable results" "$ORCHESTRATE"; then
+    if grep -q "Proceeding with.*usable results" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found partial results warning"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -253,7 +257,7 @@ test_p12_rich_progress_display() {
     test_case "Rich progress dashboard with visual indicators"
 
     # Check for display_rich_progress function
-    if grep -q "^display_rich_progress()" "$ORCHESTRATE"; then
+    if grep -q "^display_rich_progress()" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found display_rich_progress function"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -263,7 +267,7 @@ test_p12_rich_progress_display() {
     fi
 
     # Check for progress bar rendering
-    if grep -q "bar_width=" "$ORCHESTRATE"; then
+    if grep -q "bar_width=" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found progress bar rendering logic"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -272,7 +276,7 @@ test_p12_rich_progress_display() {
     fi
 
     # Check for agent emoji indicators
-    if grep -q "🔴" "$ORCHESTRATE" && grep -q "🟡" "$ORCHESTRATE"; then
+    if grep -q "🔴" "$ALL_SRC" && grep -q "🟡" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found agent emoji indicators"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -281,7 +285,7 @@ test_p12_rich_progress_display() {
     fi
 
     # Check for elapsed time display
-    if grep -q "elapsed" "$ORCHESTRATE"; then
+    if grep -q "elapsed" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found elapsed time tracking"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -300,7 +304,7 @@ test_p13_enhanced_error_messages() {
     test_case "Context-aware error messages with remediation"
 
     # Check for enhanced_error function
-    if grep -q "^enhanced_error()" "$ORCHESTRATE"; then
+    if grep -q "^enhanced_error()" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found enhanced_error function"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -310,7 +314,7 @@ test_p13_enhanced_error_messages() {
     fi
 
     # Check for error types
-    if grep -q "probe_synthesis_no_results\|agent_spawn_failed\|result_file_empty" "$ORCHESTRATE"; then
+    if grep -q "probe_synthesis_no_results\|agent_spawn_failed\|result_file_empty" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found error type handling"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -319,7 +323,7 @@ test_p13_enhanced_error_messages() {
     fi
 
     # Check for remediation suggestions
-    if grep -q "Suggested actions:\|Troubleshooting steps:" "$ORCHESTRATE"; then
+    if grep -q "Suggested actions:\|Troubleshooting steps:" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found remediation suggestions"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -338,7 +342,7 @@ test_p21_log_management() {
     test_case "Enhanced log cleanup with age-based rotation"
 
     # Check for log cleanup functionality
-    if grep -q "rotate_logs\|cleanup_old_progress_files\|cleanup_cache" "$ORCHESTRATE"; then
+    if grep -q "rotate_logs\|cleanup_old_progress_files\|cleanup_cache" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found log cleanup functions"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -347,7 +351,7 @@ test_p21_log_management() {
     fi
 
     # Check for cleanup on old files
-    if grep -q "mtime\|cleanup\|rotate" "$ORCHESTRATE"; then
+    if grep -q "mtime\|cleanup\|rotate" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found file age-based cleanup"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -356,7 +360,7 @@ test_p21_log_management() {
     fi
 
     # Check for raw output handling
-    if grep -q "raw_output\|\.raw-" "$ORCHESTRATE"; then
+    if grep -q "raw_output\|\.raw-" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found raw output handling"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -375,8 +379,8 @@ test_p22_gemini_warnings() {
     test_case "NODE_NO_WARNINGS=1 in Gemini commands"
 
     # Check for NODE_NO_WARNINGS in gemini commands
-    if grep -q "NODE_NO_WARNINGS=1.*gemini" "$ORCHESTRATE"; then
-        echo -e "${GREEN}✓${NC} Found NODE_NO_WARNINGS in gemini commands"
+    if grep -q "NODE_NO_WARNINGS=1" "$ALL_SRC" && grep -q 'gemini_env.*gemini' "$ALL_SRC"; then
+        echo -e "${GREEN}✓${NC} Found NODE_NO_WARNINGS in gemini commands (via env variable)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         echo -e "${RED}✗${NC} Missing NODE_NO_WARNINGS environment variable"
@@ -384,7 +388,7 @@ test_p22_gemini_warnings() {
     fi
 
     # Count gemini command occurrences with suppression
-    local gemini_count=$(grep -c "NODE_NO_WARNINGS=1.*gemini" "$ORCHESTRATE" || echo "0")
+    local gemini_count=$(grep -c "NODE_NO_WARNINGS=1" "$ALL_SRC" || echo "0")
     if [[ $gemini_count -ge 3 ]]; then
         echo -e "${GREEN}✓${NC} Found $gemini_count gemini commands with warning suppression"
         TESTS_PASSED=$((TESTS_PASSED + 1))
@@ -403,7 +407,7 @@ test_p23_result_caching() {
     test_case "Prompt-based caching with 1-hour TTL"
 
     # Check for cache directory definition
-    if grep -q "CACHE_DIR=.*cache.*probe-results" "$ORCHESTRATE"; then
+    if grep -q "CACHE_DIR=.*cache.*probe-results" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found cache directory definition"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -412,7 +416,7 @@ test_p23_result_caching() {
     fi
 
     # Check for cache TTL
-    if grep -q "CACHE_TTL=3600" "$ORCHESTRATE"; then
+    if grep -q "CACHE_TTL=3600" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found 1-hour cache TTL (3600s)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -421,7 +425,7 @@ test_p23_result_caching() {
     fi
 
     # Check for cache key generation (SHA256)
-    if grep -q "get_cache_key" "$ORCHESTRATE" && grep -q "shasum -a 256" "$ORCHESTRATE"; then
+    if grep -q "get_cache_key" "$ALL_SRC" && grep -q "shasum -a 256" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found SHA256 cache key generation"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -430,7 +434,7 @@ test_p23_result_caching() {
     fi
 
     # Check for cache hit/miss logic
-    if grep -q "check_cache.*cache_key" "$ORCHESTRATE" && grep -q "save_to_cache" "$ORCHESTRATE"; then
+    if grep -q "check_cache.*cache_key" "$ALL_SRC" && grep -q "save_to_cache" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found cache hit/miss handling"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -439,7 +443,7 @@ test_p23_result_caching() {
     fi
 
     # Check for cleanup function
-    if grep -q "cleanup_cache" "$ORCHESTRATE"; then
+    if grep -q "cleanup_cache" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found cache cleanup function"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -458,7 +462,7 @@ test_p24_progressive_synthesis() {
     test_case "Synthesis starts with 2+ completed agents"
 
     # Check for progressive synthesis flag
-    if grep -q "ENABLE_PROGRESSIVE_SYNTHESIS" "$ORCHESTRATE"; then
+    if grep -q "ENABLE_PROGRESSIVE_SYNTHESIS" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found progressive synthesis flag"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -467,7 +471,7 @@ test_p24_progressive_synthesis() {
     fi
 
     # Check for monitor function
-    if grep -q "progressive_synthesis_monitor" "$ORCHESTRATE"; then
+    if grep -q "progressive_synthesis_monitor" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found progressive synthesis monitor"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -476,7 +480,7 @@ test_p24_progressive_synthesis() {
     fi
 
     # Check for minimum results threshold (2)
-    if grep -q "min_results.*2" "$ORCHESTRATE"; then
+    if grep -q "min_results.*2" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found minimum 2 results threshold"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -485,7 +489,7 @@ test_p24_progressive_synthesis() {
     fi
 
     # Check for partial synthesis function
-    if grep -q "synthesize_probe_results_partial" "$ORCHESTRATE"; then
+    if grep -q "synthesize_probe_results_partial" "$ALL_SRC"; then
         echo -e "${GREEN}✓${NC} Found partial synthesis function"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else

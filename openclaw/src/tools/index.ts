@@ -40,7 +40,7 @@ export const SKILL_REGISTRY: SkillRegistryEntry[] = [
   { name: "skill-deck", description: "Generate slide deck presentations from briefs — use when you need slides, pitch decks, or visual summaries", type: "skill", file: "skill-deck.md" },
   { name: "skill-design-lineage", description: "Persist design documents with branch tracking, revision chains, and cross-session discovery", type: "skill", file: "skill-design-lineage.md" },
   { name: "skill-doc-delivery", description: "Convert markdown to DOCX, PPTX, XLSX, PDF office documents — use when you need exportable deliverables", type: "skill", file: "skill-doc-delivery.md" },
-  { name: "skill-doc-sync", description: "Post-ship doc sync across project markdown. Use when: \"sync docs\", \"update docs\", \"document changes\", \"release notes\".", type: "skill", file: "skill-doc-sync.md" },
+  { name: "skill-doc-sync", description: "Post-ship doc sync across project markdown. Use when: sync docs, update docs, document changes, release notes.", type: "skill", file: "skill-doc-sync.md" },
   { name: "skill-doctor", description: "Environment diagnostics — check providers, auth, config, hooks, scheduler, and more", type: "skill", file: "skill-doctor.md" },
   { name: "skill-extract", description: "Reverse-engineer design systems, tokens, and components from live products or screenshots", type: "skill", file: "extract-skill.md" },
   { name: "skill-factory", description: "Run a full build-and-ship pipeline from a spec — use for hands-off project generation", type: "skill", file: "skill-factory.md" },

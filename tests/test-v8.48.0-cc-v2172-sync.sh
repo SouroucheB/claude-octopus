@@ -7,6 +7,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ORCH="$PLUGIN_DIR/scripts/orchestrate.sh"
+ALL_SRC=$(mktemp)
+cat "$ORCH" "$PLUGIN_DIR/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 
 PASS=0
 FAIL=0
@@ -37,7 +40,7 @@ suite "1. v8.48.0 Flag Declarations"
 # 6 of original 8 flags pruned in v9.5 (banner-only). Only AGENT_MODEL_OVERRIDE, EFFORT_REDESIGN, DISABLE_CRON_ENV kept.
 for flag in SUPPORTS_AGENT_MODEL_OVERRIDE \
             SUPPORTS_EFFORT_REDESIGN SUPPORTS_DISABLE_CRON_ENV; do
-  if grep -q "^${flag}=false" "$ORCH"; then
+  if grep -q "^${flag}=false" "$ALL_SRC"; then
     pass "$flag declared"
   else
     fail "$flag not declared in orchestrate.sh"
@@ -48,7 +51,7 @@ done
 for flag in SUPPORTS_EXIT_WORKTREE \
             SUPPORTS_HIDDEN_HTML_COMMENTS SUPPORTS_BASH_ALLOWLIST_V2 \
             SUPPORTS_CLEAR_PRESERVES_BG SUPPORTS_TEAM_MODEL_INHERIT_FIX; do
-  if grep -q "^${flag}=false" "$ORCH"; then
+  if grep -q "^${flag}=false" "$ALL_SRC"; then
     fail "$flag should have been pruned but still declared"
   else
     pass "$flag correctly pruned"
@@ -60,7 +63,7 @@ done
 # ─────────────────────────────────────────────────────────────────────
 suite "2. v2.1.72 Detection Block"
 
-if grep -q 'version_compare.*2\.1\.72' "$ORCH"; then
+if grep -q 'version_compare.*2\.1\.72' "$ALL_SRC"; then
   pass "v2.1.72 version_compare block exists"
 else
   fail "v2.1.72 version_compare block missing"
@@ -70,7 +73,7 @@ fi
 for flag in SUPPORTS_AGENT_MODEL_OVERRIDE \
             SUPPORTS_EFFORT_REDESIGN SUPPORTS_DISABLE_CRON_ENV \
             SUPPORTS_PARALLEL_TOOL_RESILIENCE; do
-  if grep -A 15 'version_compare.*2\.1\.72' "$ORCH" | grep -q "${flag}=true"; then
+  if grep -A 15 'version_compare.*2\.1\.72' "$ALL_SRC" | grep -q "${flag}=true"; then
     pass "$flag set in v2.1.72 block"
   else
     fail "$flag not set in v2.1.72 block"
@@ -83,20 +86,20 @@ done
 suite "3. Log Lines"
 
 # After v9.5 pruning, banner line consolidated: Agent Model Override | Effort Redesign | Disable Cron Env
-if grep -q 'Agent Model Override.*Effort Redesign.*Disable Cron Env' "$ORCH"; then
+if grep -q 'Agent Model Override.*Effort Redesign.*Disable Cron Env' "$ALL_SRC"; then
   pass "v2.1.72 remaining flags logged"
 else
   fail "v2.1.72 remaining flags not logged"
 fi
 
 # Pruned flags should NOT be in log lines
-if grep -q 'Exit Worktree:.*SUPPORTS_EXIT_WORKTREE' "$ORCH"; then
+if grep -q 'Exit Worktree:.*SUPPORTS_EXIT_WORKTREE' "$ALL_SRC"; then
   fail "Pruned Exit Worktree still in log lines"
 else
   pass "Pruned Exit Worktree removed from log lines"
 fi
 
-if grep -q 'Clear Preserves BG:.*SUPPORTS_CLEAR_PRESERVES_BG' "$ORCH"; then
+if grep -q 'Clear Preserves BG:.*SUPPORTS_CLEAR_PRESERVES_BG' "$ALL_SRC"; then
   fail "Pruned Clear Preserves BG still in log lines"
 else
   pass "Pruned Clear Preserves BG removed from log lines"
@@ -107,7 +110,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "4. Effort Redesign Integration"
 
-if grep -q 'SUPPORTS_EFFORT_REDESIGN.*true' "$ORCH"; then
+if grep -q 'SUPPORTS_EFFORT_REDESIGN.*true' "$ALL_SRC"; then
   pass "Effort redesign gated by SUPPORTS_EFFORT_REDESIGN"
 else
   fail "Effort redesign not gated by flag"
@@ -115,7 +118,7 @@ fi
 
 # Check all three v2.1.72 effort symbols are present
 for symbol in '○' '◐' '●'; do
-  if grep -q "$symbol" "$ORCH"; then
+  if grep -q "$symbol" "$ALL_SRC"; then
     pass "Effort symbol $symbol present"
   else
     fail "Effort symbol $symbol missing"
@@ -127,7 +130,7 @@ done
 max_in_effort=0
 while IFS= read -r line; do
   ((max_in_effort++)) || true
-done < <(grep -n 'effort.*"max"\|effort_level.*max' "$ORCH" 2>/dev/null | grep -v '#.*max\|comment\|OCTOPUS_MAX' 2>/dev/null || true)
+done < <(grep -n 'effort.*"max"\|effort_level.*max' "$ALL_SRC" 2>/dev/null | grep -v '#.*max\|comment\|OCTOPUS_MAX' 2>/dev/null || true)
 if [[ "$max_in_effort" -eq 0 ]]; then
   pass "No 'max' effort level in effort mapping (v2.1.72 compat)"
 else
@@ -139,22 +142,22 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "5. Cron Disable Integration"
 
-if grep -A 5 'embrace_full_workflow()' "$ORCH" | head -20 | grep -q 'CLAUDE_CODE_DISABLE_CRON' || \
-   grep -B 2 -A 3 'SUPPORTS_DISABLE_CRON_ENV' "$ORCH" | grep -q 'CLAUDE_CODE_DISABLE_CRON'; then
+if grep -A 5 'embrace_full_workflow()' "$ALL_SRC" | head -20 | grep -q 'CLAUDE_CODE_DISABLE_CRON' || \
+   grep -B 2 -A 3 'SUPPORTS_DISABLE_CRON_ENV' "$ALL_SRC" | grep -q 'CLAUDE_CODE_DISABLE_CRON'; then
   pass "CLAUDE_CODE_DISABLE_CRON set in embrace workflow"
 else
   fail "CLAUDE_CODE_DISABLE_CRON not set in embrace workflow"
 fi
 
 # Check cron var is cleaned up at end of embrace
-embrace_cleanup_count=$(grep -c 'unset CLAUDE_CODE_DISABLE_CRON' "$ORCH" || echo 0)
+embrace_cleanup_count=$(grep -c 'unset CLAUDE_CODE_DISABLE_CRON' "$ALL_SRC" || echo 0)
 if [[ "$embrace_cleanup_count" -ge 2 ]]; then
   pass "CLAUDE_CODE_DISABLE_CRON cleaned up ($embrace_cleanup_count locations)"
 else
   fail "CLAUDE_CODE_DISABLE_CRON cleanup missing (found $embrace_cleanup_count, expected >= 2)"
 fi
 
-if grep -A 10 'parallel_execute()' "$ORCH" | grep -q 'CLAUDE_CODE_DISABLE_CRON'; then
+if grep -A 10 'parallel_execute()' "$ALL_SRC" | grep -q 'CLAUDE_CODE_DISABLE_CRON'; then
   pass "CLAUDE_CODE_DISABLE_CRON set in parallel_execute"
 else
   fail "CLAUDE_CODE_DISABLE_CRON not set in parallel_execute"
@@ -165,17 +168,17 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "6. Agent Model Override Integration"
 
-if grep -q 'model_override_supported' "$ORCH"; then
+if grep -q 'model_override_supported' "$ALL_SRC"; then
   pass "model_override_supported field in Agent Teams JSON"
 else
   fail "model_override_supported field missing from Agent Teams JSON"
 fi
 
-if grep -q 'SUPPORTS_AGENT_MODEL_OVERRIDE' "$ORCH" | head -1; then
+if grep -q 'SUPPORTS_AGENT_MODEL_OVERRIDE' "$ALL_SRC" | head -1; then
   pass "SUPPORTS_AGENT_MODEL_OVERRIDE referenced in dispatch"
 else
   # Broader check
-  ref_count=$(grep -c 'SUPPORTS_AGENT_MODEL_OVERRIDE' "$ORCH" || echo 0)
+  ref_count=$(grep -c 'SUPPORTS_AGENT_MODEL_OVERRIDE' "$ALL_SRC" || echo 0)
   if [[ "$ref_count" -ge 3 ]]; then
     pass "SUPPORTS_AGENT_MODEL_OVERRIDE referenced $ref_count times"
   else
@@ -188,7 +191,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "7. Header Comment"
 
-if grep -q 'v2\.1\.72' "$ORCH"; then
+if grep -q 'v2\.1\.72' "$ALL_SRC"; then
   pass "v2.1.72 referenced in header comment"
 else
   fail "v2.1.72 not referenced in header"
@@ -199,7 +202,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "8. Total Flag Count"
 
-FLAG_COUNT=$(grep -c '^SUPPORTS_.*=false' "$ORCH")
+FLAG_COUNT=$(grep -c '^SUPPORTS_.*=false' "$ALL_SRC")
 if [[ "$FLAG_COUNT" -ge 80 ]]; then
   pass "Total SUPPORTS_* flags: $FLAG_COUNT (expected >= 80)"
 else

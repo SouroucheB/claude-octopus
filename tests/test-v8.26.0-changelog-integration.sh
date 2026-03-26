@@ -8,6 +8,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ORCHESTRATE_SH="$PROJECT_ROOT/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE_SH" "$(dirname "$ORCHESTRATE_SH")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 HOOKS_JSON="$PROJECT_ROOT/.claude-plugin/hooks.json"
 SETTINGS_JSON="$PROJECT_ROOT/.claude-plugin/settings.json"
 SKILL_DOCTOR="$PROJECT_ROOT/.claude/skills/skill-doctor.md"
@@ -50,7 +54,7 @@ echo "────────────────────────�
 for flag in SUPPORTS_REMOTE_CONTROL SUPPORTS_NPM_PLUGIN_REGISTRIES SUPPORTS_FAST_BASH \
             SUPPORTS_AGGRESSIVE_DISK_PERSIST SUPPORTS_ACCOUNT_ENV_VARS SUPPORTS_MANAGED_SETTINGS_PLATFORM \
             SUPPORTS_NATIVE_AUTO_MEMORY SUPPORTS_AGENT_MEMORY_GC SUPPORTS_SMART_BASH_PREFIXES; do
-    if grep -q "^${flag}=false" "$ORCHESTRATE_SH"; then
+    if grep -q "^${flag}=false" "$ALL_SRC"; then
         pass "$flag declared with default false"
     else
         fail "$flag declaration NOT found" "Expected: ${flag}=false"
@@ -66,28 +70,28 @@ echo "Test Suite 2: Version Detection Blocks"
 echo "────────────────────────────────────────"
 
 # Test 2.1: v2.1.51 block exists
-if grep -q 'version_compare.*"2\.1\.51".*">="' "$ORCHESTRATE_SH"; then
+if grep -q 'version_compare.*"2\.1\.51".*">="' "$ALL_SRC"; then
     pass "v2.1.51+ version detection block exists"
 else
     fail "v2.1.51+ version detection block NOT found"
 fi
 
 # Test 2.2: v2.1.59 block exists
-if grep -q 'version_compare.*"2\.1\.59".*">="' "$ORCHESTRATE_SH"; then
+if grep -q 'version_compare.*"2\.1\.59".*">="' "$ALL_SRC"; then
     pass "v2.1.59+ version detection block exists"
 else
     fail "v2.1.59+ version detection block NOT found"
 fi
 
 # Test 2.3: v2.1.51 block sets SUPPORTS_REMOTE_CONTROL
-if grep -A 10 'version_compare.*"2\.1\.51"' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_REMOTE_CONTROL=true'; then
+if grep -A 10 'version_compare.*"2\.1\.51"' "$ALL_SRC" | grep -q 'SUPPORTS_REMOTE_CONTROL=true'; then
     pass "v2.1.51+ block sets SUPPORTS_REMOTE_CONTROL=true"
 else
     fail "v2.1.51+ block does NOT set SUPPORTS_REMOTE_CONTROL=true"
 fi
 
 # Test 2.4: v2.1.59 block sets SUPPORTS_NATIVE_AUTO_MEMORY
-if grep -A 10 'version_compare.*"2\.1\.59"' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_NATIVE_AUTO_MEMORY=true'; then
+if grep -A 10 'version_compare.*"2\.1\.59"' "$ALL_SRC" | grep -q 'SUPPORTS_NATIVE_AUTO_MEMORY=true'; then
     pass "v2.1.59+ block sets SUPPORTS_NATIVE_AUTO_MEMORY=true"
 else
     fail "v2.1.59+ block does NOT set SUPPORTS_NATIVE_AUTO_MEMORY=true"
@@ -170,14 +174,14 @@ echo "Test Suite 5: Doctor Agents Category"
 echo "────────────────────────────────────────"
 
 # Test 5.1: doctor_check_agents function exists
-if grep -q '^doctor_check_agents()' "$ORCHESTRATE_SH"; then
+if grep -q '^doctor_check_agents()' "$ALL_SRC"; then
     pass "doctor_check_agents() function exists"
 else
     fail "doctor_check_agents() function NOT found"
 fi
 
 # Test 5.2: categories array includes agents
-if grep -q 'categories=.*agents' "$ORCHESTRATE_SH"; then
+if grep -q 'categories=.*agents' "$ALL_SRC"; then
     pass "categories array includes 'agents'"
 else
     fail "categories array does NOT include 'agents'"
@@ -206,11 +210,11 @@ echo "Test Suite 6: Memory Delegation"
 echo "────────────────────────────────────────"
 
 # Test 6.1: SUPPORTS_NATIVE_AUTO_MEMORY check in build_memory_context
-if grep -A 5 'build_memory_context' "$ORCHESTRATE_SH" | head -20 | grep -q 'SUPPORTS_NATIVE_AUTO_MEMORY'; then
+if grep -A 5 'build_memory_context' "$ALL_SRC" | head -20 | grep -q 'SUPPORTS_NATIVE_AUTO_MEMORY'; then
     pass "build_memory_context references SUPPORTS_NATIVE_AUTO_MEMORY"
 else
     # Search more broadly
-    if grep -B 2 -A 2 'native auto-memory' "$ORCHESTRATE_SH" | grep -q 'build_memory_context\|Delegating.*memory'; then
+    if grep -B 2 -A 2 'native auto-memory' "$ALL_SRC" | grep -q 'build_memory_context\|Delegating.*memory'; then
         pass "build_memory_context delegates to native auto-memory"
     else
         fail "build_memory_context does NOT reference native auto-memory"
@@ -218,15 +222,15 @@ else
 fi
 
 # Test 6.2: _skip_mem guard in spawn_agent
-if grep -q '_skip_mem' "$ORCHESTRATE_SH"; then
+if grep -q '_skip_mem' "$ALL_SRC"; then
     pass "_skip_mem guard variable exists in spawn_agent"
 else
     fail "_skip_mem guard variable NOT found"
 fi
 
 # Test 6.3: Skip logic checks scope
-if grep -q 'agent_mem.*!=.*local.*agent_mem.*!=.*none' "$ORCHESTRATE_SH" || \
-   grep -q 'agent_mem" != "local" && .*agent_mem" != "none"' "$ORCHESTRATE_SH"; then
+if grep -q 'agent_mem.*!=.*local.*agent_mem.*!=.*none' "$ALL_SRC" || \
+   grep -q 'agent_mem" != "local" && .*agent_mem" != "none"' "$ALL_SRC"; then
     pass "Memory skip logic checks for local/none scope"
 else
     fail "Memory skip logic does NOT check scope properly"
@@ -263,7 +267,7 @@ echo "Test Suite 8: Log Lines"
 echo "────────────────────────────────────────"
 
 # Test 8.1: New log lines for v8.26 flags
-if grep -q 'Remote Control:.*NPM Registries:.*Fast Bash:.*Disk Persist:' "$ORCHESTRATE_SH"; then
+if grep -q 'Remote Control:.*NPM Registries:.*Fast Bash:.*Disk Persist:' "$ALL_SRC"; then
     pass "New log line for v2.1.51+ flags exists"
 else
     fail "New log line for v2.1.51+ flags NOT found"

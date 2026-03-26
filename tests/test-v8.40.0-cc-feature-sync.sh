@@ -7,6 +7,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ORCH="$PLUGIN_DIR/scripts/orchestrate.sh"
+ALL_SRC=$(mktemp)
+cat "$ORCH" "$PLUGIN_DIR/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 HOOK="$PLUGIN_DIR/hooks/subagent-result-capture.sh"
 
 PASS=0
@@ -42,7 +45,7 @@ suite "1. v8.40.0 Flag Pruning (v9.5)"
 for flag in SUPPORTS_VSCODE_PLAN_VIEW SUPPORTS_IMAGE_CACHE_COMPACTION \
             SUPPORTS_RENAME_WHILE_PROCESSING SUPPORTS_NATIVE_LOOP \
             SUPPORTS_RUNTIME_DEBUG SUPPORTS_FAST_BRIDGE_RECONNECT; do
-  if grep -q "^${flag}=false" "$ORCH"; then
+  if grep -q "^${flag}=false" "$ALL_SRC"; then
     fail "$flag should have been pruned but still declared"
   else
     pass "$flag correctly pruned"
@@ -54,13 +57,13 @@ done
 # ─────────────────────────────────────────────────────────────────────
 suite "2. Version Detection Blocks Pruned"
 
-if grep -q 'version_compare.*"2\.1\.70"' "$ORCH"; then
+if grep -q 'version_compare.*"2\.1\.70"' "$ALL_SRC"; then
   fail "v2.1.70 detection block should have been removed"
 else
   pass "v2.1.70 detection block correctly removed"
 fi
 
-if grep -q 'version_compare.*"2\.1\.71"' "$ORCH"; then
+if grep -q 'version_compare.*"2\.1\.71"' "$ALL_SRC"; then
   fail "v2.1.71 detection block should have been removed"
 else
   pass "v2.1.71 detection block correctly removed"
@@ -71,13 +74,13 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "3. Flag Logging Pruned"
 
-if grep -q 'VSCode Plan:.*SUPPORTS_VSCODE_PLAN_VIEW' "$ORCH"; then
+if grep -q 'VSCode Plan:.*SUPPORTS_VSCODE_PLAN_VIEW' "$ALL_SRC"; then
   fail "Pruned VSCode Plan flag still in logging"
 else
   pass "VSCode Plan logging correctly removed"
 fi
 
-if grep -q 'Native Loop:.*SUPPORTS_NATIVE_LOOP' "$ORCH"; then
+if grep -q 'Native Loop:.*SUPPORTS_NATIVE_LOOP' "$ALL_SRC"; then
   fail "Pruned Native Loop flag still in logging"
 else
   pass "Native Loop logging correctly removed"
@@ -88,8 +91,8 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "4. Effort Callout Wiring"
 
-if grep -q 'SUPPORTS_EFFORT_CALLOUT.*true' "$ORCH" | head -1 && \
-   grep -q 'log "USER".*Effort' "$ORCH"; then
+if grep -q 'SUPPORTS_EFFORT_CALLOUT.*true' "$ALL_SRC" | head -1 && \
+   grep -q 'log "USER".*Effort' "$ALL_SRC"; then
   pass "SUPPORTS_EFFORT_CALLOUT wired to user-visible effort display"
 else
   fail "SUPPORTS_EFFORT_CALLOUT not wired"
@@ -117,8 +120,8 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "6. Memory Leak Fixes Wiring"
 
-if grep -q 'leak_safe_boost' "$ORCH" && \
-   grep -q 'SUPPORTS_MEMORY_LEAK_FIXES.*true' "$ORCH"; then
+if grep -q 'leak_safe_boost' "$ALL_SRC" && \
+   grep -q 'SUPPORTS_MEMORY_LEAK_FIXES.*true' "$ALL_SRC"; then
   pass "SUPPORTS_MEMORY_LEAK_FIXES wired to timeout boost"
 else
   fail "SUPPORTS_MEMORY_LEAK_FIXES not wired to timeout boost"
@@ -129,7 +132,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────
 suite "7. Flag Count"
 
-FLAG_COUNT=$(grep -c '^SUPPORTS_.*=false' "$ORCH")
+FLAG_COUNT=$(grep -c '^SUPPORTS_.*=false' "$ALL_SRC")
 if [[ "$FLAG_COUNT" -ge 80 ]]; then
   pass "Total SUPPORTS_* flags: $FLAG_COUNT (expected >= 80)"
 else

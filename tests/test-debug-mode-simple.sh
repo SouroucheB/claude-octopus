@@ -4,6 +4,10 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ORCHESTRATE="${PLUGIN_DIR}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE" "$(dirname "$ORCHESTRATE")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 
 # Test counter
 TESTS_RUN=0
@@ -70,7 +74,7 @@ assert_not_contains "$output" "DEBUG" "No debug output without --debug"
 # Test 4: Debug emits Command: line in spawn_agent (static analysis — runtime depends on cache state)
 echo ""
 echo "Test 4: Debug shows model resolution details"
-if grep -c 'log.*DEBUG.*Command:' "$ORCHESTRATE" >/dev/null 2>&1; then
+if grep -c 'log.*DEBUG.*Command:' "$ALL_SRC" >/dev/null 2>&1; then
     echo "✓ Shows agent command in debug output"
     TESTS_RUN=$((TESTS_RUN + 1)); TESTS_PASSED=$((TESTS_PASSED + 1))
 else
@@ -82,7 +86,7 @@ fi
 # Test 5: Debug emits spawn_agent: line (static analysis — runtime depends on cache state)
 echo ""
 echo "Test 5: Debug shows spawn_agent details"
-if grep -c 'log.*DEBUG.*spawn_agent' "$ORCHESTRATE" >/dev/null 2>&1; then
+if grep -c 'log.*DEBUG.*spawn_agent' "$ALL_SRC" >/dev/null 2>&1; then
     echo "✓ Shows spawn_agent debug info"
     TESTS_RUN=$((TESTS_RUN + 1)); TESTS_PASSED=$((TESTS_PASSED + 1))
 else

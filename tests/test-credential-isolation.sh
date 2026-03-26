@@ -8,6 +8,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ORCH="$PLUGIN_DIR/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for decomposed functions
+ALL_SRC=$(mktemp)
+cat "$ORCH" "$PLUGIN_DIR/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 
 PASS=0
 FAIL=0
@@ -36,14 +40,14 @@ suite() {
 suite "1. build_provider_env() Function"
 
 # 1.1 Function exists
-if grep -q '^build_provider_env()' "$ORCH"; then
+if grep -q '^build_provider_env()' "$ALL_SRC"; then
   pass "build_provider_env() function exists"
 else
   fail "build_provider_env() function missing"
 fi
 
 # 1.2 Codex scoping — only OPENAI_API_KEY
-CODEX_ENV=$(grep -A5 'codex\*)' "$ORCH" | grep 'env -i' | head -1)
+CODEX_ENV=$(grep -A5 'codex\*)' "$ALL_SRC" | grep 'env -i' | head -1)
 if echo "$CODEX_ENV" | grep -q 'OPENAI_API_KEY'; then
   pass "Codex env includes OPENAI_API_KEY"
 else
@@ -57,7 +61,7 @@ else
 fi
 
 # 1.3 Gemini scoping — only GEMINI_API_KEY + GOOGLE_API_KEY
-GEMINI_ENV=$(grep -A5 'gemini\*)' "$ORCH" | grep 'env -i' | head -1)
+GEMINI_ENV=$(grep -A5 'gemini\*)' "$ALL_SRC" | grep 'env -i' | head -1)
 if echo "$GEMINI_ENV" | grep -q 'GEMINI_API_KEY'; then
   pass "Gemini env includes GEMINI_API_KEY"
 else
@@ -71,7 +75,7 @@ else
 fi
 
 # 1.4 Perplexity scoping — only PERPLEXITY_API_KEY
-PERP_ENV=$(grep -A5 'perplexity\*)' "$ORCH" | grep 'env -i' | head -1)
+PERP_ENV=$(grep -A5 'perplexity\*)' "$ALL_SRC" | grep 'env -i' | head -1)
 if echo "$PERP_ENV" | grep -q 'PERPLEXITY_API_KEY'; then
   pass "Perplexity env includes PERPLEXITY_API_KEY"
 else
@@ -90,14 +94,14 @@ fi
 suite "2. spawn_agent() Integration"
 
 # 2.1 spawn_agent calls build_provider_env
-if grep -c 'build_provider_env' "$ORCH" | grep -q '^[2-9]\|^[1-9][0-9]'; then
+if grep -c 'build_provider_env' "$ALL_SRC" | grep -q '^[2-9]\|^[1-9][0-9]'; then
   pass "build_provider_env called from spawn_agent (not just defined)"
 else
   fail "build_provider_env is dead code — only defined, never called"
 fi
 
 # 2.2 Credential isolation log line exists
-if grep -q 'Credential isolation active' "$ORCH"; then
+if grep -q 'Credential isolation active' "$ALL_SRC"; then
   pass "Credential isolation debug logging present"
 else
   fail "Missing credential isolation debug logging"
@@ -156,14 +160,14 @@ fi
 suite "5. Security Controls"
 
 # 5.1 OCTOPUS_SECURITY_V870 disable switch exists
-if grep -q 'OCTOPUS_SECURITY_V870' "$ORCH"; then
+if grep -q 'OCTOPUS_SECURITY_V870' "$ALL_SRC"; then
   pass "OCTOPUS_SECURITY_V870 disable switch exists"
 else
   fail "Missing OCTOPUS_SECURITY_V870 disable switch"
 fi
 
 # 5.2 Security defaults to enabled (true)
-if grep -q 'OCTOPUS_SECURITY_V870:-true' "$ORCH"; then
+if grep -q 'OCTOPUS_SECURITY_V870:-true' "$ALL_SRC"; then
   pass "Security defaults to enabled"
 else
   fail "Security does not default to enabled"

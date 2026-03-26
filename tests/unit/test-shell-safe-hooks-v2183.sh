@@ -63,9 +63,9 @@ fi
 # ── stop-failure-log.sh ──────────────────────────────────────────────────────
 suite "stop-failure-log.sh Robustness"
 
-# Set up temp dir for testing
-export CLAUDE_PLUGIN_DATA=$(mktemp -d)
-trap 'rm -rf "$CLAUDE_PLUGIN_DATA"' EXIT
+# Set up isolated temp dir for testing
+_HOOK_TEST_DIR=$(mktemp -d)
+export CLAUDE_PLUGIN_DATA="$_HOOK_TEST_DIR"
 
 # Empty stdin → exit 0
 if echo "" | bash "$PLUGIN_DIR/hooks/stop-failure-log.sh" >/dev/null 2>&1; then
@@ -102,5 +102,9 @@ echo ""
 echo "═══════════════════════════════════════════"
 echo "Total: $TOTAL | Passed: $PASS | Failed: $FAIL"
 echo "═══════════════════════════════════════════"
+
+# Cleanup
+rm -rf "${_HOOK_TEST_DIR:-}" 2>/dev/null
+unset CLAUDE_PLUGIN_DATA 2>/dev/null
 
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1

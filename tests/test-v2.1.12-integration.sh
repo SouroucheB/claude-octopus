@@ -7,6 +7,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ORCHESTRATE="${PROJECT_ROOT}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE" "$(dirname "$ORCHESTRATE")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 
 # Test result tracking
 TESTS_RUN=0
@@ -52,14 +56,14 @@ run_test() {
 test_version_detection() {
     run_test "Version detection functions exist"
 
-    if grep -q "detect_claude_code_version" "$ORCHESTRATE"; then
+    if grep -q "detect_claude_code_version" "$ALL_SRC"; then
         log_pass "detect_claude_code_version function found"
     else
         log_fail "detect_claude_code_version function not found"
         return 1
     fi
 
-    if grep -q "version_compare" "$ORCHESTRATE"; then
+    if grep -q "version_compare" "$ALL_SRC"; then
         log_pass "version_compare function found"
     else
         log_fail "version_compare function not found"
@@ -78,7 +82,7 @@ test_feature_flags() {
     )
 
     for flag in "${flags[@]}"; do
-        if grep -q "$flag" "$ORCHESTRATE"; then
+        if grep -q "$flag" "$ALL_SRC"; then
             log_pass "Feature flag $flag found"
         else
             log_fail "Feature flag $flag not found"
@@ -102,7 +106,7 @@ test_task_management_functions() {
     )
 
     for func in "${functions[@]}"; do
-        if grep -q "^${func}()" "$ORCHESTRATE" || grep -q "^${func} ()" "$ORCHESTRATE"; then
+        if grep -q "^${func}()\|^${func} ()" "$ALL_SRC"; then
             log_pass "Function $func found"
         else
             log_fail "Function $func not found"
@@ -115,7 +119,7 @@ test_task_directory_creation() {
     run_test "Task directory structure creation"
 
     # Check if task management creates proper directories
-    if grep -q 'mkdir -p.*tasks' "$ORCHESTRATE"; then
+    if grep -q 'mkdir -p.*tasks' "$ALL_SRC"; then
         log_pass "Task directory creation logic found"
     else
         log_fail "Task directory creation logic not found"
@@ -130,14 +134,14 @@ test_task_directory_creation() {
 test_fork_context_support() {
     run_test "Fork context support in spawn_agent"
 
-    if grep -q "use_fork" "$ORCHESTRATE"; then
+    if grep -q "use_fork" "$ALL_SRC"; then
         log_pass "Fork context parameter found in spawn_agent"
     else
         log_fail "Fork context parameter not found"
         return 1
     fi
 
-    if grep -q "SUPPORTS_FORK_CONTEXT" "$ORCHESTRATE"; then
+    if grep -q "SUPPORTS_FORK_CONTEXT" "$ALL_SRC"; then
         log_pass "Fork context feature flag check found"
     else
         log_fail "Fork context feature flag check not found"
@@ -148,7 +152,7 @@ test_fork_context_support() {
 test_fork_markers() {
     run_test "Fork marker creation"
 
-    if grep -q "fork_marker" "$ORCHESTRATE"; then
+    if grep -q "fork_marker" "$ALL_SRC"; then
         log_pass "Fork marker creation logic found"
     else
         log_fail "Fork marker creation logic not found"
@@ -212,14 +216,14 @@ test_hooks_json_updated() {
 test_wildcard_validation() {
     run_test "Bash wildcard validation functions"
 
-    if grep -q "validate_cli_pattern" "$ORCHESTRATE"; then
+    if grep -q "validate_cli_pattern" "$ALL_SRC"; then
         log_pass "validate_cli_pattern function found"
     else
         log_fail "validate_cli_pattern function not found"
         return 1
     fi
 
-    if grep -q "check_cli_permissions" "$ORCHESTRATE"; then
+    if grep -q "check_cli_permissions" "$ALL_SRC"; then
         log_pass "check_cli_permissions function found"
     else
         log_fail "check_cli_permissions function not found"
@@ -281,7 +285,7 @@ test_backward_compatibility() {
     run_test "Backward compatibility checks"
 
     # Check that version detection doesn't break if Claude CLI is missing
-    if grep -q "detect_claude_code_version.*2>/dev/null.*|| true" "$ORCHESTRATE"; then
+    if grep -q "detect_claude_code_version.*2>/dev/null.*|| true" "$ALL_SRC"; then
         log_pass "Version detection has fallback for missing Claude CLI"
     else
         log_fail "Version detection missing fallback"
@@ -289,8 +293,8 @@ test_backward_compatibility() {
     fi
 
     # Check that task management functions check feature flags
-    if grep -q 'SUPPORTS_TASK_MANAGEMENT.*!= "true"' "$ORCHESTRATE" || \
-       grep -q 'SUPPORTS_TASK_MANAGEMENT.*== "false"' "$ORCHESTRATE"; then
+    if grep -q 'SUPPORTS_TASK_MANAGEMENT.*!= "true"' "$ALL_SRC" || \
+       grep -q 'SUPPORTS_TASK_MANAGEMENT.*== "false"' "$ALL_SRC"; then
         log_pass "Task management checks feature flag before executing"
     else
         log_fail "Task management missing feature flag check"
@@ -308,7 +312,7 @@ test_existing_functionality() {
     )
 
     for func in "${critical_functions[@]}"; do
-        if grep -q "^${func}()" "$ORCHESTRATE" || grep -q "^${func} ()" "$ORCHESTRATE"; then
+        if grep -q "^${func}()\|^${func} ()" "$ALL_SRC"; then
             log_pass "Critical function $func still exists"
         else
             log_fail "Critical function $func missing or renamed"

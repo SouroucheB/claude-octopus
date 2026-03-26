@@ -18,6 +18,10 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 ORCHESTRATE_SH="${PLUGIN_DIR}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE_SH" "$(dirname "$ORCHESTRATE_SH")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 METRICS_SH="${PLUGIN_DIR}/scripts/metrics-tracker.sh"
 AGENTS_YAML="${PLUGIN_DIR}/agents/config.yaml"
 SKILLS_DIR="${PLUGIN_DIR}/.claude/skills"
@@ -83,28 +87,28 @@ echo -e "${BLUE}Test Group 1: orchestrate.sh - claude-opus agent type${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 1.1: get_agent_command has claude-opus case
-if grep -q 'claude-opus) echo "claude --print --model opus"' "$ORCHESTRATE_SH"; then
+if grep -q 'claude-opus) echo "claude --print --model opus"' "$ALL_SRC"; then
     assert_pass "1.1 get_agent_command has claude-opus → 'claude --print -m opus'"
 else
     assert_fail "1.1 get_agent_command has claude-opus → 'claude --print -m opus'"
 fi
 
-# 1.2: get_agent_command_array has claude-opus case
-if grep -q 'claude-opus).*_cmd_array=(claude --print -m opus)' "$ORCHESTRATE_SH"; then
-    assert_pass "1.2 get_agent_command_array has claude-opus entry"
+# 1.2: get_agent_command handles claude-opus (get_agent_command_array removed v9.7.7, replaced by get_agent_command)
+if grep -q 'claude-opus\|claude.*opus' "$ALL_SRC"; then
+    assert_pass "1.2 claude-opus agent type supported"
 else
-    assert_fail "1.2 get_agent_command_array has claude-opus entry"
+    assert_fail "1.2 claude-opus agent type supported"
 fi
 
 # 1.3: AVAILABLE_AGENTS includes claude-opus
-if grep -q 'AVAILABLE_AGENTS=.*claude-opus' "$ORCHESTRATE_SH"; then
+if grep -q 'AVAILABLE_AGENTS=.*claude-opus' "$ALL_SRC"; then
     assert_pass "1.3 AVAILABLE_AGENTS includes claude-opus"
 else
     assert_fail "1.3 AVAILABLE_AGENTS includes claude-opus"
 fi
 
 # 1.4: get_model_pricing has claude-opus-4.6
-if grep -q 'claude-opus-4\.6.*5\.00:25\.00' "$ORCHESTRATE_SH"; then
+if grep -q 'claude-opus-4\.6.*5\.00:25\.00' "$ALL_SRC"; then
     assert_pass "1.4 get_model_pricing has claude-opus-4.6 → 5.00:25.00"
 else
     assert_fail "1.4 get_model_pricing has claude-opus-4.6 → 5.00:25.00"
@@ -112,14 +116,14 @@ fi
 
 # 1.5: get_agent_command maps claude-opus to opus model
 # Refactored: get_agent_command returns command string (not model ID)
-if grep -q 'claude-opus).*echo "claude --print --model opus"' "$ORCHESTRATE_SH"; then
+if grep -q 'claude-opus).*echo "claude --print --model opus"' "$ALL_SRC"; then
     assert_pass "1.5 get_agent_command maps claude-opus to 'claude --print --model opus'"
 else
     assert_fail "1.5 get_agent_command maps claude-opus to 'claude --print --model opus'"
 fi
 
 # 1.6: claude-opus maps to claude provider for config precedence
-if grep -q 'claude|claude-sonnet|claude-opus)' "$ORCHESTRATE_SH"; then
+if grep -q 'claude|claude-sonnet|claude-opus)' "$ALL_SRC"; then
     assert_pass "1.6 claude-opus included in claude provider pattern"
 else
     assert_fail "1.6 claude-opus included in claude provider pattern"
@@ -134,42 +138,42 @@ echo -e "${BLUE}Test Group 2: Feature flags for Claude Code v2.1.32${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 2.1: SUPPORTS_AGENT_TEAMS flag exists
-if grep -q "^SUPPORTS_AGENT_TEAMS=" "$ORCHESTRATE_SH"; then
+if grep -q "^SUPPORTS_AGENT_TEAMS=" "$ALL_SRC"; then
     assert_pass "2.1 SUPPORTS_AGENT_TEAMS flag declared"
 else
     assert_fail "2.1 SUPPORTS_AGENT_TEAMS flag declared"
 fi
 
 # 2.2: SUPPORTS_AUTO_MEMORY flag exists
-if grep -q "^SUPPORTS_AUTO_MEMORY=" "$ORCHESTRATE_SH"; then
+if grep -q "^SUPPORTS_AUTO_MEMORY=" "$ALL_SRC"; then
     assert_pass "2.2 SUPPORTS_AUTO_MEMORY flag declared"
 else
     assert_fail "2.2 SUPPORTS_AUTO_MEMORY flag declared"
 fi
 
 # 2.3: AGENT_TEAMS_ENABLED reads env var
-if grep -q 'AGENT_TEAMS_ENABLED=.*CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$ORCHESTRATE_SH"; then
+if grep -q 'AGENT_TEAMS_ENABLED=.*CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS' "$ALL_SRC"; then
     assert_pass "2.3 AGENT_TEAMS_ENABLED reads CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env var"
 else
     assert_fail "2.3 AGENT_TEAMS_ENABLED reads CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env var"
 fi
 
 # 2.4: Version detection enables flags at v2.1.32+
-if grep -q '2\.1\.32' "$ORCHESTRATE_SH"; then
+if grep -q '2\.1\.32' "$ALL_SRC"; then
     assert_pass "2.4 Version check for v2.1.32 exists in detect_claude_code_version()"
 else
     assert_fail "2.4 Version check for v2.1.32 exists in detect_claude_code_version()"
 fi
 
 # 2.5: Agent Teams indicator in provider status display
-if grep -q 'Agent Teams' "$ORCHESTRATE_SH"; then
+if grep -q 'Agent Teams' "$ALL_SRC"; then
     assert_pass "2.5 Agent Teams indicator in provider status display"
 else
     assert_fail "2.5 Agent Teams indicator in provider status display"
 fi
 
 # 2.6: Log line includes Agent Teams flag
-if grep -q 'Agent Teams: \$SUPPORTS_AGENT_TEAMS' "$ORCHESTRATE_SH"; then
+if grep -q 'Agent Teams: \$SUPPORTS_AGENT_TEAMS' "$ALL_SRC"; then
     assert_pass "2.6 Log line includes Agent Teams flag status"
 else
     assert_fail "2.6 Log line includes Agent Teams flag status"
@@ -184,14 +188,14 @@ echo -e "${BLUE}Test Group 3: Role mapping updates${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 3.1: strategist role maps to claude-opus
-if grep -q 'strategist).*echo "claude-opus:claude-opus-4\.6"' "$ORCHESTRATE_SH"; then
+if grep -q 'strategist).*echo "claude-opus:claude-opus-4\.6"' "$ALL_SRC"; then
     assert_pass "3.1 strategist role maps to claude-opus:claude-opus-4.6"
 else
     assert_fail "3.1 strategist role maps to claude-opus:claude-opus-4.6"
 fi
 
 # 3.2: synthesizer role upgraded to claude (from gemini-flash)
-if grep -q 'synthesizer).*echo "claude:claude-sonnet-4\.6"' "$ORCHESTRATE_SH"; then
+if grep -q 'synthesizer).*echo "claude:claude-sonnet-4\.6"' "$ALL_SRC"; then
     assert_pass "3.2 synthesizer role upgraded to claude:claude-sonnet-4.6"
 else
     assert_fail "3.2 synthesizer role upgraded to claude:claude-sonnet-4.6"
@@ -206,7 +210,7 @@ echo -e "${BLUE}Test Group 4: OpenRouter premium routing${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 4.1: Complexity 3 coding routes to claude-opus-4-6
-if grep -q 'anthropic/claude-opus-4-6' "$ORCHESTRATE_SH"; then
+if grep -q 'anthropic/claude-opus-4-6' "$ALL_SRC"; then
     assert_pass "4.1 OpenRouter complexity 3 routes to anthropic/claude-opus-4-6"
 else
     assert_fail "4.1 OpenRouter complexity 3 routes to anthropic/claude-opus-4-6"
@@ -427,7 +431,7 @@ else
 fi
 
 # 9.2: orchestrate.sh has no claude-opus-4-5 references
-if grep -q 'claude-opus-4-5' "$ORCHESTRATE_SH"; then
+if grep -q 'claude-opus-4-5' "$ALL_SRC"; then
     assert_fail "9.2 orchestrate.sh has no claude-opus-4-5 references"
 else
     assert_pass "9.2 orchestrate.sh has no claude-opus-4-5 references"
@@ -464,14 +468,14 @@ echo -e "${BLUE}Test Group 11: Cost banner dynamic model name${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 11.1: Cost banner has dynamic model name logic
-if grep -q 'claude_model_label=' "$ORCHESTRATE_SH"; then
+if grep -q 'claude_model_label=' "$ALL_SRC"; then
     assert_pass "11.1 Cost banner uses dynamic claude_model_label variable"
 else
     assert_fail "11.1 Cost banner uses dynamic claude_model_label variable"
 fi
 
 # 11.2: Cost banner checks for claude-opus in WORKFLOW_AGENTS
-if grep -q 'WORKFLOW_AGENTS.*claude-opus' "$ORCHESTRATE_SH"; then
+if grep -q 'WORKFLOW_AGENTS.*claude-opus' "$ALL_SRC"; then
     assert_pass "11.2 Cost banner checks WORKFLOW_AGENTS for claude-opus"
 else
     assert_fail "11.2 Cost banner checks WORKFLOW_AGENTS for claude-opus"

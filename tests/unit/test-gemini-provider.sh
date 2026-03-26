@@ -14,6 +14,9 @@ test_suite "Gemini Provider Integration"
 
 # Combined search target (functions decomposed to lib/ in v9.7.7+)
 ORCH="$PROJECT_ROOT/scripts/orchestrate.sh"
+ALL_SRC=$(mktemp)
+cat "$ORCH" "$PROJECT_ROOT/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 DISPATCH="$PROJECT_ROOT/scripts/lib/dispatch.sh"
 PROVIDERS="$PROJECT_ROOT/scripts/lib/providers.sh"
 DOCTOR="$PROJECT_ROOT/scripts/lib/doctor.sh"
@@ -116,7 +119,7 @@ test_dispatch_gemini_image_variant() {
 
 test_available_agents_gemini() {
     test_case "AVAILABLE_AGENTS includes gemini"
-    if grep 'AVAILABLE_AGENTS=' "$ORCH" | grep -q ' gemini '; then
+    if grep 'AVAILABLE_AGENTS=' "$ALL_SRC" | grep -q ' gemini '; then
         test_pass
     else
         test_fail "gemini should be in AVAILABLE_AGENTS"
@@ -125,7 +128,7 @@ test_available_agents_gemini() {
 
 test_available_agents_gemini_fast() {
     test_case "AVAILABLE_AGENTS includes gemini-fast"
-    if grep 'AVAILABLE_AGENTS=' "$ORCH" | grep -q 'gemini-fast'; then
+    if grep 'AVAILABLE_AGENTS=' "$ALL_SRC" | grep -q 'gemini-fast'; then
         test_pass
     else
         test_fail "gemini-fast should be in AVAILABLE_AGENTS"
@@ -134,7 +137,7 @@ test_available_agents_gemini_fast() {
 
 test_available_agents_gemini_image() {
     test_case "AVAILABLE_AGENTS includes gemini-image"
-    if grep 'AVAILABLE_AGENTS=' "$ORCH" | grep -q 'gemini-image'; then
+    if grep 'AVAILABLE_AGENTS=' "$ALL_SRC" | grep -q 'gemini-image'; then
         test_pass
     else
         test_fail "gemini-image should be in AVAILABLE_AGENTS"
@@ -317,7 +320,7 @@ test_embrace_gemini_in_strategy() {
 
 test_detect_providers_gemini() {
     test_case "detect_providers: detects Gemini CLI"
-    if grep -A20 'detect_providers()' "$ORCH" | grep -q 'gemini'; then
+    if grep -A20 'detect_providers()' "$ALL_SRC" | grep -q 'gemini'; then
         test_pass
     else
         test_fail "detect_providers should detect gemini"
@@ -453,11 +456,11 @@ test_toml_not_used_in_dispatch() {
 
 test_pricing_gemini_pro() {
     test_case "pricing: gemini pro model has pricing"
-    if grep -q 'gemini.*pro' "$ORCH" | head -1 && grep -qE 'gemini-3.*pro.*echo "[0-9]' "$ORCH"; then
+    if grep -q 'gemini.*pro' "$ORCH" | head -1 && grep -qE 'gemini-3.*pro.*echo "[0-9]' "$ALL_SRC"; then
         test_pass
     else
         # Fallback: just check any gemini model has pricing
-        if grep -q 'gemini.*echo "[0-9]' "$ORCH"; then
+        if grep -q 'gemini.*echo "[0-9]' "$ALL_SRC"; then
             test_pass
         else
             test_fail "get_model_pricing should have gemini model"
@@ -467,7 +470,7 @@ test_pricing_gemini_pro() {
 
 test_pricing_gemini_flash() {
     test_case "pricing: gemini flash model has pricing"
-    if grep -q 'gemini.*flash' "$ORCH"; then
+    if grep -q 'gemini.*flash' "$ALL_SRC"; then
         test_pass
     else
         test_fail "get_model_pricing should have gemini flash model"

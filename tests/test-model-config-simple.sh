@@ -6,6 +6,9 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
+ALL_SRC=$(mktemp)
+cat "$PLUGIN_DIR/scripts/orchestrate.sh" "$PLUGIN_DIR/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 CONFIG_FILE="${HOME}/.claude-octopus/config/providers.json"
 BACKUP_FILE="${CONFIG_FILE}.backup"
 
@@ -61,7 +64,7 @@ for provider in codex gemini; do
     else
         # v8.49.0: Fall back to checking orchestrate.sh for hardcoded defaults
         # (providers.json may not have .model set if user hasn't run /octo:model-config)
-        if grep -q "get_tier_model\|get_default_model_for_provider" "${PLUGIN_DIR}/scripts/orchestrate.sh" 2>/dev/null; then
+        if grep -q "get_tier_model\|get_default_model_for_provider" "$ALL_SRC" 2>/dev/null; then
             echo -e "${GREEN}✓${NC} ${provider} default model resolved via orchestrate.sh fallback"
             TESTS_PASSED=$((TESTS_PASSED + 1))
         else
@@ -102,8 +105,8 @@ echo "------------------------------------"
 
 for func in get_agent_model set_provider_model reset_provider_model; do
     TESTS_RUN=$((TESTS_RUN + 1))
-    if grep -q "^${func}()" "${PLUGIN_DIR}/scripts/orchestrate.sh" 2>/dev/null || \
-       grep -q "^${func} ()" "${PLUGIN_DIR}/scripts/orchestrate.sh" 2>/dev/null; then
+    if grep -q "^${func}()" "$ALL_SRC" 2>/dev/null || \
+       grep -q "^${func} ()" "$ALL_SRC" 2>/dev/null; then
         echo -e "${GREEN}✓${NC} Function exists: ${func}"
         TESTS_PASSED=$((TESTS_PASSED + 1))
     else
@@ -114,7 +117,7 @@ done
 
 # Test 6: Check for environment variable support
 TESTS_RUN=$((TESTS_RUN + 1))
-if grep -q "OCTOPUS_CODEX_MODEL" "${PLUGIN_DIR}/scripts/orchestrate.sh"; then
+if grep -q "OCTOPUS_CODEX_MODEL" "$ALL_SRC"; then
     echo -e "${GREEN}✓${NC} Environment variable support (OCTOPUS_CODEX_MODEL)"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else
@@ -123,7 +126,7 @@ else
 fi
 
 TESTS_RUN=$((TESTS_RUN + 1))
-if grep -q "OCTOPUS_GEMINI_MODEL" "${PLUGIN_DIR}/scripts/orchestrate.sh"; then
+if grep -q "OCTOPUS_GEMINI_MODEL" "$ALL_SRC"; then
     echo -e "${GREEN}✓${NC} Environment variable support (OCTOPUS_GEMINI_MODEL)"
     TESTS_PASSED=$((TESTS_PASSED + 1))
 else

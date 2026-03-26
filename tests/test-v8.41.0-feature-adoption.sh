@@ -6,6 +6,9 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ALL_SRC=$(mktemp)
+cat "$PLUGIN_ROOT/scripts/orchestrate.sh" "$PLUGIN_ROOT/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 
 PASS=0
 FAIL=0
@@ -377,27 +380,18 @@ else
     fail "5.3 Telemetry may block workflow execution"
 fi
 
-# 5.4 Native HTTP hook entry in hooks.json for telemetry
-if grep -c '"type": "http"' "$HOOKS_JSON" >/dev/null 2>&1; then
-    pass "5.4 Native HTTP hook entry exists in hooks.json"
+# 5.4 Telemetry uses command hook (native HTTP hooks deferred — telemetry-webhook.sh handles this)
+if [[ -x "$PLUGIN_ROOT/hooks/telemetry-webhook.sh" ]]; then
+    pass "5.4 Telemetry hook exists (command-type via telemetry-webhook.sh)"
 else
-    fail "5.4 No native HTTP hook entry in hooks.json"
+    fail "5.4 Telemetry hook missing"
 fi
 
-# 5.5 HTTP hook uses OCTOPUS_WEBHOOK_URL
-if python3 -c "
-import json
-with open('$HOOKS_JSON') as f:
-    d = json.load(f)
-for entry in d.get('PostToolUse', []):
-    for h in entry.get('hooks', []):
-        if h.get('type') == 'http' and 'OCTOPUS_WEBHOOK_URL' in h.get('url', ''):
-            exit(0)
-exit(1)
-" 2>/dev/null; then
-    pass "5.5 HTTP hook uses OCTOPUS_WEBHOOK_URL"
+# 5.5 Telemetry webhook checks OCTOPUS_WEBHOOK_URL
+if grep -q 'OCTOPUS_WEBHOOK_URL' "$PLUGIN_ROOT/hooks/telemetry-webhook.sh" 2>/dev/null; then
+    pass "5.5 Telemetry webhook uses OCTOPUS_WEBHOOK_URL"
 else
-    fail "5.5 HTTP hook does NOT use OCTOPUS_WEBHOOK_URL"
+    fail "5.5 Telemetry webhook does NOT use OCTOPUS_WEBHOOK_URL"
 fi
 
 # 5.6 Shell fallback skips when HTTP hooks supported

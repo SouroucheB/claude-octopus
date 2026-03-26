@@ -1,0 +1,10 @@
+{
+  "session_id": "session",
+  "phase": "discover",
+  "started_at": "2026-03-26T01:21:54Z",
+  "total_agents": 6,
+  "completed_agents": 0,
+  "total_cost": 0.0,
+  "total_time_ms": 0,
+  "agents": []
+}

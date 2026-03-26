@@ -13,6 +13,10 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 ORCHESTRATE_SH="${PLUGIN_DIR}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE_SH" "$(dirname "$ORCHESTRATE_SH")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 BRIDGE_SH="${PLUGIN_DIR}/scripts/agent-teams-bridge.sh"
 FLOW_DEVELOP_MD="${PLUGIN_DIR}/.claude/skills/flow-develop.md"
 
@@ -83,21 +87,21 @@ echo ""
 echo -e "${BLUE}--- 1. SUPPORTS_CONTINUATION Flag ---${NC}"
 
 # 1.1: Flag declaration exists
-if grep -q 'SUPPORTS_CONTINUATION=false' "$ORCHESTRATE_SH"; then
+if grep -q 'SUPPORTS_CONTINUATION=false' "$ALL_SRC"; then
     assert_pass "1.1 SUPPORTS_CONTINUATION flag declared with default=false"
 else
     assert_fail "1.1 SUPPORTS_CONTINUATION flag declared with default=false"
 fi
 
 # 1.2: Flag set to true in detect_claude_code_version
-if grep -A 5 'v2.1.34' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_CONTINUATION=true'; then
+if grep -A 5 'v2.1.34' "$ALL_SRC" | grep -q 'SUPPORTS_CONTINUATION=true'; then
     assert_pass "1.2 SUPPORTS_CONTINUATION enabled in v2.1.34+ detection block"
 else
     assert_fail "1.2 SUPPORTS_CONTINUATION enabled in v2.1.34+ detection block"
 fi
 
 # 1.3: Flag appears in log output
-if grep -q 'Continuation:' "$ORCHESTRATE_SH"; then
+if grep -q 'Continuation:' "$ALL_SRC"; then
     assert_pass "1.3 SUPPORTS_CONTINUATION included in version detection log output"
 else
     assert_fail "1.3 SUPPORTS_CONTINUATION included in version detection log output"
@@ -111,49 +115,49 @@ echo ""
 echo -e "${BLUE}--- 2. resume_agent() Function ---${NC}"
 
 # 2.1: Function exists
-if grep -q '^resume_agent()' "$ORCHESTRATE_SH"; then
+if grep -q '^resume_agent()' "$ALL_SRC"; then
     assert_pass "2.1 resume_agent() function defined"
 else
     assert_fail "2.1 resume_agent() function defined"
 fi
 
 # 2.2: Gates on SUPPORTS_CONTINUATION
-if grep -A 30 '^resume_agent()' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_CONTINUATION.*true'; then
+if grep -A 30 '^resume_agent()' "$ALL_SRC" | grep -q 'SUPPORTS_CONTINUATION.*true'; then
     assert_pass "2.2 resume_agent() gates on SUPPORTS_CONTINUATION"
 else
     assert_fail "2.2 resume_agent() gates on SUPPORTS_CONTINUATION"
 fi
 
 # 2.3: Returns 1 when SUPPORTS_CONTINUATION is false
-if grep -A 30 '^resume_agent()' "$ORCHESTRATE_SH" | grep -q 'return 1'; then
+if grep -A 30 '^resume_agent()' "$ALL_SRC" | grep -q 'return 1'; then
     assert_pass "2.3 resume_agent() returns 1 on failure conditions"
 else
     assert_fail "2.3 resume_agent() returns 1 on failure conditions"
 fi
 
 # 2.4: Gates on empty agent_id
-if grep -A 30 '^resume_agent()' "$ORCHESTRATE_SH" | grep -q 'empty agent_id'; then
+if grep -A 30 '^resume_agent()' "$ALL_SRC" | grep -q 'empty agent_id'; then
     assert_pass "2.4 resume_agent() gates on empty agent_id"
 else
     assert_fail "2.4 resume_agent() gates on empty agent_id"
 fi
 
 # 2.5: Writes JSON instruction file with dispatch_method (v2.1.77: "send_message" replaces "resume")
-if grep -A 60 '^resume_agent()' "$ORCHESTRATE_SH" | grep -q 'dispatch_method.*send_message\|dispatch_method.*resume'; then
+if grep -A 60 '^resume_agent()' "$ALL_SRC" | grep -q 'dispatch_method.*send_message\|dispatch_method.*resume'; then
     assert_pass "2.5 resume_agent() writes JSON with dispatch_method"
 else
     assert_fail "2.5 resume_agent() writes JSON with dispatch_method"
 fi
 
 # 2.6: Emits AGENT_TEAMS_RESUME signal
-if grep -A 70 '^resume_agent()' "$ORCHESTRATE_SH" | grep -q 'AGENT_TEAMS_RESUME'; then
+if grep -A 70 '^resume_agent()' "$ALL_SRC" | grep -q 'AGENT_TEAMS_RESUME'; then
     assert_pass "2.6 resume_agent() emits AGENT_TEAMS_RESUME signal"
 else
     assert_fail "2.6 resume_agent() emits AGENT_TEAMS_RESUME signal"
 fi
 
 # 2.7: Calls bridge_register_task for the resumed task
-if grep -A 70 '^resume_agent()' "$ORCHESTRATE_SH" | grep -q 'bridge_register_task'; then
+if grep -A 70 '^resume_agent()' "$ALL_SRC" | grep -q 'bridge_register_task'; then
     assert_pass "2.7 resume_agent() registers task in bridge ledger"
 else
     assert_fail "2.7 resume_agent() registers task in bridge ledger"
@@ -260,28 +264,28 @@ echo ""
 echo -e "${BLUE}--- 4. Tangle Retry Integration ---${NC}"
 
 # 4.1: retry_failed_subtasks references resume_agent
-if grep -A 100 'retry_failed_subtasks()' "$ORCHESTRATE_SH" | grep -q 'resume_agent'; then
+if grep -A 100 'retry_failed_subtasks()' "$ALL_SRC" | grep -q 'resume_agent'; then
     assert_pass "4.1 retry_failed_subtasks() attempts resume_agent before cold spawn"
 else
     assert_fail "4.1 retry_failed_subtasks() attempts resume_agent before cold spawn"
 fi
 
 # 4.2: retry path calls bridge_get_agent_id to find previous agent
-if grep -A 100 'retry_failed_subtasks()' "$ORCHESTRATE_SH" | grep -q 'bridge_get_agent_id'; then
+if grep -A 100 'retry_failed_subtasks()' "$ALL_SRC" | grep -q 'bridge_get_agent_id'; then
     assert_pass "4.2 retry path looks up previous agent_id via bridge"
 else
     assert_fail "4.2 retry path looks up previous agent_id via bridge"
 fi
 
 # 4.3: Fallback to spawn_agent when resume fails
-if grep -A 100 'retry_failed_subtasks()' "$ORCHESTRATE_SH" | grep -q '_did_resume.*true'; then
+if grep -A 100 'retry_failed_subtasks()' "$ALL_SRC" | grep -q '_did_resume.*true'; then
     assert_pass "4.3 retry path falls back to spawn_agent when resume unavailable"
 else
     assert_fail "4.3 retry path falls back to spawn_agent when resume unavailable"
 fi
 
 # 4.4: SUPPORTS_CONTINUATION gate in retry path
-if grep -A 100 'retry_failed_subtasks()' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_CONTINUATION.*true'; then
+if grep -A 100 'retry_failed_subtasks()' "$ALL_SRC" | grep -q 'SUPPORTS_CONTINUATION.*true'; then
     assert_pass "4.4 retry path gates resume on SUPPORTS_CONTINUATION"
 else
     assert_fail "4.4 retry path gates resume on SUPPORTS_CONTINUATION"
@@ -295,14 +299,14 @@ echo ""
 echo -e "${BLUE}--- 5. Agent Teams Dispatch ---${NC}"
 
 # 5.1: Agent Teams instruction JSON includes agent_id field
-if grep -A 20 'agent_instruction_file.*teams_dir' "$ORCHESTRATE_SH" | grep -q 'agent_id'; then
+if grep -A 20 'agent_instruction_file.*teams_dir' "$ALL_SRC" | grep -q 'agent_id'; then
     assert_pass "5.1 Agent Teams instruction JSON includes agent_id field"
 else
     assert_fail "5.1 Agent Teams instruction JSON includes agent_id field"
 fi
 
 # 5.2: Task-agent map file written for continuation support
-if grep -q 'task-agent-map' "$ORCHESTRATE_SH"; then
+if grep -q 'task-agent-map' "$ALL_SRC"; then
     assert_pass "5.2 Task-agent map file created for agent_id correlation"
 else
     assert_fail "5.2 Task-agent map file created for agent_id correlation"

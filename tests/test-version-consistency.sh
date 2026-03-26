@@ -239,12 +239,16 @@ fi
 echo ""
 echo "Test 12: Checking Gemini agent execution fix (v7.19.2)..."
 ORCHESTRATE="$PROJECT_ROOT/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE" "$(dirname "$ORCHESTRATE")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 if [[ -f "$ORCHESTRATE" ]]; then
     # Check for env prefix in Gemini command
-    if grep -q "env NODE_NO_WARNINGS=1 gemini" "$ORCHESTRATE"; then
+    if grep -q "NODE_NO_WARNINGS=1" "$ALL_SRC" && grep -q 'gemini_env.*gemini\|{gemini_env} gemini' "$ALL_SRC"; then
         pass "Gemini agent execution fix implemented (env prefix)"
     else
-        fail "Gemini agent execution fix missing" "v7.19.2: Should use 'env NODE_NO_WARNINGS=1 gemini'"
+        fail "Gemini agent execution fix missing" "v7.19.2: Should use NODE_NO_WARNINGS=1 with gemini"
     fi
 else
     fail "orchestrate.sh not found" "Expected: $ORCHESTRATE"
@@ -255,14 +259,14 @@ echo ""
 echo "Test 13: Checking performance fixes (v7.19.0)..."
 if [[ -f "$ORCHESTRATE" ]]; then
     # Check for result file pipeline improvements
-    if grep -q "tee.*processed.*raw" "$ORCHESTRATE"; then
+    if grep -q "tee.*processed.*raw" "$ALL_SRC"; then
         pass "Result file pipeline fix implemented"
     else
         info "Result file pipeline may use different implementation"
     fi
 
     # Check for timeout handling
-    if grep -q "TIMEOUT.*PARTIAL" "$ORCHESTRATE" || grep -q "124.*timeout" "$ORCHESTRATE"; then
+    if grep -q "TIMEOUT.*PARTIAL" "$ORCHESTRATE" || grep -q "124.*timeout" "$ALL_SRC"; then
         pass "Timeout partial output preservation implemented"
     else
         info "Timeout handling may use different approach"

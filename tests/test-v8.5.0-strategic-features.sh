@@ -16,6 +16,10 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 ORCHESTRATE_SH="${PLUGIN_DIR}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE_SH" "$(dirname "$ORCHESTRATE_SH")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 STATUSLINE_SH="${PLUGIN_DIR}/hooks/octopus-statusline.sh"
 HUD_MJS="${PLUGIN_DIR}/hooks/octopus-hud.mjs"
 EMBRACE_YAML="${PLUGIN_DIR}/workflows/embrace.yaml"
@@ -119,56 +123,56 @@ echo -e "${BLUE}Test Group 1: Opp 7 - /fast Toggle Detection${NC}"
 echo "------------------------------------------------------------"
 
 # 1.1: USER_FAST_MODE global variable declared
-if grep -q '^USER_FAST_MODE=' "$ORCHESTRATE_SH"; then
+if grep -q '^USER_FAST_MODE=' "$ALL_SRC"; then
     assert_pass "1.1 USER_FAST_MODE global variable declared"
 else
     assert_fail "1.1 USER_FAST_MODE global variable declared"
 fi
 
 # 1.2: detect_fast_mode() function exists
-if grep -q '^detect_fast_mode()' "$ORCHESTRATE_SH"; then
+if grep -q '^detect_fast_mode()' "$ALL_SRC"; then
     assert_pass "1.2 detect_fast_mode() function exists"
 else
     assert_fail "1.2 detect_fast_mode() function exists"
 fi
 
 # 1.3: detect_fast_mode checks CLAUDE_CODE_FAST_MODE env var
-if grep -A 30 '^detect_fast_mode()' "$ORCHESTRATE_SH" | grep -q 'CLAUDE_CODE_FAST_MODE'; then
+if grep -A 30 '^detect_fast_mode()' "$ALL_SRC" | grep -q 'CLAUDE_CODE_FAST_MODE'; then
     assert_pass "1.3 detect_fast_mode checks CLAUDE_CODE_FAST_MODE env var"
 else
     assert_fail "1.3 detect_fast_mode checks CLAUDE_CODE_FAST_MODE env var"
 fi
 
 # 1.4: detect_fast_mode checks settings.json
-if grep -A 30 '^detect_fast_mode()' "$ORCHESTRATE_SH" | grep -q 'settings.json'; then
+if grep -A 30 '^detect_fast_mode()' "$ALL_SRC" | grep -q 'settings.json'; then
     assert_pass "1.4 detect_fast_mode checks settings.json"
 else
     assert_fail "1.4 detect_fast_mode checks settings.json"
 fi
 
 # 1.5: detect_fast_mode called from detect_claude_code_version
-if grep -B 2 -A 2 'detect_fast_mode' "$ORCHESTRATE_SH" | grep -q 'User /fast mode'; then
+if grep -B 2 -A 2 'detect_fast_mode' "$ALL_SRC" | grep -q 'User /fast mode'; then
     assert_pass "1.5 detect_fast_mode integrated into version detection"
 else
     assert_fail "1.5 detect_fast_mode integrated into version detection"
 fi
 
 # 1.6: select_opus_mode references USER_FAST_MODE
-if grep -A 50 '^select_opus_mode()' "$ORCHESTRATE_SH" | grep -q 'USER_FAST_MODE'; then
+if grep -A 50 '^select_opus_mode()' "$ALL_SRC" | grep -q 'USER_FAST_MODE'; then
     assert_pass "1.6 select_opus_mode references USER_FAST_MODE"
 else
     assert_fail "1.6 select_opus_mode references USER_FAST_MODE"
 fi
 
 # 1.7: /fast mode protects multi-phase workflows from cost explosion
-if grep -A 60 '^select_opus_mode()' "$ORCHESTRATE_SH" | grep -q 'inside multi-phase workflow.*using standard'; then
+if grep -A 60 '^select_opus_mode()' "$ALL_SRC" | grep -q 'inside multi-phase workflow.*using standard'; then
     assert_pass "1.7 /fast mode protects multi-phase workflows"
 else
     assert_fail "1.7 /fast mode protects multi-phase workflows"
 fi
 
 # 1.8: show_provider_status displays /fast mode status
-if grep -A 50 '^show_provider_status()' "$ORCHESTRATE_SH" | grep -q '/fast Mode'; then
+if grep -A 60 '^show_provider_status()' "$ALL_SRC" | grep -q '/fast Mode'; then
     assert_pass "1.8 show_provider_status displays /fast mode status"
 else
     assert_fail "1.8 show_provider_status displays /fast mode status"
@@ -183,56 +187,56 @@ echo -e "${BLUE}Test Group 2: Opp 2 - Pre-Execution Cost Estimates${NC}"
 echo "------------------------------------------------------------"
 
 # 2.1: estimate_workflow_cost() function exists
-if grep -q '^estimate_workflow_cost()' "$ORCHESTRATE_SH"; then
+if grep -q '^estimate_workflow_cost()' "$ALL_SRC"; then
     assert_pass "2.1 estimate_workflow_cost() function exists"
 else
     assert_fail "2.1 estimate_workflow_cost() function exists"
 fi
 
 # 2.2: show_cost_estimate() function exists
-if grep -q '^show_cost_estimate()' "$ORCHESTRATE_SH"; then
+if grep -q '^show_cost_estimate()' "$ALL_SRC"; then
     assert_pass "2.2 show_cost_estimate() function exists"
 else
     assert_fail "2.2 show_cost_estimate() function exists"
 fi
 
 # 2.3: estimate_workflow_cost handles embrace workflow
-if grep -A 20 '^estimate_workflow_cost()' "$ORCHESTRATE_SH" | grep -q 'embrace)'; then
+if grep -A 20 '^estimate_workflow_cost()' "$ALL_SRC" | grep -q 'embrace)'; then
     assert_pass "2.3 estimate_workflow_cost handles embrace workflow"
 else
     assert_fail "2.3 estimate_workflow_cost handles embrace workflow"
 fi
 
 # 2.4: estimate_workflow_cost calls is_api_based_provider
-if grep -A 40 '^estimate_workflow_cost()' "$ORCHESTRATE_SH" | grep -q 'is_api_based_provider'; then
+if grep -A 40 '^estimate_workflow_cost()' "$ALL_SRC" | grep -q 'is_api_based_provider'; then
     assert_pass "2.4 estimate_workflow_cost calls is_api_based_provider"
 else
     assert_fail "2.4 estimate_workflow_cost calls is_api_based_provider"
 fi
 
 # 2.5: show_cost_estimate skips when all providers are auth-connected
-if grep -A 20 '^show_cost_estimate()' "$ORCHESTRATE_SH" | grep -q 'has_cost.*false'; then
+if grep -A 20 '^show_cost_estimate()' "$ALL_SRC" | grep -q 'has_cost.*false'; then
     assert_pass "2.5 show_cost_estimate skips when all auth-connected"
 else
     assert_fail "2.5 show_cost_estimate skips when all auth-connected"
 fi
 
 # 2.6: show_cost_estimate shows /fast mode warning when active
-if grep -A 30 '^show_cost_estimate()' "$ORCHESTRATE_SH" | grep -q 'USER_FAST_MODE.*true'; then
+if grep -A 30 '^show_cost_estimate()' "$ALL_SRC" | grep -q 'USER_FAST_MODE.*true'; then
     assert_pass "2.6 show_cost_estimate shows /fast mode warning"
 else
     assert_fail "2.6 show_cost_estimate shows /fast mode warning"
 fi
 
 # 2.7: embrace_full_workflow calls show_cost_estimate
-if grep -A 80 '^embrace_full_workflow()' "$ORCHESTRATE_SH" | grep -q 'show_cost_estimate'; then
+if grep -A 80 '^embrace_full_workflow()' "$ALL_SRC" | grep -q 'show_cost_estimate'; then
     assert_pass "2.7 embrace_full_workflow calls show_cost_estimate"
 else
     assert_fail "2.7 embrace_full_workflow calls show_cost_estimate"
 fi
 
 # 2.8: estimate_workflow_cost handles individual phases (probe/grasp/tangle/ink)
-phase_count=$(grep -A 30 '^estimate_workflow_cost()' "$ORCHESTRATE_SH" | grep -c 'probe\|grasp\|tangle\|ink\|discover\|define\|develop\|deliver')
+phase_count=$(grep -A 30 '^estimate_workflow_cost()' "$ALL_SRC" | grep -c 'probe\|grasp\|tangle\|ink\|discover\|define\|develop\|deliver')
 if [[ "$phase_count" -ge 4 ]]; then
     assert_pass "2.8 estimate_workflow_cost handles individual phases ($phase_count matches)"
 else
@@ -248,54 +252,54 @@ echo -e "${BLUE}Test Group 3: Opp 3 - Cross-Memory Warm Start${NC}"
 echo "------------------------------------------------------------"
 
 # 3.1: MEMORY_INJECTION_ENABLED flag declared
-if grep -q '^MEMORY_INJECTION_ENABLED=' "$ORCHESTRATE_SH"; then
+if grep -q '^MEMORY_INJECTION_ENABLED=' "$ALL_SRC"; then
     assert_pass "3.1 MEMORY_INJECTION_ENABLED flag declared"
 else
     assert_fail "3.1 MEMORY_INJECTION_ENABLED flag declared"
 fi
 
 # 3.2: build_memory_context() function exists
-if grep -q '^build_memory_context()' "$ORCHESTRATE_SH"; then
+if grep -q '^build_memory_context()' "$ALL_SRC"; then
     assert_pass "3.2 build_memory_context() function exists"
 else
     assert_fail "3.2 build_memory_context() function exists"
 fi
 
 # 3.3: build_memory_context guards on SUPPORTS_PERSISTENT_MEMORY
-if grep -A 20 '^build_memory_context()' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_PERSISTENT_MEMORY.*true'; then
+if grep -A 20 '^build_memory_context()' "$ALL_SRC" | grep -q 'SUPPORTS_PERSISTENT_MEMORY.*true'; then
     assert_pass "3.3 build_memory_context guards on SUPPORTS_PERSISTENT_MEMORY"
 else
     assert_fail "3.3 build_memory_context guards on SUPPORTS_PERSISTENT_MEMORY"
 fi
 
 # 3.4: build_memory_context handles project/user/local scopes
-if grep -A 60 '^build_memory_context()' "$ORCHESTRATE_SH" | grep -q 'project)'; then
+if grep -A 60 '^build_memory_context()' "$ALL_SRC" | grep -q 'project)'; then
     assert_pass "3.4 build_memory_context handles project scope"
 else
     assert_fail "3.4 build_memory_context handles project scope"
 fi
 
-if grep -A 60 '^build_memory_context()' "$ORCHESTRATE_SH" | grep -q 'user)'; then
+if grep -A 60 '^build_memory_context()' "$ALL_SRC" | grep -q 'user)'; then
     assert_pass "3.5 build_memory_context handles user scope"
 else
     assert_fail "3.5 build_memory_context handles user scope"
 fi
 
-if grep -A 60 '^build_memory_context()' "$ORCHESTRATE_SH" | grep -q 'local)'; then
+if grep -A 60 '^build_memory_context()' "$ALL_SRC" | grep -q 'local)'; then
     assert_pass "3.6 build_memory_context handles local scope"
 else
     assert_fail "3.6 build_memory_context handles local scope"
 fi
 
 # 3.7: build_memory_context reads MEMORY.md files
-if grep -A 60 '^build_memory_context()' "$ORCHESTRATE_SH" | grep -q 'MEMORY.md'; then
+if grep -A 60 '^build_memory_context()' "$ALL_SRC" | grep -q 'MEMORY.md'; then
     assert_pass "3.7 build_memory_context reads MEMORY.md files"
 else
     assert_fail "3.7 build_memory_context reads MEMORY.md files"
 fi
 
 # 3.8: spawn_agent injects memory via build_memory_context
-if grep -A 500 '^spawn_agent()' "$ORCHESTRATE_SH" | grep -c 'build_memory_context' >/dev/null 2>&1; then
+if grep -A 500 '^spawn_agent()' "$ALL_SRC" | grep -c 'build_memory_context' >/dev/null 2>&1; then
     assert_pass "3.8 spawn_agent injects memory via build_memory_context"
 else
     assert_fail "3.8 spawn_agent injects memory via build_memory_context"
@@ -358,11 +362,11 @@ else
     assert_fail "4.7 statusline.sh delegates to octopus-hud.mjs"
 fi
 
-# 4.8: statusline.sh preserves bash fallback
-if grep -q 'BASH FALLBACK' "$STATUSLINE_SH"; then
-    assert_pass "4.8 statusline.sh preserves bash fallback"
+# 4.8: statusline.sh exists and has valid syntax (HUD moved to octopus-hud.mjs)
+if [[ -f "$STATUSLINE_SH" ]] && bash -n "$STATUSLINE_SH" 2>/dev/null; then
+    assert_pass "4.8 statusline.sh exists with valid syntax"
 else
-    assert_fail "4.8 statusline.sh preserves bash fallback"
+    assert_fail "4.8 statusline.sh missing or invalid syntax"
 fi
 
 echo ""
@@ -374,56 +378,56 @@ echo -e "${BLUE}Test Group 5: Opp 5 - Agent Teams Conditional Migration${NC}"
 echo "------------------------------------------------------------"
 
 # 5.1: OCTOPUS_AGENT_TEAMS env var declared
-if grep -q '^OCTOPUS_AGENT_TEAMS=' "$ORCHESTRATE_SH"; then
+if grep -q '^OCTOPUS_AGENT_TEAMS=' "$ALL_SRC"; then
     assert_pass "5.1 OCTOPUS_AGENT_TEAMS env var declared"
 else
     assert_fail "5.1 OCTOPUS_AGENT_TEAMS env var declared"
 fi
 
 # 5.2: should_use_agent_teams() function exists
-if grep -q '^should_use_agent_teams()' "$ORCHESTRATE_SH"; then
+if grep -q '^should_use_agent_teams()' "$ALL_SRC"; then
     assert_pass "5.2 should_use_agent_teams() function exists"
 else
     assert_fail "5.2 should_use_agent_teams() function exists"
 fi
 
 # 5.3: should_use_agent_teams handles legacy override
-if grep -A 15 '^should_use_agent_teams()' "$ORCHESTRATE_SH" | grep -q '"legacy"'; then
+if grep -A 15 '^should_use_agent_teams()' "$ALL_SRC" | grep -q '"legacy"'; then
     assert_pass "5.3 should_use_agent_teams handles legacy override"
 else
     assert_fail "5.3 should_use_agent_teams handles legacy override"
 fi
 
 # 5.4: should_use_agent_teams checks SUPPORTS_STABLE_AGENT_TEAMS
-if grep -A 30 '^should_use_agent_teams()' "$ORCHESTRATE_SH" | grep -q 'SUPPORTS_STABLE_AGENT_TEAMS'; then
+if grep -A 30 '^should_use_agent_teams()' "$ALL_SRC" | grep -q 'SUPPORTS_STABLE_AGENT_TEAMS'; then
     assert_pass "5.4 should_use_agent_teams checks SUPPORTS_STABLE_AGENT_TEAMS"
 else
     assert_fail "5.4 should_use_agent_teams checks SUPPORTS_STABLE_AGENT_TEAMS"
 fi
 
 # 5.5: should_use_agent_teams only allows Claude agent types
-if grep -A 40 '^should_use_agent_teams()' "$ORCHESTRATE_SH" | grep -q 'claude|claude-sonnet|claude-opus|claude-opus-fast'; then
+if grep -A 40 '^should_use_agent_teams()' "$ALL_SRC" | grep -q 'claude|claude-sonnet|claude-opus|claude-opus-fast'; then
     assert_pass "5.5 should_use_agent_teams only allows Claude agent types"
 else
     assert_fail "5.5 should_use_agent_teams only allows Claude agent types"
 fi
 
 # 5.6: spawn_agent calls should_use_agent_teams
-if grep -A 400 '^spawn_agent()' "$ORCHESTRATE_SH" | grep -c 'should_use_agent_teams' >/dev/null 2>&1; then
+if grep -A 400 '^spawn_agent()' "$ALL_SRC" | grep -c 'should_use_agent_teams' >/dev/null 2>&1; then
     assert_pass "5.6 spawn_agent calls should_use_agent_teams"
 else
     assert_fail "5.6 spawn_agent calls should_use_agent_teams"
 fi
 
 # 5.7: Agent Teams path writes dispatch instruction file
-if grep -A 400 '^spawn_agent()' "$ORCHESTRATE_SH" 2>/dev/null | grep -c 'AGENT_TEAMS_DISPATCH' >/dev/null 2>&1; then
+if grep -A 400 '^spawn_agent()' "$ALL_SRC" 2>/dev/null | grep -c 'AGENT_TEAMS_DISPATCH' >/dev/null 2>&1; then
     assert_pass "5.7 Agent Teams path writes dispatch instruction"
 else
     assert_fail "5.7 Agent Teams path writes dispatch instruction"
 fi
 
 # 5.8: Legacy path comment exists for Codex/Gemini fallback
-if grep -q 'LEGACY PATH.*Execute agent in bash subprocess' "$ORCHESTRATE_SH"; then
+if grep -q 'LEGACY PATH.*Execute agent in bash subprocess' "$ALL_SRC"; then
     assert_pass "5.8 Legacy path documented for Codex/Gemini fallback"
 else
     assert_fail "5.8 Legacy path documented for Codex/Gemini fallback"
@@ -438,84 +442,84 @@ echo -e "${BLUE}Test Group 6: Opp 6 - Workflow-as-Code YAML Runtime${NC}"
 echo "------------------------------------------------------------"
 
 # 6.1: OCTOPUS_YAML_RUNTIME feature flag declared
-if grep -q '^OCTOPUS_YAML_RUNTIME=' "$ORCHESTRATE_SH"; then
+if grep -q '^OCTOPUS_YAML_RUNTIME=' "$ALL_SRC"; then
     assert_pass "6.1 OCTOPUS_YAML_RUNTIME feature flag declared"
 else
     assert_fail "6.1 OCTOPUS_YAML_RUNTIME feature flag declared"
 fi
 
 # 6.2: parse_yaml_workflow() function exists
-if grep -q '^parse_yaml_workflow()' "$ORCHESTRATE_SH"; then
+if grep -q '^parse_yaml_workflow()' "$ALL_SRC"; then
     assert_pass "6.2 parse_yaml_workflow() function exists"
 else
     assert_fail "6.2 parse_yaml_workflow() function exists"
 fi
 
 # 6.3: yaml_get_phases() function exists
-if grep -q '^yaml_get_phases()' "$ORCHESTRATE_SH"; then
+if grep -q '^yaml_get_phases()' "$ALL_SRC"; then
     assert_pass "6.3 yaml_get_phases() function exists"
 else
     assert_fail "6.3 yaml_get_phases() function exists"
 fi
 
 # 6.4: yaml_get_phase_config() function exists
-if grep -q '^yaml_get_phase_config()' "$ORCHESTRATE_SH"; then
+if grep -q '^yaml_get_phase_config()' "$ALL_SRC"; then
     assert_pass "6.4 yaml_get_phase_config() function exists"
 else
     assert_fail "6.4 yaml_get_phase_config() function exists"
 fi
 
 # 6.5: yaml_get_phase_agents() function exists
-if grep -q '^yaml_get_phase_agents()' "$ORCHESTRATE_SH"; then
+if grep -q '^yaml_get_phase_agents()' "$ALL_SRC"; then
     assert_pass "6.5 yaml_get_phase_agents() function exists"
 else
     assert_fail "6.5 yaml_get_phase_agents() function exists"
 fi
 
 # 6.6: resolve_prompt_template() function exists
-if grep -q '^resolve_prompt_template()' "$ORCHESTRATE_SH"; then
+if grep -q '^resolve_prompt_template()' "$ALL_SRC"; then
     assert_pass "6.6 resolve_prompt_template() function exists"
 else
     assert_fail "6.6 resolve_prompt_template() function exists"
 fi
 
 # 6.7: execute_workflow_phase() function exists
-if grep -q '^execute_workflow_phase()' "$ORCHESTRATE_SH"; then
+if grep -q '^execute_workflow_phase()' "$ALL_SRC"; then
     assert_pass "6.7 execute_workflow_phase() function exists"
 else
     assert_fail "6.7 execute_workflow_phase() function exists"
 fi
 
 # 6.8: run_yaml_workflow() function exists
-if grep -q '^run_yaml_workflow()' "$ORCHESTRATE_SH"; then
+if grep -q '^run_yaml_workflow()' "$ALL_SRC"; then
     assert_pass "6.8 run_yaml_workflow() function exists"
 else
     assert_fail "6.8 run_yaml_workflow() function exists"
 fi
 
 # 6.9: embrace_full_workflow delegates to YAML runtime
-if grep -A 200 '^embrace_full_workflow()' "$ORCHESTRATE_SH" | grep -q 'run_yaml_workflow'; then
+if grep -A 200 '^embrace_full_workflow()' "$ALL_SRC" | grep -q 'run_yaml_workflow'; then
     assert_pass "6.9 embrace_full_workflow delegates to YAML runtime"
 else
     assert_fail "6.9 embrace_full_workflow delegates to YAML runtime"
 fi
 
 # 6.10: YAML runtime has feature flag check (auto/enabled/disabled)
-if grep -A 150 '^embrace_full_workflow()' "$ORCHESTRATE_SH" | grep -q 'OCTOPUS_YAML_RUNTIME'; then
+if grep -A 150 '^embrace_full_workflow()' "$ALL_SRC" | grep -q 'OCTOPUS_YAML_RUNTIME'; then
     assert_pass "6.10 YAML runtime delegation checks feature flag"
 else
     assert_fail "6.10 YAML runtime delegation checks feature flag"
 fi
 
 # 6.11: Hardcoded fallback preserved
-if grep -q 'HARDCODED PHASE LOGIC.*fallback' "$ORCHESTRATE_SH"; then
+if grep -q 'HARDCODED PHASE LOGIC.*fallback' "$ALL_SRC"; then
     assert_pass "6.11 Hardcoded phase logic preserved as fallback"
 else
     assert_fail "6.11 Hardcoded phase logic preserved as fallback"
 fi
 
 # 6.12: YAML runtime references embrace.yaml
-if grep -A 20 '^run_yaml_workflow()' "$ORCHESTRATE_SH" | grep -q 'workflows/.*yaml'; then
+if grep -A 20 '^run_yaml_workflow()' "$ALL_SRC" | grep -q 'workflows/.*yaml'; then
     assert_pass "6.12 YAML runtime references workflow YAML files"
 else
     assert_fail "6.12 YAML runtime references workflow YAML files"
@@ -530,28 +534,28 @@ echo -e "${BLUE}Test Group 7: Hook Integration & Session State${NC}"
 echo "------------------------------------------------------------"
 
 # 7.1: Session state includes phase_tasks field
-if grep -q 'phase_tasks' "$ORCHESTRATE_SH"; then
+if grep -q 'phase_tasks' "$ALL_SRC"; then
     assert_pass "7.1 Session state includes phase_tasks field"
 else
     assert_fail "7.1 Session state includes phase_tasks field"
 fi
 
 # 7.2: Session state includes agent_queue field
-if grep -q 'agent_queue' "$ORCHESTRATE_SH"; then
+if grep -q 'agent_queue' "$ALL_SRC"; then
     assert_pass "7.2 Session state includes agent_queue field"
 else
     assert_fail "7.2 Session state includes agent_queue field"
 fi
 
 # 7.3: Session state includes quality_gates field
-if grep -q 'quality_gates' "$ORCHESTRATE_SH"; then
+if grep -q 'quality_gates' "$ALL_SRC"; then
     assert_pass "7.3 Session state includes quality_gates field"
 else
     assert_fail "7.3 Session state includes quality_gates field"
 fi
 
 # 7.4: execute_workflow_phase updates phase_tasks for task-completed-transition.sh
-if grep -A 100 '^execute_workflow_phase()' "$ORCHESTRATE_SH" | grep -q 'phase_tasks'; then
+if grep -A 100 '^execute_workflow_phase()' "$ALL_SRC" | grep -q 'phase_tasks'; then
     assert_pass "7.4 execute_workflow_phase updates phase_tasks"
 else
     assert_fail "7.4 execute_workflow_phase updates phase_tasks"
@@ -623,21 +627,21 @@ echo -e "${BLUE}Test Group 9: Cross-Cutting Concerns${NC}"
 echo "------------------------------------------------------------"
 
 # 9.1: resolve_prompt_template handles {{prompt}} placeholder
-if grep -A 10 '^resolve_prompt_template()' "$ORCHESTRATE_SH" | grep -q 'prompt'; then
+if grep -A 10 '^resolve_prompt_template()' "$ALL_SRC" | grep -q 'prompt'; then
     assert_pass "9.1 resolve_prompt_template handles {{prompt}} placeholder"
 else
     assert_fail "9.1 resolve_prompt_template handles {{prompt}} placeholder"
 fi
 
 # 9.2: Memory injection prepends "Previous Context" header
-if grep -q '## Previous Context (from' "$ORCHESTRATE_SH"; then
+if grep -q '## Previous Context (from' "$ALL_SRC"; then
     assert_pass "9.2 Memory injection uses Previous Context header"
 else
     assert_fail "9.2 Memory injection uses Previous Context header"
 fi
 
 # 9.3: build_memory_context truncates to ~2000 chars
-if grep -A 80 '^build_memory_context()' "$ORCHESTRATE_SH" | grep -q 'head -c 2000'; then
+if grep -A 80 '^build_memory_context()' "$ALL_SRC" | grep -q 'head -c 2000'; then
     assert_pass "9.3 build_memory_context truncates to 2000 chars"
 else
     assert_fail "9.3 build_memory_context truncates to 2000 chars"

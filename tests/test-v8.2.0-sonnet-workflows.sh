@@ -14,6 +14,10 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 ORCHESTRATE_SH="${PLUGIN_DIR}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE_SH" "$(dirname "$ORCHESTRATE_SH")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 SKILL_DEBATE="${PLUGIN_DIR}/.claude/skills/skill-debate.md"
 
 # Colors for output
@@ -56,7 +60,7 @@ echo -e "${BLUE}Test Group 1: grapple_debate() - 3-way Debate${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Extract grapple_debate function (large function, need ~400 lines)
-GRAPPLE_FN=$(grep -A 400 '^grapple_debate()' "$ORCHESTRATE_SH" | head -400)
+GRAPPLE_FN=$(grep -A 400 '^grapple_debate()' "$ALL_SRC" | head -400)
 
 # 1.1: grapple_debate references claude-sonnet agent
 if echo "$GRAPPLE_FN" | grep -q '"claude-sonnet"'; then
@@ -123,7 +127,7 @@ echo -e "${BLUE}Test Group 2: probe_discover() - 5 Perspectives${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Extract probe_discover function
-PROBE_FN=$(grep -A 200 '^probe_discover()' "$ORCHESTRATE_SH" | head -200)
+PROBE_FN=$(grep -A 200 '^probe_discover()' "$ALL_SRC" | head -200)
 
 # 2.1: probe_discover includes claude-sonnet in agent list
 if echo "$PROBE_FN" | grep -q 'claude-sonnet'; then
@@ -170,7 +174,7 @@ echo -e "${BLUE}Test Group 3: grasp_define() - Sonnet for Constraints${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Extract grasp_define function
-GRASP_FN=$(grep -A 100 '^grasp_define()' "$ORCHESTRATE_SH" | head -100)
+GRASP_FN=$(grep -A 100 '^grasp_define()' "$ALL_SRC" | head -100)
 
 # 3.1: grasp_define calls claude-sonnet for constraints
 if echo "$GRASP_FN" | grep -q 'run_agent_sync "claude-sonnet".*constraints'; then
@@ -202,7 +206,7 @@ echo -e "${BLUE}Test Group 4: ink_deliver() - Sonnet Quality Review${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Extract ink_deliver function
-INK_FN=$(grep -A 150 '^ink_deliver()' "$ORCHESTRATE_SH" | head -150)
+INK_FN=$(grep -A 150 '^ink_deliver()' "$ALL_SRC" | head -150)
 
 # 4.1: ink_deliver calls claude-sonnet for quality review
 if echo "$INK_FN" | grep -q 'run_agent_sync "claude-sonnet"'; then

@@ -16,6 +16,10 @@ set -eo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 ORCHESTRATE_SH="${PLUGIN_DIR}/scripts/orchestrate.sh"
+# v9.12: Search orchestrate.sh + lib/*.sh for functions that may have been decomposed
+ALL_SRC=$(mktemp)
+cat "$ORCHESTRATE_SH" "$(dirname "$ORCHESTRATE_SH")/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+trap 'rm -f "$ALL_SRC"' EXIT
 PACKAGE_JSON="${PLUGIN_DIR}/package.json"
 PLUGIN_JSON="${PLUGIN_DIR}/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="${PLUGIN_DIR}/.claude-plugin/marketplace.json"
@@ -63,56 +67,56 @@ echo -e "${BLUE}Test Group 1: v2.1.33 Feature Flag Declarations${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 1.1: SUPPORTS_PERSISTENT_MEMORY declared
-if grep -q '^SUPPORTS_PERSISTENT_MEMORY=false' "$ORCHESTRATE_SH"; then
+if grep -q '^SUPPORTS_PERSISTENT_MEMORY=false' "$ALL_SRC"; then
     assert_pass "1.1 SUPPORTS_PERSISTENT_MEMORY=false declared"
 else
     assert_fail "1.1 SUPPORTS_PERSISTENT_MEMORY=false declared"
 fi
 
 # 1.2: SUPPORTS_HOOK_EVENTS declared
-if grep -q '^SUPPORTS_HOOK_EVENTS=false' "$ORCHESTRATE_SH"; then
+if grep -q '^SUPPORTS_HOOK_EVENTS=false' "$ALL_SRC"; then
     assert_pass "1.2 SUPPORTS_HOOK_EVENTS=false declared"
 else
     assert_fail "1.2 SUPPORTS_HOOK_EVENTS=false declared"
 fi
 
 # 1.3: SUPPORTS_AGENT_TYPE_ROUTING declared
-if grep -q '^SUPPORTS_AGENT_TYPE_ROUTING=false' "$ORCHESTRATE_SH"; then
+if grep -q '^SUPPORTS_AGENT_TYPE_ROUTING=false' "$ALL_SRC"; then
     assert_pass "1.3 SUPPORTS_AGENT_TYPE_ROUTING=false declared"
 else
     assert_fail "1.3 SUPPORTS_AGENT_TYPE_ROUTING=false declared"
 fi
 
 # 1.4: v2.1.33 version check block exists
-if grep -q 'version_compare.*2\.1\.33' "$ORCHESTRATE_SH"; then
+if grep -q 'version_compare.*2\.1\.33' "$ALL_SRC"; then
     assert_pass "1.4 v2.1.33 version_compare block exists"
 else
     assert_fail "1.4 v2.1.33 version_compare block exists"
 fi
 
 # 1.5: SUPPORTS_PERSISTENT_MEMORY set to true in version block
-if grep -q 'SUPPORTS_PERSISTENT_MEMORY=true' "$ORCHESTRATE_SH"; then
+if grep -q 'SUPPORTS_PERSISTENT_MEMORY=true' "$ALL_SRC"; then
     assert_pass "1.5 SUPPORTS_PERSISTENT_MEMORY=true activation in version block"
 else
     assert_fail "1.5 SUPPORTS_PERSISTENT_MEMORY=true activation in version block"
 fi
 
 # 1.6: SUPPORTS_HOOK_EVENTS set to true in version block
-if grep -q 'SUPPORTS_HOOK_EVENTS=true' "$ORCHESTRATE_SH"; then
+if grep -q 'SUPPORTS_HOOK_EVENTS=true' "$ALL_SRC"; then
     assert_pass "1.6 SUPPORTS_HOOK_EVENTS=true activation in version block"
 else
     assert_fail "1.6 SUPPORTS_HOOK_EVENTS=true activation in version block"
 fi
 
 # 1.7: SUPPORTS_AGENT_TYPE_ROUTING set to true in version block
-if grep -q 'SUPPORTS_AGENT_TYPE_ROUTING=true' "$ORCHESTRATE_SH"; then
+if grep -q 'SUPPORTS_AGENT_TYPE_ROUTING=true' "$ALL_SRC"; then
     assert_pass "1.7 SUPPORTS_AGENT_TYPE_ROUTING=true activation in version block"
 else
     assert_fail "1.7 SUPPORTS_AGENT_TYPE_ROUTING=true activation in version block"
 fi
 
 # 1.8: Log line for new feature flags
-if grep -q 'Persistent Memory.*Hook Events.*Agent Type Routing' "$ORCHESTRATE_SH"; then
+if grep -q 'Persistent Memory.*Hook Events.*Agent Type Routing' "$ALL_SRC"; then
     assert_pass "1.8 Log line outputs Persistent Memory, Hook Events, Agent Type Routing"
 else
     assert_fail "1.8 Log line outputs Persistent Memory, Hook Events, Agent Type Routing"
@@ -127,35 +131,35 @@ echo -e "${BLUE}Test Group 2: Complexity-Based Claude Routing${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 2.1: get_tiered_agent_v2 checks SUPPORTS_AGENT_TYPE_ROUTING for claude
-if grep -q 'SUPPORTS_AGENT_TYPE_ROUTING.*true' "$ORCHESTRATE_SH"; then
+if grep -q 'SUPPORTS_AGENT_TYPE_ROUTING.*true' "$ALL_SRC"; then
     assert_pass "2.1 get_tiered_agent_v2 gates on SUPPORTS_AGENT_TYPE_ROUTING"
 else
     assert_fail "2.1 get_tiered_agent_v2 gates on SUPPORTS_AGENT_TYPE_ROUTING"
 fi
 
 # 2.2: complexity=3 routes to claude-opus in get_tiered_agent_v2
-if grep -A 60 'get_tiered_agent_v2()' "$ORCHESTRATE_SH" | grep -q '3) echo "claude-opus"'; then
+if grep -A 60 'get_tiered_agent_v2()' "$ALL_SRC" | grep -q '3) echo "claude-opus"'; then
     assert_pass "2.2 complexity=3 routes to claude-opus"
 else
     assert_fail "2.2 complexity=3 routes to claude-opus"
 fi
 
 # 2.3: strategist role exists in agent routing
-if grep -q 'strategist).*echo "claude-opus' "$ORCHESTRATE_SH"; then
+if grep -q 'strategist).*echo "claude-opus' "$ALL_SRC"; then
     assert_pass "2.3 strategist role maps to claude-opus agent"
 else
     assert_fail "2.3 strategist role maps to claude-opus agent"
 fi
 
 # 2.4: strategist role maps to premium agent (claude-opus)
-if grep -q 'strategist).*echo "claude-opus' "$ORCHESTRATE_SH"; then
+if grep -q 'strategist).*echo "claude-opus' "$ALL_SRC"; then
     assert_pass "2.4 strategist role maps to claude-opus for premium phases"
 else
     assert_fail "2.4 strategist role maps to claude-opus for premium phases"
 fi
 
 # 2.5: is_agent_available_v2 handles claude-opus
-if grep -q 'claude|claude-sonnet|claude-opus)' "$ORCHESTRATE_SH"; then
+if grep -q 'claude|claude-sonnet|claude-opus)' "$ALL_SRC"; then
     assert_pass "2.5 is_agent_available_v2 handles claude-opus agent type"
 else
     assert_fail "2.5 is_agent_available_v2 handles claude-opus agent type"

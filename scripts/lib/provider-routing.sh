@@ -32,6 +32,12 @@ build_provider_env() {
         return 0
     fi
 
+    # v9.15.1: Skip env -i isolation on Windows — PATH contains spaces
+    # (C:\Program Files\...) which break read -ra word splitting in spawn.sh
+    case "${OCTOPUS_PLATFORM:-$(uname)}" in
+        MINGW*|MSYS*|CYGWIN*|Windows*) return 0 ;;
+    esac
+
     # v9.2.1: Try resolving env vars before building isolated env (Issue #177)
     case "$provider" in
         codex*)

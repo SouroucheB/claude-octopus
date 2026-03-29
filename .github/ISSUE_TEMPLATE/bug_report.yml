@@ -56,6 +56,8 @@ body:
         - OpenRouter API
         - Ollama
         - Copilot CLI
+        - Qwen CLI
+        - OpenCode CLI
     validations:
       required: true
   - type: dropdown

@@ -8,9 +8,10 @@ Every AI model has blind spots. Claude Octopus puts up to eight of them on every
 
 <p align="center">
   <a href="https://claude.ai"><img src="https://img.shields.io/badge/Claude-Built_with_AI-c96442?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDJhMTAgMTAgMCAxIDAgMCAyMCAxMCAxMCAwIDAgMCAwLTIwbTAgMS44YTEuMiAxLjIgMCAwIDEgLjg1LjM1bDEuNSA0LjVhLjYuNiAwIDAgMCAuMzUuMzVsNC41IDEuNWExLjIgMS4yIDAgMCAxIDAgMi4yN2wtNC41IDEuNWEuNi42IDAgMCAwLS4zNS4zNWwtMS41IDQuNWExLjIgMS4yIDAgMCAxLTIuMjcgMGwtMS41LTQuNWEuNi42IDAgMCAwLS4zNS0uMzVsLTQuNS0xLjVhMS4yIDEuMiAwIDAgMSAwLTIuMjdsNC41LTEuNWEuNi42IDAgMCAwIC4zNS0uMzVsMS41LTQuNUExLjIgMS4yIDAgMCAxIDEyIDMuOCIvPjwvc3ZnPg==&labelColor=333" alt="Built with Claude"></a>
+  <a href="https://github.com/nyldn/claude-octopus/actions/workflows/test.yml"><img src="https://github.com/nyldn/claude-octopus/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <img src="https://img.shields.io/badge/Tests-146_passing-brightgreen" alt="146 tests passing">
   <img src="https://img.shields.io/badge/Version-9.15.2-blue" alt="Version 9.15.2">
   <img src="https://img.shields.io/badge/Claude_Code-v2.1.83+-blueviolet" alt="Requires Claude Code v2.1.83+">
-  <img src="https://img.shields.io/badge/Factory_AI-Compatible-orange" alt="Factory AI Compatible">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
 </p>
 
@@ -39,12 +40,6 @@ Every AI model has blind spots. Claude Octopus puts up to eight of them on every
 | **v7** | Double Diamond workflow. Multi-provider dispatch. Quality gates and consensus scoring. Configurable sandbox modes. |
 
 [Full changelog →](CHANGELOG.md)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/image?repos=nyldn/claude-octopus&type=date&legend=top-left)](https://www.star-history.com/?repos=nyldn%2Fclaude-octopus&type=date&legend=top-left)
-
----
 
 ## Quickstart
 
@@ -137,6 +132,24 @@ Not sure which command to use? Pick by goal:
 | Just run something quick | `/octo:quick` |
 
 Or skip the table — type `/octo:auto <what you want>` or just say `octo <what you want>`, and the smart router picks for you. 🔍
+
+<details>
+<summary><strong>How does this compare to Superpowers or plain Claude Code?</strong></summary>
+
+| | Claude Code alone | [Superpowers](https://github.com/obra/superpowers) | Claude Octopus |
+|---|---|---|---|
+| **Core idea** | One model, your prompts | Structured methodology for one agent | Up to 8 providers cross-checking each other |
+| **Providers** | Claude only | Claude only | Codex, Gemini, Copilot, Qwen, Ollama, Perplexity, OpenRouter, OpenCode |
+| **Workflow** | Ad-hoc | Spec → plan → subagent-driven dev | Discover → Define → Develop → Deliver (Double Diamond) |
+| **Strength** | Simple, no setup | Long autonomous runs with discipline | Multiple perspectives catching blind spots |
+| **Consensus gates** | No | No | Yes — 75% agreement threshold |
+| **Best for** | Quick tasks, simple features | Large builds with clear specs | Research, review, debates, multi-provider validation |
+| **Setup** | Nothing | Install plugin | Install plugin, optionally add providers |
+| **Works together?** | — | — | Yes — Octopus attributes Superpowers as an influence and both can be installed |
+
+**tl;dr:** Superpowers makes one agent work really well for hours. Octopus makes multiple agents check each other's work. They solve different problems — and you can use both.
+
+</details>
 
 ---
 
@@ -343,6 +356,8 @@ The workflow continues with available providers. You'll see the status in the vi
 ## Community
 
 Join [r/ClaudeOctopus](https://www.reddit.com/r/ClaudeOctopus/) for help, workflow tips, showcases, and updates.
+
+[![Star History Chart](https://api.star-history.com/image?repos=nyldn/claude-octopus&type=date&legend=top-left)](https://www.star-history.com/?repos=nyldn%2Fclaude-octopus&type=date&legend=top-left)
 
 ## Contributing
 

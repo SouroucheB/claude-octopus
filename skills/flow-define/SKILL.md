@@ -41,28 +41,31 @@ This skill uses **ENFORCED execution mode**. You MUST follow this exact sequence
 
 ### STEP 1: Display Visual Indicators (MANDATORY - BLOCKING)
 
-**Check provider availability:**
+**MANDATORY: Run the centralized provider check BEFORE displaying the banner:**
 
 ```bash
-command -v codex &> /dev/null && codex_status="Available ✓" || codex_status="Not installed ✗"
-command -v gemini &> /dev/null && gemini_status="Available ✓" || gemini_status="Not installed ✗"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh"
 ```
 
+**Use the ACTUAL results. PROHIBITED: Showing only "🔵 Claude: Available ✓" without listing all providers.**
+
 **Validation:**
-- If BOTH Codex and Gemini unavailable -> STOP, suggest: `/octo:setup`
-- If ONE unavailable -> Continue with available provider(s)
-- If BOTH available -> Proceed normally
+- If ALL external CLI providers unavailable -> STOP, suggest: `/octo:setup`
+- If some unavailable -> Continue with available provider(s)
+- If multiple available -> Proceed normally
 
-
-**Display this banner BEFORE orchestrate.sh execution:**
+**Display this banner BEFORE orchestrate.sh execution (list ALL providers from check output):**
 
 ```
 🐙 **CLAUDE OCTOPUS ACTIVATED** - Multi-provider definition mode
 🎯 Define Phase: [Brief description of what you're defining/scoping]
 
 Provider Availability:
-🔴 Codex CLI: ${codex_status} - Technical requirements analysis
-🟡 Gemini CLI: ${gemini_status} - Business context and constraints
+🔴 Codex CLI: [status from check] - Technical requirements analysis
+🟡 Gemini CLI: [status from check] - Business context and constraints
+🟢 Copilot CLI: [status from check] - GitHub integration perspective
+🟣 Qwen CLI: [status from check] - Alternative analysis
+🟤 OpenCode CLI: [status from check] - Multi-provider routing
 🔵 Claude: Available ✓ - Consensus building and synthesis
 
 💰 Estimated Cost: $0.01-0.05
@@ -287,9 +290,10 @@ fi
 
 # Update metrics
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "phases_completed" "1"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "codex"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "gemini"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "claude"
+# Track actual providers used (dynamic — not hardcoded)
+for _provider in $(bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh" | grep ":available" | cut -d: -f1) claude; do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "$_provider"
+done
 ```
 
 **DO NOT PROCEED TO STEP 7 until state updated.**

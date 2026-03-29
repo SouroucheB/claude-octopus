@@ -349,14 +349,22 @@ AskUserQuestion({
 - If user selected "Independent evaluation": use `--mode blinded` (no cross-contamination)
 - Incorporate all other answers into the debate context.
 
-### Step 3: Parse Arguments
+### Step 3: Parse Arguments & Build Debate Fleet
 ```bash
 # Extract question and flags
 QUESTION="Should we use Redis or in-memory cache?"
 ROUNDS=3
 STYLE="thorough"
-ADVISORS="gemini,codex"
+
+# Dynamic advisor selection — use build-fleet.sh for model family diversity
+DEBATE_FLEET=$("${CLAUDE_PLUGIN_ROOT}/scripts/helpers/build-fleet.sh" debate standard "${QUESTION}" 2>/dev/null)
+# Extract debater agent types (exclude claude-sonnet Moderator)
+ADVISORS=$(echo "$DEBATE_FLEET" | grep '|Debater|' | cut -d'|' -f1 | paste -sd',' -)
+# Fallback if build-fleet.sh unavailable
+[[ -z "$ADVISORS" ]] && ADVISORS="gemini,codex"
 ```
+
+**The `build-fleet.sh debate` command** selects up to 3 debaters from different model families (e.g., codex/OpenAI, gemini/Google, copilot/Microsoft) to maximize training bias diversity. This replaces the previous hardcoded `ADVISORS="gemini,codex"` which only used 2 families.
 
 ### Step 4: Setup Debate Folder
 ```bash

@@ -317,9 +317,10 @@ fi
 
 # Update metrics
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "phases_completed" "1"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "codex"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "gemini"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "claude"
+# Track actual providers used (dynamic — not hardcoded)
+for _provider in $(bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh" | grep ":available" | cut -d: -f1) claude; do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "$_provider"
+done
 ```
 
 **DO NOT PROCEED TO STEP 7 until state updated.**

@@ -50,29 +50,44 @@ parse_review_md() {
 build_review_fleet() {
     local fleet=""
 
-    # logic-reviewer: Codex (correctness/logic) → claude-sonnet fallback
+    # logic-reviewer: Codex (OpenAI) → OpenCode → Copilot → claude-sonnet fallback
     if command -v codex >/dev/null 2>&1; then
         fleet+="codex:logic-reviewer:correctness and logic bugs, edge cases, regressions"$'\n'
+    elif command -v opencode >/dev/null 2>&1; then
+        fleet+="opencode:logic-reviewer:correctness and logic bugs, edge cases, regressions"$'\n'
+    elif command -v copilot >/dev/null 2>&1; then
+        fleet+="copilot:logic-reviewer:correctness and logic bugs, edge cases, regressions"$'\n'
     else
         fleet+="claude-sonnet:logic-reviewer:correctness and logic bugs, edge cases, regressions"$'\n'
     fi
 
-    # security-reviewer: Gemini (security/OWASP) → claude-sonnet fallback
+    # security-reviewer: Gemini (Google) → Qwen → Copilot → claude-sonnet fallback
+    # Prefer different family from logic-reviewer for diversity
     if command -v gemini >/dev/null 2>&1; then
         fleet+="gemini:security-reviewer:OWASP vulnerabilities, injection, auth flaws, data exposure"$'\n'
+    elif command -v qwen >/dev/null 2>&1; then
+        fleet+="qwen:security-reviewer:OWASP vulnerabilities, injection, auth flaws, data exposure"$'\n'
+    elif command -v copilot >/dev/null 2>&1; then
+        fleet+="copilot:security-reviewer:OWASP vulnerabilities, injection, auth flaws, data exposure"$'\n'
     else
         fleet+="claude-sonnet:security-reviewer:OWASP vulnerabilities, injection, auth flaws, data exposure"$'\n'
     fi
 
-    # arch-reviewer: claude-sonnet (always available)
+    # arch-reviewer: claude-sonnet (always available — best at holistic analysis)
     fleet+="claude-sonnet:arch-reviewer:architecture, integration, API contracts, breaking changes"$'\n'
 
-    # cve-reviewer: Perplexity → Gemini search → claude WebSearch → skip
+    # cve-reviewer: Perplexity → Gemini search → Copilot → Qwen → claude WebSearch
     if command -v perplexity >/dev/null 2>&1 || [[ -n "${PERPLEXITY_API_KEY:-}" ]]; then
         fleet+="perplexity:cve-reviewer:known CVEs, library advisories, live web search"$'\n'
     elif command -v gemini >/dev/null 2>&1; then
         fleet+="gemini:cve-reviewer:known CVEs via web search, library advisories"$'\n'
         log INFO "CVE lookup: Perplexity unavailable, using Gemini search"
+    elif command -v copilot >/dev/null 2>&1; then
+        fleet+="copilot:cve-reviewer:known CVEs via web search, library advisories"$'\n'
+        log INFO "CVE lookup: Perplexity+Gemini unavailable, using Copilot"
+    elif command -v qwen >/dev/null 2>&1; then
+        fleet+="qwen:cve-reviewer:known CVEs via web search, library advisories"$'\n'
+        log INFO "CVE lookup: Perplexity+Gemini unavailable, using Qwen"
     else
         fleet+="claude-sonnet:cve-reviewer:known CVEs via WebSearch tool, library advisories"$'\n'
         log WARN "CVE lookup: no dedicated web-search provider, using Claude WebSearch (degraded)"

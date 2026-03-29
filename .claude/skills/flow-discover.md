@@ -221,29 +221,31 @@ fi
 
 **Parse the `intensity` parameter from the skill args.** The args string may start with `[intensity=quick|standard|deep]`. If no intensity is specified, default to `"standard"` (backward compatible with `/octo:embrace` which doesn't pass intensity).
 
-**Agent fleets by intensity:**
+**Build the fleet dynamically using `build-fleet.sh`** — this is the single source of truth for provider-to-perspective assignment. It detects ALL available providers (codex, gemini, copilot, qwen, opencode, ollama, perplexity, openrouter) and assigns perspectives with model family diversity enforcement.
 
-| Intensity | Count | Perspectives & Agent Types |
-|-----------|-------|----------------------------|
-| **Quick** | 2 | Codex: problem analysis, Gemini: ecosystem overview |
-| **Standard** | 4-5 | + Claude Sonnet: edge cases, Codex: feasibility, [Sonnet: codebase analysis if inside git repo] |
-| **Deep** | 6-7 | + Gemini: cross-synthesis, [Perplexity: web research if PERPLEXITY_API_KEY set] |
+```bash
+FLEET_OUTPUT=$("${CLAUDE_PLUGIN_ROOT}/scripts/helpers/build-fleet.sh" research "${INTENSITY}" "${PROMPT}" 2>/dev/null)
+```
 
-**Build the perspective list as an array of objects, each with:**
-- `agent_type`: codex, gemini, claude-sonnet, or perplexity
-- `perspective`: the angle-specific prompt (same prompts as probe_discover() in orchestrate.sh)
-- `task_id`: `probe-<timestamp>-<index>`
-- `label`: human-readable name (e.g., "Problem Analysis", "Ecosystem Overview")
+The output is one line per agent: `agent_type|label|perspective_prompt`
 
-**Perspective prompts (use the user's research question as `$PROMPT`):**
+**Parse each line into the fleet array:**
+- `agent_type`: the provider to dispatch (codex, gemini, copilot, qwen, opencode, claude-sonnet, perplexity, etc.)
+- `label`: human-readable name (e.g., "Problem Analysis", "Ecosystem Overview", "Contrarian Analysis")
+- `perspective_prompt`: the angle-specific prompt to send to that provider
+- `task_id`: generate as `probe-<timestamp>-<index>` for each entry
 
-1. **Problem Analysis** (Codex): `"Analyze the problem space: $PROMPT. Focus on understanding constraints, requirements, and user needs."`
-2. **Ecosystem Overview** (Gemini): `"Research existing solutions and patterns for: $PROMPT. What has been done before? What worked, what failed?"`
-3. **Edge Cases** (Claude Sonnet): `"Explore edge cases and potential challenges for: $PROMPT. What could go wrong? What's often overlooked?"`
-4. **Feasibility** (Codex): `"Investigate technical feasibility and dependencies for: $PROMPT. What are the prerequisites?"`
-5. **Codebase Analysis** (Claude Sonnet, only if inside git repo with source files): `"Analyze the LOCAL CODEBASE in the current directory for: $PROMPT. Run: find . -type f -name '*.ts' -o -name '*.py' -o -name '*.js' | head -30, then read key files. Report: tech stack, architecture patterns, file structure, coding conventions, and how they relate to the prompt. Focus on ACTUAL code, not hypotheticals."`
-6. **Cross-Synthesis** (Gemini): `"Synthesize cross-cutting concerns for: $PROMPT. What themes emerge across problem space, solutions, and feasibility?"`
-7. **Web Research** (Perplexity, only if PERPLEXITY_API_KEY set): `"Search the live web for the latest information about: $PROMPT. Find recent articles, documentation, blog posts, GitHub repos, and community discussions. Include source URLs and publication dates. Focus on information from the last 12 months that may not be in training data."`
+**Fleet sizes by intensity:**
+
+| Intensity | Agents | Behavior |
+|-----------|--------|----------|
+| **Quick** | 2 | Two most diverse providers |
+| **Standard** | 4-5 | Rotates across available providers + Claude for edge cases and codebase analysis |
+| **Deep** | 6-10 | ALL available providers get unique perspectives (bonus slots for copilot, qwen, opencode, etc.) |
+
+**Model family diversity is enforced automatically** — the script prioritizes spreading agents across different model families (OpenAI, Google, Microsoft, Alibaba, Anthropic) to avoid agreement bias from same-family models.
+
+**DO NOT hardcode provider assignments.** Always use build-fleet.sh output. If the script is unavailable, fall back to the previous behavior (codex + gemini + claude-sonnet).
 
 **DO NOT PROCEED TO STEP 4 until the fleet is built.**
 
@@ -253,7 +255,7 @@ fi
 
 **Launch each perspective as a background Agent subagent.** Each agent calls `orchestrate.sh probe-single` which handles persona application, credential isolation, and result file writing.
 
-**CRITICAL: You MUST use the Agent tool with `run_in_background: true` for each perspective.** Launch Gemini agents first (higher latency), then Codex, then Claude Sonnet, then Perplexity.
+**CRITICAL: You MUST use the Agent tool with `run_in_background: true` for each perspective.** Launch external CLI agents first (higher latency — gemini, codex, copilot, qwen, opencode), then Claude Sonnet agents, then API-only agents (perplexity).
 
 For each perspective in the fleet, launch:
 
@@ -343,9 +345,10 @@ key_findings=$(head -50 "$SYNTHESIS_FILE" | grep -A 3 "## Key Findings\|## Summa
 
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_context "discover" "$key_findings"
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "phases_completed" "1"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "codex"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "gemini"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "claude"
+# Track actual providers used (dynamic — from fleet output, not hardcoded)
+for _provider in $(echo "$FLEET_OUTPUT" | cut -d'|' -f1 | sort -u); do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "$_provider"
+done
 ```
 
 **Present results** formatted according to context (Dev vs Knowledge):

@@ -73,26 +73,48 @@ When context_type is Dev, determine the **subtype** to inject domain-appropriate
 orchestrate.sh deliver "<user prompt>\n\nDomain-specific validation criteria:\n<supplement text>"
 ```
 
-**DO NOT PROCEED TO STEP 2 until context determined.** Context type (Dev vs Knowledge) and dev subtype determine which validation supplements to inject — wrong context produces a review that checks irrelevant criteria.
+**DO NOT PROCEED TO STEP 1c until context determined.** Context type (Dev vs Knowledge) and dev subtype determine which validation supplements to inject — wrong context produces a review that checks irrelevant criteria.
+
+---
+
+### STEP 1c: Scope Drift Check (Dev context only — INFORMATIONAL)
+
+**For Dev context only.** Skip this step entirely for Knowledge context.
+
+Run the scope drift detection skill to compare the actual diff against stated intent before the full review:
+
+```bash
+# Load the scope drift skill
+# See: skills/skill-scope-drift/SKILL.md
+```
+
+1. **Gather intent** from TODOS.md, PR description, commit messages, and .octo/STATE.md
+2. **Gather the actual diff** via `git diff --stat` against the base branch
+3. **Compare** intent vs diff — flag scope creep (unrelated changes) and missing requirements (stated but undelivered)
+4. **Display** the structured scope drift report
+
+**This is informational — NEVER blocks the review.** Display the report and proceed to Step 2 regardless of the result. The report gives reviewers (both human and AI) awareness of potential drift before they begin detailed analysis.
+
+If no intent sources are found (no TODOS.md, no PR, no commit messages), skip this step silently.
 
 ---
 
 ### STEP 2: Display Visual Indicators (MANDATORY - BLOCKING)
 
-**Check provider availability:**
+**MANDATORY: Run the centralized provider check BEFORE displaying the banner:**
 
 ```bash
-command -v codex &> /dev/null && codex_status="Available ✓" || codex_status="Not installed ✗"
-command -v gemini &> /dev/null && gemini_status="Available ✓" || gemini_status="Not installed ✗"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh"
 ```
 
+**Use the ACTUAL results. PROHIBITED: Showing only "🔵 Claude: Available ✓" without listing all providers.**
+
 **Validation:**
-- If BOTH Codex and Gemini unavailable -> STOP, suggest: `/octo:setup`
-- If ONE unavailable -> Continue with available provider(s)
-- If BOTH available -> Proceed normally
+- If ALL external CLI providers unavailable -> STOP, suggest: `/octo:setup`
+- If some unavailable -> Continue with available provider(s)
+- If multiple available -> Proceed normally
 
-
-**Display this banner BEFORE orchestrate.sh execution:**
+**Display this banner BEFORE orchestrate.sh execution (list ALL providers from check output):**
 
 **For Dev Context:**
 ```
@@ -100,8 +122,11 @@ command -v gemini &> /dev/null && gemini_status="Available ✓" || gemini_status
 ✅ [Dev] Deliver Phase: [Brief description of code review]
 
 Provider Availability:
-🔴 Codex CLI: ${codex_status} - Code quality analysis
-🟡 Gemini CLI: ${gemini_status} - Security and edge cases
+🔴 Codex CLI: [status from check] - Code quality analysis
+🟡 Gemini CLI: [status from check] - Security and edge cases
+🟢 Copilot CLI: [status from check] - GitHub integration
+🟣 Qwen CLI: [status from check] - Additional perspective
+🟤 OpenCode CLI: [status from check] - Multi-provider routing
 🔵 Claude: Available ✓ - Synthesis and recommendations
 
 💰 Estimated Cost: $0.02-0.08
@@ -250,9 +275,10 @@ validation_summary=$(head -30 "$VALIDATION_FILE" | grep -A 2 "## Summary\|Pass\|
 
 # Update final metrics (completion of full workflow)
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "phases_completed" "1"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "codex"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "gemini"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "claude"
+# Track actual providers used (dynamic — not hardcoded)
+for _provider in $(bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh" | grep ":available" | cut -d: -f1) claude; do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "$_provider"
+done
 
 # Display final state summary
 echo ""

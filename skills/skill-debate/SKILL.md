@@ -246,27 +246,22 @@ When the user invokes `/debate`:
 
 **CRITICAL: Check which AI providers are available and display the visual indicator banner:**
 
-First, check availability:
+**MANDATORY: Run the centralized provider check:**
 ```bash
-codex_available="✗ Not installed"
-if command -v codex >/dev/null 2>&1; then
-  codex_available="✓"
-fi
-
-gemini_available="✗ Not installed"
-if command -v gemini >/dev/null 2>&1; then
-  gemini_available="✓"
-fi
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh"
 ```
 
-Then immediately output the required visual indicator banner:
+Then output the banner with ALL providers from check results:
 ```
 🐙 **CLAUDE OCTOPUS ACTIVATED** - AI Debate Hub
 🐙 Debate: [Topic/question being debated]
 
 Provider Availability:
-🔴 Codex CLI: [Available ✓ / Not installed ✗]
-🟡 Gemini CLI: [Available ✓ / Not installed ✗]
+🔴 Codex CLI: [status from check]
+🟡 Gemini CLI: [status from check]
+🟢 Copilot CLI: [status from check]
+🟣 Qwen CLI: [status from check]
+🟤 OpenCode CLI: [status from check]
 🟠 Sonnet 4.6: Available ✓ (via Agent tool — no extra cost)
 🐙 Claude (Opus): Available ✓ (Moderator and participant)
 ```
@@ -335,14 +330,22 @@ AskUserQuestion({
 - If user selected "Independent evaluation": use `--mode blinded` (no cross-contamination)
 - Incorporate all other answers into the debate context.
 
-### Step 3: Parse Arguments
+### Step 3: Parse Arguments & Build Debate Fleet
 ```bash
 # Extract question and flags
 QUESTION="Should we use Redis or in-memory cache?"
 ROUNDS=3
 STYLE="thorough"
-ADVISORS="gemini,codex"
+
+# Dynamic advisor selection — use build-fleet.sh for model family diversity
+DEBATE_FLEET=$("${CLAUDE_PLUGIN_ROOT}/scripts/helpers/build-fleet.sh" debate standard "${QUESTION}" 2>/dev/null)
+# Extract debater agent types (exclude claude-sonnet Moderator)
+ADVISORS=$(echo "$DEBATE_FLEET" | grep '|Debater|' | cut -d'|' -f1 | paste -sd',' -)
+# Fallback if build-fleet.sh unavailable
+[[ -z "$ADVISORS" ]] && ADVISORS="gemini,codex"
 ```
+
+**The `build-fleet.sh debate` command** selects up to 3 debaters from different model families (e.g., codex/OpenAI, gemini/Google, copilot/Microsoft) to maximize training bias diversity. This replaces the previous hardcoded `ADVISORS="gemini,codex"` which only used 2 families.
 
 ### Step 4: Setup Debate Folder
 ```bash

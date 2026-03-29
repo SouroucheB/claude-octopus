@@ -51,32 +51,36 @@ If user says "skip" for any question, note assumptions and proceed.
 
 ### STEP 2: Display Visual Indicators (MANDATORY - BLOCKING)
 
-**Check provider availability:**
+**MANDATORY: Run the centralized provider check BEFORE displaying the banner:**
 
 ```bash
-command -v codex &> /dev/null && codex_status="Available" || codex_status="Not installed"
-command -v gemini &> /dev/null && gemini_status="Available" || gemini_status="Not installed"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh"
 ```
 
-**Display this banner BEFORE orchestrate.sh execution:**
+**Use the ACTUAL results. PROHIBITED: Showing only Claude without listing all providers.**
+
+**Display this banner BEFORE orchestrate.sh execution (list ALL providers from check output):**
 
 ```
 🐙 CLAUDE OCTOPUS ACTIVATED - NLSpec Authoring Mode
 Spec Phase: Generating structured specification for [project name]
 
 Provider Availability:
-Codex CLI: ${codex_status}
-Gemini CLI: ${gemini_status}
-Claude: Available (Synthesis & NLSpec generation)
+🔴 Codex CLI: [status from check]
+🟡 Gemini CLI: [status from check]
+🟢 Copilot CLI: [status from check]
+🟣 Qwen CLI: [status from check]
+🟤 OpenCode CLI: [status from check]
+🔵 Claude: Available ✓ (Synthesis & NLSpec generation)
 
 Estimated Cost: $0.01-0.05
 Estimated Time: 3-7 minutes
 ```
 
 **Validation:**
-- If BOTH Codex and Gemini unavailable -> STOP, suggest: `/octo:setup`
-- If ONE unavailable -> Continue with available provider(s)
-- If BOTH available -> Proceed normally
+- If ALL external CLI providers unavailable -> STOP, suggest: `/octo:setup`
+- If some unavailable -> Continue with available provider(s)
+- If multiple available -> Proceed normally
 
 **DO NOT PROCEED TO STEP 3 until banner displayed.**
 
@@ -364,9 +368,10 @@ spec_summary="NLSpec generated for [project name] with [N] behaviors, complexity
 
 # Update metrics
 "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "phases_completed" "1"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "codex"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "gemini"
-"${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "claude"
+# Track actual providers used (dynamic — not hardcoded)
+for _provider in $(bash "${CLAUDE_PLUGIN_ROOT}/scripts/helpers/check-providers.sh" | grep ":available" | cut -d: -f1) claude; do
+  "${CLAUDE_PLUGIN_ROOT}/scripts/state-manager.sh" update_metrics "provider" "$_provider"
+done
 ```
 
 **Present final summary to user:**

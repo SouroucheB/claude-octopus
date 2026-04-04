@@ -1,15 +1,43 @@
-## [9.19.0] - 2026-04-03
+## [9.19.0] - 2026-04-04
 
 ### Added
 
-- **Token optimization command** (`/octo:optimize`) — Analyzes token usage patterns, detects RTK install/hook status, shows context window usage, and provides guided RTK setup with per-command-type savings benchmarks. 49 commands total.
-- **RTK-aware context nudges** — `context-awareness.sh` now detects RTK and shows gain stats at CRITICAL/AUTO_COMPACT severity. Users without RTK get install tips at WARNING+. Uses `rtk gain --json` with python3 parsing for reliable stat extraction.
-- **HUD RTK column** — `octopus-hud.mjs` gains an "RTK" column showing cumulative tokens saved and average compression percentage. Auto-shows when RTK has gain data. Uses 120s cache with 2s subprocess timeout. Added to `performance` preset.
-- **Doctor RTK diagnostics** — `skill-doctor.md` reports RTK hook configuration status (not just install). `install-deps.sh` detects RTK version and whether the Claude Code bash hook is active, with actionable fix commands.
+- **Claude Code v2.1.87-92 sync** — 13 new `SUPPORTS_*` flags (122 total): PostCompact hook (v2.1.76+), Elicitation hooks (v2.1.76+), `--bare` flag (v2.1.87+), model capability env vars (v2.1.87+), console auth (v2.1.87+), worktree HTTP hooks (v2.1.87+), deep link 5K (v2.1.88+), session ID header (v2.1.89+), marketplace offline (v2.1.90+), plugin executables (v2.1.91+), MCP result size (v2.1.91+), disable skill shell (v2.1.91+), multiline deep links (v2.1.91+).
+- **PostCompact context recovery** — New `post-compact.sh` hook reads workflow state snapshot saved by `pre-compact.sh` and re-injects phase/workflow/autonomy context after compaction. 10-minute staleness window.
+- **Elicitation hooks** — `Elicitation` and `ElicitationResult` hook events log MCP structured input for observability.
+- **Plugin CLI executable** — `bin/octopus` bare command (CC v2.1.91+ auto-discovers `bin/`). Subcommands: `doctor`, `version`, `session`, `fleet`.
+- **Headroom-inspired token compression** — `hooks/output-compressor.sh` PostToolUse hook auto-detects large outputs (JSON arrays, logs, HTML, verbose text >3K chars) and injects compressed summaries. `bin/octo-compress` standalone CLI for pipe-based compression (`npm install 2>&1 | octo-compress`). HUD "Saved" column tracks cumulative savings.
+- **Rate limit HUD fallback** — `octopus-hud.mjs` uses CC-provided `rate_limits` from stdin when OAuth API is unavailable (enterprise, API-billing, expired creds).
+- **managed-settings.d fragment** — Deploys `octopus-defaults.json` (git instructions off, auto-memory dir) on session start. Atomic write with tmpfile+mv.
+- **Token optimization command** (`/octo:optimize`) — RTK analysis, context usage, guided setup. 49 commands total.
+- **RTK-aware context nudges** — RTK gain stats at WARNING+CRITICAL+AUTO_COMPACT severity levels.
+- **HUD RTK column** — Cumulative tokens saved and average compression percentage.
+- **20 new doctor tips** — PostCompact, bare flag, model caps, console auth, plugin executables, MCP result size, marketplace offline, disable skill shell, elicitation hooks, session ID header, deep link 5K, worktree HTTP hooks, multiline deep links, rate limit fallback, managed settings, output compressor, octo-compress CLI.
+- **67-test suite** — `test-cc-v2184-91-sync.sh` covers all v9.19 flags, cascade blocks, hooks, executables, wiring, doctor tips, HUD fallback, orphan cleanup, hook consistency.
 
 ### Changed
 
-- **Context awareness hook** — RTK tip broadened from WARNING-only to WARNING + CRITICAL + AUTO_COMPACT severity levels.
+- **Token savings (~7,300 tokens/session):**
+  - Hook conditional `if` gates on 4 hooks (careful-check, freeze-check, telemetry, output-compressor) — skip process spawns when conditions aren't met
+  - PostToolUse consolidation — single `post-tool-dispatch.sh` replaces 3 blanket hooks
+  - Context-reinforcement trim — 750→150 tokens (compact gate names)
+  - Lazy skill `paths:` on 9 specialized skills — only listed when relevant files present
+  - CLAUDE.md diet — 3,800→2,418 tokens (dev sections moved to `docs/DEVELOPER.md`)
+  - additionalContext minimization — `[🐙 Octopus]` → `[🐙]` across all hooks
+- **`--bare` flag** — All `claude -p` subprocess calls use `--bare` on CC v2.1.87+ for faster synthesis (skips hooks/LSP/plugin sync).
+- **Version cascade ordering** — Fixed v2.1.30 and v2.1.80 block inversions in `providers.sh`. Merged duplicate v2.1.33 blocks.
+- **Hook consistency** — Added `set -euo pipefail` to `worktree-setup.sh`, `worktree-teardown.sh`, `config-change-handler.sh`, `telemetry-webhook.sh`.
+
+### Fixed
+
+- **HUD cache bypass** — Error-cached OAuth result no longer blocks CC-provided rate limit fallback for 15 seconds.
+- **JSON heredoc injection** — `session-start-memory.sh` fallback path now uses `jq -n --arg` instead of raw variable expansion in heredoc.
+- **Post-compact staleness** — Window raised from 5 to 10 minutes for large context compactions.
+
+### Removed
+
+- **`session-sync.sh`** — Orphaned hook (merged into `session-start-memory.sh`). Removed from `hook-profile.sh` allowlist.
+- **`"executables"` manifest field** — Not a valid `plugin.json` schema field; CC auto-discovers `bin/` by convention.
 
 ---
 

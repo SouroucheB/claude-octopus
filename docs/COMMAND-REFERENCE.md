@@ -1,6 +1,6 @@
 # Command and Usage Reference
 
-Complete reference for all 49 Claude Octopus slash commands, plus activation rules, provider indicators, and the project-lifecycle features that are triggered by natural language rather than slash commands.
+Complete reference for all 49 Claude Octopus slash commands, 10 CLI tools (`octopus` + `octo-compress`), plus activation rules, provider indicators, and the project-lifecycle features that are triggered by natural language rather than slash commands.
 
 ---
 
@@ -111,6 +111,23 @@ All slash commands use the `/octo:` namespace. The smart router command is `/oct
 |---------|-------------|
 | `/octo:claw` | OpenClaw instance admin across macOS, Ubuntu/Debian, Docker, OCI, Proxmox |
 | `/octo:octo` | [Legacy] Redirects to `/octo:auto` |
+
+### CLI Tools (v9.19.0+)
+
+Plugin executables available as bare commands (CC v2.1.91+). Also usable via full path on older CC versions.
+
+| Command | Description |
+|---------|-------------|
+| `octopus doctor` | Run diagnostics (same as `/octo:doctor`) |
+| `octopus version` | Show plugin version |
+| `octopus session` | Show current session info |
+| `octopus fleet` | Show provider fleet status |
+| `octo-compress` | Pipe verbose output for token savings: `npm install 2>&1 \| octo-compress` |
+| `octo-compress json` | Force JSON array/object compression |
+| `octo-compress logs` | Force log compression (head+tail) |
+| `octo-compress html` | Force HTML tag stripping |
+| `octo-compress stats` | Show compression savings for current session |
+| `octo-compress config` | Show compression configuration |
 
 ### Project Lifecycle (Skill-Based)
 

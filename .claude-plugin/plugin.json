@@ -134,8 +134,5 @@
     "./.claude/commands/history.md",
     "./.claude/commands/discipline.md",
     "./.claude/commands/optimize.md"
-  ],
-  "executables": [
-    "./bin/octopus"
   ]
 }

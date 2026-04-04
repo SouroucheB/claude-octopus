@@ -899,6 +899,36 @@ doctor_check_skills() {
                 "Restart session to deploy octopus-defaults.json to ~/.claude/managed-settings.d/"
         fi
     fi
+
+    if [[ "$SUPPORTS_ELICITATION_HOOKS" == "true" ]]; then
+        doctor_add "elicitation-hooks" "skills" "pass" \
+            "CC v2.1.76 Elicitation/ElicitationResult hooks active" \
+            "MCP servers can request structured user input mid-task; events logged to ~/.claude-octopus/logs/elicitation.log"
+    fi
+
+    if [[ "$SUPPORTS_SESSION_ID_HEADER" == "true" ]]; then
+        doctor_add "session-id-header" "skills" "info" \
+            "CC v2.1.89 X-Claude-Code-Session-Id header available" \
+            "Proxy servers can aggregate requests by session ID for telemetry and routing"
+    fi
+
+    if [[ "$SUPPORTS_DEEP_LINK_5K" == "true" ]]; then
+        doctor_add "deep-link-5k" "skills" "info" \
+            "CC v2.1.88 deep links expanded to 5,000 chars" \
+            "claude-cli://open?q= links can carry longer prompts with scroll-to-review"
+    fi
+
+    if [[ "$SUPPORTS_WORKTREE_HTTP_HOOKS" == "true" ]]; then
+        doctor_add "worktree-http-hooks" "skills" "info" \
+            "CC v2.1.87 WorktreeCreate supports type:http hooks" \
+            "Worktree hooks can POST JSON to a URL instead of running a shell command"
+    fi
+
+    if [[ "$SUPPORTS_MULTILINE_DEEP_LINKS" == "true" ]]; then
+        doctor_add "multiline-deep-links" "skills" "info" \
+            "CC v2.1.91 multi-line deep link prompts available" \
+            "claude-cli://open?q= supports encoded newlines (%0A) for multi-step prompts"
+    fi
 }
 
 # --- Category 8: Conflicts ---

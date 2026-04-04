@@ -63,14 +63,12 @@ if [[ -n "$AUTONOMY" ]] && command -v jq &>/dev/null; then
            '.autonomy = $autonomy | .restored_from_memory = true | if $providers != "" then .providers = $providers else . end' \
            "$SESSION_FILE" > "$TMP" 2>/dev/null && mv "$TMP" "$SESSION_FILE" 2>/dev/null || rm -f "$TMP"
     else
-        # Create initial session with restored preferences
-        cat > "$SESSION_FILE" <<EOFJSON
-{
-  "autonomy": "$AUTONOMY",
-  "restored_from_memory": true,
-  "session_start": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-}
-EOFJSON
+        # Create initial session with restored preferences (jq --arg for safe escaping)
+        jq -n \
+            --arg autonomy "$AUTONOMY" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{"autonomy": $autonomy, "restored_from_memory": true, "session_start": $ts}' \
+            > "$SESSION_FILE" 2>/dev/null || true
     fi
 
     echo "[Octopus] Restored preferences from auto-memory: autonomy=${AUTONOMY}"

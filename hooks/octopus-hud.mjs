@@ -387,7 +387,11 @@ function parseInputRateLimits(inputRateLimits) {
 
 async function getUsage(inputRateLimits) {
   const cache = readUsageCache();
-  if (cache && isCacheValid(cache)) return cache.data;
+  if (cache && isCacheValid(cache)) {
+    // v9.19.0: On error cache, still try CC-provided rate limits before returning null
+    if (cache.data) return cache.data;
+    return parseInputRateLimits(inputRateLimits);
+  }
 
   let creds = getCredentials();
   if (!creds) {

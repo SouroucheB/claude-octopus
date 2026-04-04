@@ -15,7 +15,7 @@ SNAPSHOT="${STATE_DIR}/pre-compact-snapshot.json"
 # Nothing to recover if pre-compact didn't save a snapshot
 [[ -f "$SNAPSHOT" ]] || exit 0
 
-# Only inject if snapshot is <5 min old (avoid stale re-injection from old sessions)
+# Only inject if snapshot is <10 min old (avoid stale re-injection from old sessions)
 now=$(date +%s)
 if [[ "$(uname)" == "Darwin" ]]; then
     mod=$(stat -f %m "$SNAPSHOT" 2>/dev/null || echo 0)

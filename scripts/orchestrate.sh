@@ -336,6 +336,22 @@ SUPPORTS_PLUGIN_EXECUTABLES=false       # v9.19: Claude Code v2.1.91+ (plugins c
 SUPPORTS_MCP_RESULT_SIZE=false          # v9.19: Claude Code v2.1.91+ (_meta["anthropic/maxResultSizeChars"] annotation up to 500K)
 SUPPORTS_DISABLE_SKILL_SHELL=false      # v9.19: Claude Code v2.1.91+ (disableSkillShellExecution setting blocks shell in skills)
 SUPPORTS_MULTILINE_DEEP_LINKS=false     # v9.19: Claude Code v2.1.91+ (multi-line prompts in claude-cli://open?q= via %0A encoding)
+# ── v9.21.0: CC v2.1.89-101 sync ────────────────────────────────────────────
+SUPPORTS_PERMISSION_DENIED_HOOK=false   # v9.21: Claude Code v2.1.89+ (PermissionDenied hook fires after auto-mode denials, can return retry:true)
+SUPPORTS_DEFER_PERMISSION=false         # v9.21: Claude Code v2.1.89+ (PreToolUse can return "defer" to pause headless sessions)
+SUPPORTS_NO_FLICKER=false               # v9.21: Claude Code v2.1.89+ (CLAUDE_CODE_NO_FLICKER=1 alt-screen rendering mode)
+SUPPORTS_KEEP_CODING_INSTRUCTIONS=false # v9.21: Claude Code v2.1.94+ (keep-coding-instructions frontmatter for output styles)
+SUPPORTS_SESSION_TITLE_HOOK=false       # v9.21: Claude Code v2.1.94+ (hookSpecificOutput.sessionTitle in UserPromptSubmit)
+SUPPORTS_SKILL_NAME_INVOCATION=false    # v9.21: Claude Code v2.1.94+ (plugin skills use frontmatter name for invocation)
+SUPPORTS_DEFAULT_EFFORT_HIGH=false      # v9.21: Claude Code v2.1.94+ (default effort changed from medium to high for API/Team/Enterprise)
+SUPPORTS_STATUSLINE_REFRESH_INTERVAL=false # v9.21: Claude Code v2.1.97+ (refreshInterval setting for auto-refresh statusline)
+SUPPORTS_EXCLUDE_DYNAMIC_PROMPT=false   # v9.21: Claude Code v2.1.98+ (--exclude-dynamic-system-prompt-sections for cache-friendly -p calls)
+SUPPORTS_PERFORCE_MODE=false            # v9.21: Claude Code v2.1.98+ (CLAUDE_CODE_PERFORCE_MODE — Edit/Write fail on read-only files)
+SUPPORTS_MONITOR_TOOL=false             # v9.21: Claude Code v2.1.98+ (Monitor tool for streaming events from background scripts)
+SUPPORTS_TRACEPARENT=false              # v9.21: Claude Code v2.1.98+ (W3C TRACEPARENT env var passed to Bash subprocesses when OTEL enabled)
+SUPPORTS_SETTINGS_RESILIENCE=false      # v9.21: Claude Code v2.1.101+ (unrecognized hook event names no longer crash settings.json parsing)
+SUPPORTS_OS_CA_CERTS=false              # v9.21: Claude Code v2.1.101+ (OS CA certificate store trust for enterprise TLS proxies)
+SUPPORTS_AUTO_CLOUD_ENV=false           # v9.21: Claude Code v2.1.101+ (auto cloud environment creation for remote sessions)
 OCTOPUS_BACKEND="api"              # v8.16: Detected backend (api|bedrock|vertex|foundry)
 AGENT_TEAMS_ENABLED="${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:-0}"
 OCTOPUS_SECURITY_V870="${OCTOPUS_SECURITY_V870:-true}"

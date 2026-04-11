@@ -42,9 +42,29 @@ print(d.get('prompt', d.get('message', '')))" 2>/dev/null) || true
 # ═══════════════════════════════════════════════════════════════════════════════
 PROMPT_LOWER=$(printf '%s' "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
-# Skip if the prompt starts with an octopus command invocation
+# ── Session title auto-naming (CC v2.1.94+, SUPPORTS_SESSION_TITLE_HOOK) ──
+# When user invokes /octo: command, auto-title the session for easier /resume.
+# Only sets title if no prior /rename (session_title absent or auto-generated).
+# Respects OCTOPUS_AUTO_TITLE=false to disable.
+# ── Session title auto-naming (CC v2.1.94+, SUPPORTS_SESSION_TITLE_HOOK) ──
+# When user invokes /octo: command, auto-title the session for easier /resume.
+# Only sets title on first /octo: invocation per session. Respects /rename.
+_OCTO_EXPLICIT=false
 if [[ "$PROMPT_LOWER" == /octo:* ]] || [[ "$PROMPT_LOWER" == "octo:"* ]]; then
-    exit 0
+    _OCTO_EXPLICIT=true
+    if [[ "${OCTOPUS_AUTO_TITLE:-true}" != "false" ]]; then
+        _CMD=$(printf '%s' "$PROMPT_LOWER" | sed 's|^/\{0,1\}octo:\([a-z_-]*\).*|\1|')
+        if [[ -n "$_CMD" ]]; then
+            _SESSION_ID=$(printf '%s' "$INPUT" | grep -o '"session_id":"[^"]*"' | head -1 | cut -d'"' -f4)
+            _TITLE_FILE="${HOME}/.claude-octopus/.session-titled-${_SESSION_ID:-unknown}"
+            if [[ ! -f "$_TITLE_FILE" ]]; then
+                touch "$_TITLE_FILE" 2>/dev/null || true
+                printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","sessionTitle":"Octopus: /octo:%s"}}\n' "$_CMD"
+                exit 0
+            fi
+        fi
+    fi
+    # Don't exit — fall through for intent tracking, but suppress auto-invoke below
 fi
 # Skip command-message XML tags (skill invocations already in progress)
 if [[ "$PROMPT" == *"<command-message>octo:"* ]] || [[ "$PROMPT" == *"<command-name>/octo:"* ]]; then
@@ -208,8 +228,11 @@ case "$INTENT" in
 esac
 
 # Determine if we should auto-invoke
+# Never auto-invoke when user already typed an explicit /octo: command
 SHOULD_AUTO_INVOKE=false
-if [[ "$AUTO_INVOKE" == "true" && -n "$SKILL_NAME" ]]; then
+if [[ "$_OCTO_EXPLICIT" == "true" ]]; then
+    SHOULD_AUTO_INVOKE=false
+elif [[ "$AUTO_INVOKE" == "true" && -n "$SKILL_NAME" ]]; then
     if [[ "$SIGNAL_STRENGTH" == "strong" && "$CONFIDENCE" == "HIGH" ]]; then
         # Strong signal + HIGH confidence = auto-invoke on first match
         SHOULD_AUTO_INVOKE=true

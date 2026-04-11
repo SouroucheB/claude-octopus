@@ -194,6 +194,11 @@ fi
 rm -f "${HOME}/.claude-octopus/.octo/pre-compact-snapshot.json" 2>/dev/null || true
 rm -f "${HOME}/.claude-octopus/.reload-signal" 2>/dev/null || true
 
+# Clean up session title sentinel files (from user-prompt-submit.sh auto-titling)
+# Keep last 20 (by mtime), remove the rest to prevent accumulation
+find "${HOME}/.claude-octopus/" -maxdepth 1 -name ".session-titled-*" -type f 2>/dev/null \
+    | xargs ls -t 2>/dev/null | tail -n +21 | xargs rm -f 2>/dev/null || true
+
 # Session manager cleanup: retain 10 most recent sessions
 if [[ -x "${CLAUDE_PLUGIN_ROOT:-}/scripts/session-manager.sh" ]]; then
     "${CLAUDE_PLUGIN_ROOT}/scripts/session-manager.sh" cleanup 2>/dev/null || true

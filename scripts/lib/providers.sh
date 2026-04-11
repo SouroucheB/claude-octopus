@@ -346,9 +346,12 @@ detect_claude_code_version() {
         SUPPORTS_DEEP_LINK_5K=true
     fi
 
-    # Check for v2.1.89+ features (session ID header for proxy aggregation)
+    # Check for v2.1.89+ features (session ID header, PermissionDenied hook, defer permission, NO_FLICKER)
     if version_compare "$CLAUDE_CODE_VERSION" "2.1.89" ">="; then
         SUPPORTS_SESSION_ID_HEADER=true
+        SUPPORTS_PERMISSION_DENIED_HOOK=true
+        SUPPORTS_DEFER_PERMISSION=true
+        SUPPORTS_NO_FLICKER=true
     fi
 
     # Check for v2.1.90+ features (marketplace offline mode)
@@ -362,6 +365,34 @@ detect_claude_code_version() {
         SUPPORTS_MCP_RESULT_SIZE=true
         SUPPORTS_DISABLE_SKILL_SHELL=true
         SUPPORTS_MULTILINE_DEEP_LINKS=true
+    fi
+
+    # Check for v2.1.94+ features (keep-coding-instructions, session title hook, skill name invocation, default effort high)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.94" ">="; then
+        SUPPORTS_KEEP_CODING_INSTRUCTIONS=true
+        SUPPORTS_SESSION_TITLE_HOOK=true
+        SUPPORTS_SKILL_NAME_INVOCATION=true
+        SUPPORTS_DEFAULT_EFFORT_HIGH=true
+    fi
+
+    # Check for v2.1.97+ features (statusline refreshInterval)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.97" ">="; then
+        SUPPORTS_STATUSLINE_REFRESH_INTERVAL=true
+    fi
+
+    # Check for v2.1.98+ features (exclude dynamic prompt, Perforce mode, Monitor tool, TRACEPARENT)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.98" ">="; then
+        SUPPORTS_EXCLUDE_DYNAMIC_PROMPT=true
+        SUPPORTS_PERFORCE_MODE=true
+        SUPPORTS_MONITOR_TOOL=true
+        SUPPORTS_TRACEPARENT=true
+    fi
+
+    # Check for v2.1.101+ features (settings resilience, OS CA certs, auto cloud env)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.101" ">="; then
+        SUPPORTS_SETTINGS_RESILIENCE=true
+        SUPPORTS_OS_CA_CERTS=true
+        SUPPORTS_AUTO_CLOUD_ENV=true
     fi
 
     log "INFO" "Claude Code v$CLAUDE_CODE_VERSION detected"
@@ -398,6 +429,11 @@ detect_claude_code_version() {
     log "INFO" "Worktree HTTP Hooks: $SUPPORTS_WORKTREE_HTTP_HOOKS | Session ID Header: $SUPPORTS_SESSION_ID_HEADER | Deep Link 5K: $SUPPORTS_DEEP_LINK_5K"
     log "INFO" "Marketplace Offline: $SUPPORTS_MARKETPLACE_OFFLINE | Plugin Executables: $SUPPORTS_PLUGIN_EXECUTABLES | MCP Result Size: $SUPPORTS_MCP_RESULT_SIZE"
     log "INFO" "Disable Skill Shell: $SUPPORTS_DISABLE_SKILL_SHELL | Multiline Deep Links: $SUPPORTS_MULTILINE_DEEP_LINKS"
+    log "INFO" "PermissionDenied Hook: $SUPPORTS_PERMISSION_DENIED_HOOK | Defer Permission: $SUPPORTS_DEFER_PERMISSION | NO_FLICKER: $SUPPORTS_NO_FLICKER"
+    log "INFO" "Keep Coding Instructions: $SUPPORTS_KEEP_CODING_INSTRUCTIONS | Session Title Hook: $SUPPORTS_SESSION_TITLE_HOOK | Skill Name Invocation: $SUPPORTS_SKILL_NAME_INVOCATION"
+    log "INFO" "Default Effort High: $SUPPORTS_DEFAULT_EFFORT_HIGH | Statusline Refresh Interval: $SUPPORTS_STATUSLINE_REFRESH_INTERVAL"
+    log "INFO" "Exclude Dynamic Prompt: $SUPPORTS_EXCLUDE_DYNAMIC_PROMPT | Perforce Mode: $SUPPORTS_PERFORCE_MODE | Monitor Tool: $SUPPORTS_MONITOR_TOOL | Traceparent: $SUPPORTS_TRACEPARENT"
+    log "INFO" "Settings Resilience: $SUPPORTS_SETTINGS_RESILIENCE | OS CA Certs: $SUPPORTS_OS_CA_CERTS | Auto Cloud Env: $SUPPORTS_AUTO_CLOUD_ENV"
 
     # v8.29.0: Context window control
     OCTOPUS_CONTEXT_WINDOW="${OCTOPUS_CONTEXT_WINDOW:-auto}"

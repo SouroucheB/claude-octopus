@@ -423,5 +423,16 @@
         }
       ]
     }
+  ],
+  "PermissionDenied": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/permission-denied-log.sh",
+          "timeout": 5
+        }
+      ]
+    }
   ]
 }

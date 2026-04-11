@@ -7,6 +7,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
 # Auto-sync marketplace.json with actual counts
 if [[ -x "$ROOT_DIR/scripts/sync-marketplace.sh" ]]; then
     "$ROOT_DIR/scripts/sync-marketplace.sh"
@@ -19,16 +24,24 @@ if [[ -x "$ROOT_DIR/scripts/sync-marketplace.sh" ]]; then
     fi
 fi
 
+# Check for non-portable sed usage (BSD/GNU divergence — see issue #255)
+# Only flag GNU-only command grouping (the actual bug class). sed -i is handled
+# with platform conditionals throughout the codebase (see lib/config-display.sh).
+PORTABILITY_FAIL=0
+if grep -rnE "sed\s.*'/[^']*,/[^']*\{" "$ROOT_DIR/scripts/" "$ROOT_DIR/hooks/" 2>/dev/null; then
+    echo -e "${RED}ERROR: GNU-only sed command grouping detected. Use awk instead.${NC}"
+    PORTABILITY_FAIL=1
+fi
+if [[ "$PORTABILITY_FAIL" -eq 1 ]]; then
+    echo -e "${RED}Policy: awk/grep for multi-line extraction. sed for single-line s/// only.${NC}"
+    exit 1
+fi
+
 # Run the full validation script if it exists
 if [[ -x "$ROOT_DIR/scripts/validate-release.sh" ]]; then
     "$ROOT_DIR/scripts/validate-release.sh"
 else
     # Fallback to basic checks
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    NC='\033[0m'
-
     echo -e "${GREEN}🐙 Claude Octopus Pre-Push Check${NC}"
 
     PLUGIN_VERSION=$(grep '"version"' .claude-plugin/plugin.json | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')

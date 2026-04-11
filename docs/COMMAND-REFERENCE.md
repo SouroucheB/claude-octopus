@@ -1124,6 +1124,10 @@ Activate destructive command warnings for the current session.
 | Discard changes | `git checkout .`, `git restore .` |
 | Container/cluster | `kubectl delete`, `docker rm -f`, `docker system prune` |
 
+**Denial audit log (v9.21.0+, CC v2.1.89+):**
+
+When careful mode is active and Claude Code's auto-mode denies a command, the denial is logged to `~/.claude-octopus/denied-commands.log` with the tool name and reason. Arguments are never logged for security. The log rotates at 100KB. Disable with `OCTO_CAREFUL_MODE=off`.
+
 **Deactivation:** Automatic at session end, or remove the state file manually.
 
 ---
@@ -1184,6 +1188,12 @@ Remove the edit boundary set by `/octo:freeze` or `/octo:guard`.
 ---
 
 ## Session & Insights
+
+### Session Auto-Titling (v9.21.0+, CC v2.1.94+)
+
+When you invoke any `/octo:` command, the session is automatically titled "Octopus: /octo:review" (etc.) for easier identification in `/resume`. Only the first `/octo:` command per session sets the title — subsequent commands don't overwrite. If you `/rename` the session, auto-titling is suppressed. Disable with `OCTOPUS_AUTO_TITLE=false`.
+
+---
 
 ### `/octo:costs`
 

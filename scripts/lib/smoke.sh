@@ -1002,8 +1002,9 @@ _smoke_test_provider() {
         smoke_dir=$(mktemp -d 2>/dev/null || mktemp -d -t 'octo-smoke')
         git -C "$smoke_dir" init -q 2>/dev/null || true
         pushd "$smoke_dir" >/dev/null 2>&1
-        run_with_timeout "$smoke_timeout" \
-            $cmd_str "Reply with exactly: ok" \
+        # codex cmd_str ends with `-` (stdin prompt); arg form is rejected.
+        echo "Reply with exactly: ok" | run_with_timeout "$smoke_timeout" \
+            $cmd_str \
             >/dev/null 2>"$stderr_file" || smoke_exit=$?
         popd >/dev/null 2>&1
         rm -rf "$smoke_dir" 2>/dev/null
@@ -1074,7 +1075,7 @@ provider_smoke_test() {
     fi
 
     if [[ "$has_gemini" == "true" ]]; then
-        _smoke_test_provider "gemini" 10 "$gemini_result_file" &
+        _smoke_test_provider "gemini" "${OCTOPUS_GEMINI_SMOKE_TIMEOUT:-30}" "$gemini_result_file" &
         pids+=($!)
     else
         echo "SKIP" > "$gemini_result_file"
@@ -1095,9 +1096,9 @@ provider_smoke_test() {
 
     for result in "$codex_result" "$gemini_result"; do
         case "${result%%:*}" in
-            PASS) ((pass_count++)) ;;
-            SKIP) ((skip_count++)) ;;
-            *) ((fail_count++)) ;;
+            PASS) ((++pass_count)) ;;
+            SKIP) ((++skip_count)) ;;
+            *) ((++fail_count)) ;;
         esac
     done
 

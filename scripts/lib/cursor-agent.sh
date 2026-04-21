@@ -57,12 +57,15 @@ cursor_agent_is_available() {
     if ! _is_cursor_agent_binary; then
         return 1
     fi
-    # Check auth: env var first (fast), then Cursor config paths
+    # Check auth: env var first (fast), then Cursor config file
     if [[ -n "${CURSOR_API_KEY:-}" ]]; then
         return 0
     fi
-    # Cursor stores auth state in ~/.cursor/ (shared with Cursor IDE)
-    if [[ -f "${HOME}/.cursor/agent-cli-state.json" ]]; then
+    # Session auth lives in ~/.cursor/cli-config.json's authInfo block.
+    # NOTE: ~/.cursor/agent-cli-state.json is a statsig migration flag
+    # ({"hasClearedLegacyStatsigFields":true}), NOT auth state — verified
+    # on Cursor Agent CLI build 2026.04.17-787b533.
+    if grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null; then
         return 0
     fi
     return 1
@@ -73,7 +76,7 @@ cursor_agent_is_available() {
 cursor_agent_auth_method() {
     if [[ -n "${CURSOR_API_KEY:-}" ]]; then
         echo "env:CURSOR_API_KEY"
-    elif [[ -f "${HOME}/.cursor/agent-cli-state.json" ]]; then
+    elif grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null; then
         echo "cursor-session"
     else
         echo "none"

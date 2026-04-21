@@ -732,9 +732,9 @@ check_provider_health() {
                 echo "cursor-agent: 'agent' binary is not Cursor Agent CLI" >&2
                 return 1
             fi
-            # Check auth: env var or Cursor session
+            # Check auth: env var or Cursor session (authInfo in cli-config.json)
             if [[ -z "${CURSOR_API_KEY:-}" ]] && \
-               [[ ! -f "${HOME}/.cursor/agent-cli-state.json" ]]; then
+               ! grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null; then
                 echo "cursor-agent: not authenticated (run: agent login or set CURSOR_API_KEY)" >&2
                 return 1
             fi
@@ -958,7 +958,7 @@ detect_providers() {
         local cursor_auth="none"
         if [[ -n "${CURSOR_API_KEY:-}" ]]; then
             cursor_auth="env:CURSOR_API_KEY"
-        elif [[ -f "${HOME}/.cursor/agent-cli-state.json" ]]; then
+        elif grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null; then
             cursor_auth="cursor-session"
         fi
         result="${result}cursor-agent:${cursor_auth} "

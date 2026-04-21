@@ -297,7 +297,7 @@ is_agent_available_v2() {
                 printf '%s\n' "$_ca_ver" | grep -cE '^20[0-9]{2}\.' >/dev/null 2>&1
             } && {
                 [[ -n "${CURSOR_API_KEY:-}" ]] || \
-                [[ -f "${HOME}/.cursor/agent-cli-state.json" ]]
+                grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null
             }
             ;;
         *)

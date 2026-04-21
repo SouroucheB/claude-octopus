@@ -170,7 +170,7 @@ cmd_detect_providers() {
         local cursor_auth="none"
         if [[ -n "${CURSOR_API_KEY:-}" ]]; then
             cursor_auth="env:CURSOR_API_KEY"
-        elif [[ -f "${HOME}/.cursor/agent-cli-state.json" ]]; then
+        elif grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null; then
             cursor_auth="cursor-session"
         fi
         echo "CURSOR_AGENT_STATUS=ok"
@@ -194,7 +194,7 @@ cmd_detect_providers() {
     local qwen_status=$(command -v qwen &>/dev/null && echo "ok" || echo "not-installed")
     local opencode_status=$(command -v opencode &>/dev/null && echo "ok" || echo "not-installed")
     local cursor_agent_status=$(command -v agent &>/dev/null && agent --version 2>&1 | grep -cE '^20[0-9]{2}\.' >/dev/null && echo "ok" || echo "not-installed")
-    local cursor_agent_auth=$([[ -n "${CURSOR_API_KEY:-}" ]] && echo "env:CURSOR_API_KEY" || [[ -f "${HOME}/.cursor/agent-cli-state.json" ]] && echo "cursor-session" || echo "none")
+    local cursor_agent_auth=$([[ -n "${CURSOR_API_KEY:-}" ]] && echo "env:CURSOR_API_KEY" || { grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null && echo "cursor-session"; } || echo "none")
 
     cat > "$WORKSPACE_DIR/.provider-cache" <<EOF
 # Auto-generated on $(date)
@@ -398,7 +398,7 @@ preflight_check() {
     if command -v agent &>/dev/null && agent --version 2>&1 | grep -cE '^20[0-9]{2}\.' >/dev/null; then
         has_cursor_agent=true
         log DEBUG "Cursor Agent CLI: $(command -v agent)"
-        if [[ -n "${CURSOR_API_KEY:-}" ]] || [[ -f "${HOME}/.cursor/agent-cli-state.json" ]]; then
+        if [[ -n "${CURSOR_API_KEY:-}" ]] || grep -q '"authInfo"' "${HOME}/.cursor/cli-config.json" 2>/dev/null; then
             cursor_agent_auth=true
         fi
     fi

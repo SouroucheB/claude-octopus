@@ -203,16 +203,30 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
 
     # Process output
     if [[ $exit_code -eq 0 ]]; then
-        awk '
-            BEGIN { in_response = 0; header_done = 0; }
-            /^--------$/ { header_done = 1; next; }
-            !header_done { next; }
-            /^(codex|gemini|assistant)$/ { in_response = 1; next; }
-            /^thinking$/ { next; }
-            /^tokens used$/ { next; }
-            /^[0-9,]+$/ && in_response { next; }
-            in_response { print; }
-        ' "$temp_output" >> "$result_file"
+        # v9.27.0: Port #191 awk-header-guard fix from spawn_agent — codex exec
+        # sends clean response on stdout (no header), banner on stderr.
+        if [[ $(grep -c '^--------$' "$temp_output" 2>/dev/null || true) -gt 0 ]]; then
+            awk '
+                BEGIN { in_response = 0; header_done = 0; }
+                /^--------$/ { header_done = 1; next; }
+                !header_done { next; }
+                /^(codex|gemini|assistant)$/ { in_response = 1; next; }
+                /^thinking$/ { next; }
+                /^tokens used$/ { next; }
+                /^[0-9,]+$/ && in_response { next; }
+                in_response { print; }
+            ' "$temp_output" >> "$result_file"
+        else
+            grep -v \
+                -e '^MCP issues detected' \
+                -e '^Loading extension:' \
+                -e '^YOLO mode is enabled' \
+                -e '^Keychain initialization' \
+                -e '^Using FileKeychain' \
+                -e '^Loaded cached credentials' \
+                -e '^Run /mcp' \
+                "$temp_output" >> "$result_file" 2>/dev/null || cat "$temp_output" >> "$result_file"
+        fi
 
         # Trust marker for external CLI output
         case "$agent_type" in codex*|gemini*|perplexity*)
@@ -235,13 +249,20 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
     elif [[ $exit_code -eq 124 ]] || [[ $exit_code -eq 143 ]]; then
         # Timeout — preserve partial output
         if [[ -s "$temp_output" ]]; then
-            awk '
-                BEGIN { in_response = 0; header_done = 0; }
-                /^--------$/ { header_done = 1; next; }
-                !header_done { next; }
-                /^(codex|gemini|assistant)$/ { in_response = 1; next; }
-                in_response { print; }
-            ' "$temp_output" >> "$result_file"
+            if [[ $(grep -c '^--------$' "$temp_output" 2>/dev/null || true) -gt 0 ]]; then
+                awk '
+                    BEGIN { in_response = 0; header_done = 0; }
+                    /^--------$/ { header_done = 1; next; }
+                    !header_done { next; }
+                    /^(codex|gemini|assistant)$/ { in_response = 1; next; }
+                    /^thinking$/ { next; }
+                    /^tokens used$/ { next; }
+                    /^[0-9,]+$/ && in_response { next; }
+                    in_response { print; }
+                ' "$temp_output" >> "$result_file"
+            else
+                cat "$temp_output" >> "$result_file"
+            fi
         fi
         echo '```' >> "$result_file"
         echo "" >> "$result_file"

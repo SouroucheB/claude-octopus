@@ -1,3 +1,9 @@
+## [9.27.0] - 2026-04-21
+
+### Fixed
+- **fix(probe):** port awk-header-guard from `spawn_agent` to `probe_single_agent` — codex output was silently empty in `/octo:discover` and all probe-based skills (#300)
+- **fix(perplexity):** remove `env -i` wrapper for shell-function providers (perplexity, openrouter) — `env` cannot exec bash functions, causing exit 127 (#300)
+
 ## [9.26.0] - 2026-04-21
 
 ### Fixed

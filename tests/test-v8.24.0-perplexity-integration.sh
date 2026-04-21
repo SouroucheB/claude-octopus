@@ -161,11 +161,11 @@ else
     fail "Model pricing missing for sonar models"
 fi
 
-# Test 3.5: Environment isolation
-if grep -q 'perplexity\*)' "$_ORCH_ALL_TMP" && grep -A1 'perplexity\*)' "$_ORCH_ALL_TMP" | grep -q 'PERPLEXITY_API_KEY'; then
-    pass "build_provider_env() isolates Perplexity"
+# Test 3.5: Perplexity env — shell function provider, resolves key (#300)
+if grep -q 'perplexity\*)' "$_ORCH_ALL_TMP" && grep -A3 'perplexity\*)' "$_ORCH_ALL_TMP" | grep -q 'PERPLEXITY_API_KEY'; then
+    pass "build_provider_env() resolves Perplexity API key"
 else
-    fail "build_provider_env() missing perplexity isolation"
+    fail "build_provider_env() missing perplexity key resolution"
 fi
 
 # Test 3.6: OCTOPUS_<PROVIDER>_MODEL env var support (dynamic pattern covers all providers)

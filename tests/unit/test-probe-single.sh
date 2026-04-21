@@ -64,17 +64,17 @@ assert_contains "$(grep -A200 'probe_single_agent()' "$ALL_SRC" | head -220)" \
 
 # ── probe_single_agent outputs result file path ──────────────────────────────
 
-assert_contains "$(grep -A250 'probe_single_agent()' "$ALL_SRC" | head -270)" \
+assert_contains "$(grep -A300 'probe_single_agent()' "$ALL_SRC" | head -310)" \
   'echo.*result_file' "probe_single_agent: outputs result file path on stdout"
 
 # ── probe_single_agent handles timeout status ────────────────────────────────
 
-assert_contains "$(grep -A250 'probe_single_agent()' "$ALL_SRC" | head -270)" \
+assert_contains "$(grep -A300 'probe_single_agent()' "$ALL_SRC" | head -310)" \
   "Status: TIMEOUT" "probe_single_agent: handles TIMEOUT status"
 
 # ── probe_single_agent handles failure status ────────────────────────────────
 
-assert_contains "$(grep -A250 'probe_single_agent()' "$ALL_SRC" | head -270)" \
+assert_contains "$(grep -A300 'probe_single_agent()' "$ALL_SRC" | head -310)" \
   "Status: FAILED" "probe_single_agent: handles FAILED status"
 
 # ── flow-discover.md references probe-single ─────────────────────────────────

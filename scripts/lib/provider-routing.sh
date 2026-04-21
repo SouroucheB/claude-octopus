@@ -62,8 +62,14 @@ build_provider_env() {
             echo "env -i PATH=$PATH HOME=$HOME GEMINI_API_KEY=${GEMINI_API_KEY:-} GOOGLE_API_KEY=${GOOGLE_API_KEY:-} NODE_NO_WARNINGS=1 TMPDIR=${TMPDIR:-/tmp}${_trace_prefix}"
             ;;
         perplexity*)
+            # perplexity_execute is a shell function — env -i cannot exec it (#300)
             [[ -z "${PERPLEXITY_API_KEY:-}" ]] && resolve_provider_env "PERPLEXITY_API_KEY" 2>/dev/null
-            echo "env -i PATH=$PATH HOME=$HOME PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-} TMPDIR=${TMPDIR:-/tmp}${_trace_prefix}"
+            return 0
+            ;;
+        openrouter*)
+            # openrouter_execute is a shell function — env -i cannot exec it (#300)
+            [[ -z "${OPENROUTER_API_KEY:-}" ]] && resolve_provider_env "OPENROUTER_API_KEY" 2>/dev/null
+            return 0
             ;;
         *)
             # Claude and other providers: no isolation needed

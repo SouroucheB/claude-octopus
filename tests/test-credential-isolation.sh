@@ -70,18 +70,20 @@ else
   pass "Gemini env does NOT contain OPENAI_API_KEY"
 fi
 
-# 1.4 Perplexity scoping — only PERPLEXITY_API_KEY
-PERP_ENV=$(grep -A5 'perplexity\*)' "$ALL_SRC" | grep 'env -i' | head -1)
-if echo "$PERP_ENV" | grep -q 'PERPLEXITY_API_KEY'; then
-  pass "Perplexity env includes PERPLEXITY_API_KEY"
+# 1.4 Perplexity — shell function provider, env -i skipped (#300)
+# perplexity_execute is a bash function dispatched by get_agent_command();
+# env -i cannot exec shell functions, so build_provider_env returns empty.
+PERP_CASE=$(grep -A50 'build_provider_env()' "$ALL_SRC" | grep -A5 'perplexity\*)' | head -6)
+if echo "$PERP_CASE" | grep -q 'resolve_provider_env.*PERPLEXITY_API_KEY'; then
+  pass "Perplexity resolves PERPLEXITY_API_KEY before dispatch"
 else
-  fail "Perplexity env missing PERPLEXITY_API_KEY"
+  fail "Perplexity missing PERPLEXITY_API_KEY resolve"
 fi
 
-if echo "$PERP_ENV" | grep -q 'OPENAI_API_KEY\|GEMINI_API_KEY'; then
-  fail "Perplexity env leaks other provider keys"
+if echo "$PERP_CASE" | grep -q 'return 0'; then
+  pass "Perplexity correctly returns empty env prefix (shell function)"
 else
-  pass "Perplexity env does NOT contain other provider keys"
+  fail "Perplexity should return 0 (no env -i for shell function provider)"
 fi
 
 # ─────────────────────────────────────────────────────────────────────

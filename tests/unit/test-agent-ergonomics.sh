@@ -18,7 +18,7 @@ pass() { test_case "$1"; test_pass; }
 fail() { test_case "$1"; test_fail "${2:-$1}"; }
 assert_contains() {
   local output="$1" pattern="$2" label="$3"
-  echo "$output" | grep -qE "$pattern" && pass "$label" || fail "$label" "missing: $pattern"
+  grep -qE "$pattern" <<< "$output" && pass "$label" || fail "$label" "missing: $pattern"
 }
 
 # ── readonly frontmatter ─────────────────────────────────────────────────────

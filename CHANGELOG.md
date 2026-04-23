@@ -1,3 +1,11 @@
+## [9.29.2] - 2026-04-23
+
+### Changed
+
+- Fix: add --skip-git-repo-check to all codex exec invocations (#319)
+
+---
+
 ## [9.29.1] - 2026-04-22
 
 ### Changed

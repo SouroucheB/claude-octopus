@@ -30,7 +30,8 @@ if [[ -f "$VALIDATION_FILE" ]]; then
     fi
 fi
 
-# Reference integrity check: scan recently created/modified files for broken references
+# Reference integrity check: scan recently created/modified files for broken references.
+# Only defined here — called below when VALIDATION_FILE exists (i.e. tangle was recently run).
 # Catches: HTML linking missing JS/CSS, scripts sourcing missing files, configs referencing missing paths
 check_reference_integrity() {
     # Scope-local: disable -u because bash 3.2 (macOS CI) aborts (exit 134)
@@ -115,7 +116,11 @@ check_reference_integrity() {
     fi
 }
 
-check_reference_integrity
+# Only scan for broken references when a tangle run actually happened recently.
+# Skipping when VALIDATION_FILE is absent avoids scanning the plugin source tree
+# in CI (where all .sh files are "recently modified" by the checkout), which
+# triggered Abort trap: 6 on bash 3.2 macOS. See issue #313.
+[[ -f "$VALIDATION_FILE" ]] && check_reference_integrity
 
 # No validation file or quality gate passed
 echo '{"decision": "continue"}'

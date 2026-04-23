@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Multi-tentacled orchestration plugin for Claude Code",
-    "version": "9.29.1"
+    "version": "9.29.2"
   },
   "plugins": [
     {
       "name": "octo",
       "source": "./",
-      "description": "v9.29.1 - Multi-LLM orchestration for Claude Code. Route tasks to Codex, Gemini, Perplexity, Copilot, Qwen, Ollama, OpenCode. 137 CC feature flags, token compression (~7K/session saved), interactive setup wizard. 32 personas, 48 commands, 52 skills. Run /octo:setup.",
-      "version": "9.29.1",
+      "description": "v9.29.2 - Multi-LLM orchestration for Claude Code. Route tasks to Codex, Gemini, Perplexity, Copilot, Qwen, Ollama, OpenCode. 137 CC feature flags, token compression (~7K/session saved), interactive setup wizard. 32 personas, 48 commands, 52 skills. Run /octo:setup.",
+      "version": "9.29.2",
       "author": {
         "name": "nyldn",
         "url": "https://github.com/nyldn"

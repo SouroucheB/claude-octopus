@@ -167,6 +167,8 @@ test_version_advisory_seeds_on_unknown_last_seen() {
 test_version_advisory_emits_on_version_change() {
     test_case "version-advisory.sh emits advisory when version jumps"
     local hook="$PROJECT_ROOT/hooks/version-advisory.sh"
+    local current_version
+    current_version=$(jq -r '.version' "$PROJECT_ROOT/.claude-plugin/plugin.json")
     local tmpdir
     tmpdir=$(mktemp -d)
     mkdir -p "$tmpdir/.claude-octopus"
@@ -176,7 +178,7 @@ test_version_advisory_emits_on_version_change() {
     local output
     output=$(HOME="$tmpdir" CLAUDE_PLUGIN_ROOT="$PROJECT_ROOT" bash "$hook" 2>&1 || true)
     rm -rf "$tmpdir"
-    if grep -qi 'updated.*9\.28\.0.*9\.29' <<< "$output" && grep -q '/octo:setup\|OCTOPUS_LEGACY_ROLES' <<< "$output"; then
+    if [[ "$output" == *"9.28.0"* && "$output" == *"$current_version"* ]] && grep -q '/octo:setup\|OCTOPUS_LEGACY_ROLES' <<< "$output"; then
         test_pass
     else
         test_fail "advisory missing or malformed. Got: $output"

@@ -87,12 +87,26 @@ test_provider_pid_capture() {
     test_case "Parallel workflow waits track provider PIDs, not wrapper PIDs"
 
     local failed=0
+    local pid_capture_files=(
+        "scripts/lib/workflows.sh"
+        "scripts/lib/yaml-workflow.sh"
+        "scripts/lib/agent-utils.sh"
+        "scripts/lib/parallel.sh"
+        "scripts/lib/auto-route.sh"
+        "scripts/async-tmux-features.sh"
+    )
+    local pid_capture_paths=()
+    local rel
+    for rel in "${pid_capture_files[@]}"; do
+        pid_capture_paths+=("$PROJECT_ROOT/$rel")
+    done
+
     if ! grep -q '^spawn_agent_capture_pid()' "$PROJECT_ROOT/scripts/lib/spawn.sh"; then
         echo "  MISSING spawn_agent_capture_pid helper in scripts/lib/spawn.sh"
         failed=1
     fi
 
-    for rel in scripts/lib/workflows.sh scripts/lib/yaml-workflow.sh scripts/lib/agent-utils.sh; do
+    for rel in "${pid_capture_files[@]}"; do
         if ! grep -q 'spawn_agent_capture_pid' "$PROJECT_ROOT/$rel"; then
             echo "  MISSING provider PID capture in: $rel"
             failed=1
@@ -103,16 +117,14 @@ test_provider_pid_capture() {
     wrapper_tracking=$(
         {
             grep -RnE 'pids[^=]*[+]?=.*\$!' \
-                "$PROJECT_ROOT/scripts/lib/workflows.sh" \
-                "$PROJECT_ROOT/scripts/lib/yaml-workflow.sh" \
-                "$PROJECT_ROOT/scripts/lib/agent-utils.sh" 2>/dev/null || true
+                "${pid_capture_paths[@]}" 2>/dev/null || true
             awk '
                 /pid=\$!/ { pending=NR; line=$0; next }
                 pending && NR <= pending + 5 && /pids/ { print FILENAME ":" pending ":" line " ... " $0; pending=0 }
                 pending && NR > pending + 5 { pending=0 }
-            ' "$PROJECT_ROOT/scripts/lib/workflows.sh" \
-              "$PROJECT_ROOT/scripts/lib/yaml-workflow.sh" \
-              "$PROJECT_ROOT/scripts/lib/agent-utils.sh" 2>/dev/null || true
+            ' "${pid_capture_paths[@]}" 2>/dev/null || true
+            grep -RnE 'pid=\$\(spawn_agent[[:space:]]' \
+                "${pid_capture_paths[@]}" 2>/dev/null || true
         } | sed '/^$/d'
     )
     if [[ -n "$wrapper_tracking" ]]; then

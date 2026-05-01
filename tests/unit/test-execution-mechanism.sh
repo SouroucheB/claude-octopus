@@ -104,4 +104,26 @@ if [[ -f "$EMBRACE" ]]; then
         fail "embrace.md only has $skill_invocations skill invocations" "Must chain at least 4 (discover+define+develop+deliver)"
     fi
 fi
+
+echo ""
+echo "=== Develop Direct Dispatch Preserves Preflight ==="
+
+for develop_file in "$PROJECT_ROOT/.claude/commands/develop.md" "$PROJECT_ROOT/commands/octo-develop.md"; do
+    develop_name=$(basename "$develop_file")
+    if [[ -f "$develop_file" ]]; then
+        if grep -q 'helpers/check-providers.sh' "$develop_file"; then
+            pass "$develop_name checks provider availability before dispatch"
+        else
+            fail "$develop_name missing provider preflight" "Direct develop dispatch must run helpers/check-providers.sh before orchestrate.sh"
+        fi
+
+        if grep -q 'CLAUDE OCTOPUS ACTIVATED' "$develop_file"; then
+            pass "$develop_name displays workflow indicator before dispatch"
+        else
+            fail "$develop_name missing workflow indicator" "Direct develop dispatch must show the Octopus activation banner before orchestrate.sh"
+        fi
+    else
+        fail "$develop_name not found" "$develop_file missing"
+    fi
+done
 test_summary

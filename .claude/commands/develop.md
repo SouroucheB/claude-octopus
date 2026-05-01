@@ -29,7 +29,21 @@ aliases:
 
 When the user invokes this command (e.g., `/octo:develop <arguments>`):
 
-**Step 1 — Run orchestrate.sh via Bash tool:**
+**Step 1 — Run provider preflight via Bash tool:**
+
+```bash
+bash "${HOME}/.claude-octopus/plugin/scripts/helpers/check-providers.sh"
+```
+
+Use the actual preflight output to display the workflow indicator before dispatch:
+
+```text
+🐙 **CLAUDE OCTOPUS ACTIVATED** - Multi-provider implementation mode
+```
+
+List available providers, mark missing providers as `(unavailable - skipping)`, and use the compact single-line banner when `OCTOPUS_COMPACT_BANNERS=true`. If no external provider is available, stop and tell the user to run `/octo:setup`; do not fall back to Claude-native implementation.
+
+**Step 2 — Run orchestrate.sh via Bash tool:**
 
 ```bash
 bash "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" develop "<user's arguments here>"

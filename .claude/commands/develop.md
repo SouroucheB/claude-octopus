@@ -16,27 +16,22 @@ aliases:
 
 ### EXECUTION MECHANISM — NON-NEGOTIABLE
 
-**You MUST execute this command by invoking the corresponding skill via the Skill tool. You are PROHIBITED from:**
-- ❌ Using the Agent tool to research/implement yourself instead of invoking the skill
-- ❌ Using WebFetch/Read/Grep as a substitute for multi-provider dispatch
-- ❌ Skipping `orchestrate.sh` calls because "I can do this faster directly"
-- ❌ Implementing the task using only Claude-native tools (Agent, Write, Edit)
-
-**Multi-LLM orchestration is the purpose of this command.** If you execute using only Claude, you've violated the command's contract.
+**You MUST execute this command via the Bash tool calling `orchestrate.sh develop`. Do NOT use `Skill(skill: "octo:develop")` — it resolves back to this file causing an infinite loop.**
 
 ---
 
 When the user invokes this command (e.g., `/octo:develop <arguments>`):
 
-**✓ CORRECT - Use the Skill tool:**
-```
-Skill(skill: "octo:develop", args: "<user's arguments>")
+**Step 1 — Run orchestrate.sh via Bash tool:**
+```bash
+bash "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" develop "<user's arguments here>"
 ```
 
 **✗ INCORRECT:**
 ```
-Skill(skill: "flow-develop", ...)  ❌ Wrong! Internal skill name, not resolvable by Skill tool
-Task(subagent_type: "octo:develop", ...)  ❌ Wrong! This is a skill, not an agent type
+Skill(skill: "octo:develop", ...)  ❌ Resolves to this command file — infinite loop
+Skill(skill: "flow-develop", ...)  ❌ Internal name, not resolvable by Skill tool
+Task(subagent_type: "octo:develop", ...)  ❌ This is a skill, not an agent type
 ```
 
 ### Post-Completion — Interactive Next Steps

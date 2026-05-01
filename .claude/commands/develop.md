@@ -30,11 +30,13 @@ aliases:
 When the user invokes this command (e.g., `/octo:develop <arguments>`):
 
 **Step 1 — Run orchestrate.sh via Bash tool:**
+
 ```bash
 bash "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" develop "<user's arguments here>"
 ```
 
 **✗ INCORRECT:**
+
 ```text
 Skill(skill: "octo:develop", ...)  ❌ Resolves to this command file — infinite loop
 Skill(skill: "flow-develop", ...)  ❌ Internal name, not resolvable by Skill tool

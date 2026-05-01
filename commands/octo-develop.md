@@ -12,11 +12,12 @@ description: "\"Development phase - Build solutions with multi-AI implementation
 
 ### EXECUTION MECHANISM — NON-NEGOTIABLE
 
-**You MUST execute this command by invoking the corresponding skill via the Skill tool. You are PROHIBITED from:**
-- ❌ Using the Agent tool to research/implement yourself instead of invoking the skill
-- ❌ Using WebFetch/Read/Grep as a substitute for multi-provider dispatch
-- ❌ Skipping `orchestrate.sh` calls because "I can do this faster directly"
-- ❌ Implementing the task using only Claude-native tools (Agent, Write, Edit)
+**You MUST execute this command via the Bash tool calling `orchestrate.sh develop`. You are PROHIBITED from:**
+- Using `Skill(skill: "octo:develop")` because it resolves back to this file and loops
+- Using `Skill(skill: "flow-develop", ...)` because that internal name is not resolvable by the Skill tool
+- Using the Agent tool, WebFetch, Read, or Grep as a substitute for multi-provider dispatch
+- Skipping `orchestrate.sh` calls because "I can do this faster directly"
+- Implementing the task using only Claude-native tools
 
 **Multi-LLM orchestration is the purpose of this command.** If you execute using only Claude, you've violated the command's contract.
 
@@ -24,20 +25,21 @@ description: "\"Development phase - Build solutions with multi-AI implementation
 
 When the user invokes this command (e.g., `/octo:develop <arguments>`):
 
-**✓ CORRECT - Use the Skill tool:**
-```
-Skill(skill: "octo:develop", args: "<user's arguments>")
+**Step 1 — Run orchestrate.sh via Bash tool:**
+```bash
+bash "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" develop "<user's arguments here>"
 ```
 
 **✗ INCORRECT:**
-```
-Skill(skill: "flow-develop", ...)  ❌ Wrong! Internal skill name, not resolvable by Skill tool
-Task(subagent_type: "octo:develop", ...)  ❌ Wrong! This is a skill, not an agent type
+```text
+Skill(skill: "octo:develop", ...)  ❌ Resolves to this command file — infinite loop
+Skill(skill: "flow-develop", ...)  ❌ Internal name, not resolvable by Skill tool
+Task(subagent_type: "octo:develop", ...)  ❌ This is a skill, not an agent type
 ```
 
 ### Post-Completion — Interactive Next Steps
 
-**CRITICAL: After the skill completes, you MUST ask the user what to do next. Do NOT end the session silently.**
+**CRITICAL: After the workflow completes, you MUST ask the user what to do next. Do NOT end the session silently.**
 
 ```javascript
 AskUserQuestion({
@@ -60,7 +62,7 @@ AskUserQuestion({
 
 ---
 
-**Auto-loads the develop skill for the implementation phase.**
+**Dispatches to the develop workflow via `orchestrate.sh` for the implementation phase.**
 
 ## Quick Usage
 

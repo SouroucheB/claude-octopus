@@ -16,7 +16,14 @@ aliases:
 
 ### EXECUTION MECHANISM — NON-NEGOTIABLE
 
-**You MUST execute this command via the Bash tool calling `orchestrate.sh develop`. Do NOT use `Skill(skill: "octo:develop")` — it resolves back to this file causing an infinite loop.**
+**You MUST execute this command via the Bash tool calling `orchestrate.sh develop`. You are PROHIBITED from:**
+- Using `Skill(skill: "octo:develop")` because it resolves back to this file and loops
+- Using `Skill(skill: "flow-develop", ...)` because that internal name is not resolvable by the Skill tool
+- Using the Agent tool, WebFetch, Read, or Grep as a substitute for multi-provider dispatch
+- Skipping `orchestrate.sh` calls because "I can do this faster directly"
+- Implementing the task using only Claude-native tools
+
+**Multi-LLM orchestration is the purpose of this command.** If you execute using only Claude, you've violated the command's contract.
 
 ---
 
@@ -28,7 +35,7 @@ bash "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" develop "<user's ar
 ```
 
 **✗ INCORRECT:**
-```
+```text
 Skill(skill: "octo:develop", ...)  ❌ Resolves to this command file — infinite loop
 Skill(skill: "flow-develop", ...)  ❌ Internal name, not resolvable by Skill tool
 Task(subagent_type: "octo:develop", ...)  ❌ This is a skill, not an agent type
@@ -36,7 +43,7 @@ Task(subagent_type: "octo:develop", ...)  ❌ This is a skill, not an agent type
 
 ### Post-Completion — Interactive Next Steps
 
-**CRITICAL: After the skill completes, you MUST ask the user what to do next. Do NOT end the session silently.**
+**CRITICAL: After the workflow completes, you MUST ask the user what to do next. Do NOT end the session silently.**
 
 ```javascript
 AskUserQuestion({
@@ -59,7 +66,7 @@ AskUserQuestion({
 
 ---
 
-**Auto-loads the develop skill for the implementation phase.**
+**Dispatches to the develop workflow via `orchestrate.sh` for the implementation phase.**
 
 ## Quick Usage
 

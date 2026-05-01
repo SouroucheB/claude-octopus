@@ -26,9 +26,13 @@ This works for research, escalated code review, debugging, TDD, escalated securi
 ## Install
 
 ```bash
-claude plugin marketplace add https://github.com/nyldn/claude-octopus.git
+claude plugin marketplace add https://github.com/nyldn/plugins.git
 claude plugin install octo@nyldn-plugins
 ```
+
+The `nyldn-plugins` marketplace is shared with Image Agency at
+`https://github.com/nyldn/plugins.git`, so users can also install
+`img@nyldn-plugins` without adding a second nyldn marketplace.
 
 Then run `/octo:setup` — it detects your providers, shows what's available, and walks you through config. **Zero external providers required to start.** Claude is built in; add others one at a time.
 

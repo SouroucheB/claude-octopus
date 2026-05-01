@@ -312,8 +312,8 @@ check_marketplace_version() {
   # Extract version from plugin.json
   local plugin_version=$(grep '"version"' "$plugin_json" | head -n 1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 
-  # Extract version field from marketplace.json
-  local marketplace_version=$(grep '"version"' "$marketplace_json" | tail -n 1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+  # Extract the octo plugin version, not marketplace metadata or sibling plugins.
+  local marketplace_version=$(jq -r '.plugins[] | select(.name == "octo") | .version // empty' "$marketplace_json")
 
   # Check if versions match
   if [ "$plugin_version" = "$marketplace_version" ]; then

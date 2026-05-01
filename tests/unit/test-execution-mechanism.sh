@@ -111,16 +111,29 @@ echo "=== Develop Direct Dispatch Preserves Preflight ==="
 for develop_file in "$PROJECT_ROOT/.claude/commands/develop.md" "$PROJECT_ROOT/commands/octo-develop.md"; do
     develop_name=$(basename "$develop_file")
     if [[ -f "$develop_file" ]]; then
-        if grep -q 'helpers/check-providers.sh' "$develop_file"; then
+        preflight_line=$(grep -n 'helpers/check-providers.sh' "$develop_file" | head -1 | cut -d: -f1 || true)
+        banner_line=$(grep -n 'CLAUDE OCTOPUS ACTIVATED' "$develop_file" | head -1 | cut -d: -f1 || true)
+        dispatch_line=$(grep -n 'orchestrate.sh" develop' "$develop_file" | head -1 | cut -d: -f1 || true)
+
+        if [[ -n "$preflight_line" && -n "$dispatch_line" && "$preflight_line" -lt "$dispatch_line" ]]; then
             pass "$develop_name checks provider availability before dispatch"
         else
             fail "$develop_name missing provider preflight" "Direct develop dispatch must run helpers/check-providers.sh before orchestrate.sh"
         fi
 
-        if grep -q 'CLAUDE OCTOPUS ACTIVATED' "$develop_file"; then
+        if [[ -n "$banner_line" && -n "$dispatch_line" && "$banner_line" -lt "$dispatch_line" ]]; then
             pass "$develop_name displays workflow indicator before dispatch"
         else
             fail "$develop_name missing workflow indicator" "Direct develop dispatch must show the Octopus activation banner before orchestrate.sh"
+        fi
+
+        if grep -q 'OCTOPUS_EFFORT_OVERRIDE' "$develop_file" \
+           && grep -q 'OCTOPUS_OPUS_MODE' "$develop_file" \
+           && grep -q 'Fast Opus 4.6 mode is 6x more expensive' "$develop_file" \
+           && grep -q 'project memory' "$develop_file"; then
+            pass "$develop_name documents model effort and memory policy"
+        else
+            fail "$develop_name missing model effort policy" "Develop command must document effort overrides, Fast Opus cost, and memory recording policy"
         fi
     else
         fail "$develop_name not found" "$develop_file missing"

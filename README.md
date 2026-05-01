@@ -50,7 +50,6 @@ Every AI model has blind spots. Claude Octopus puts up to eight of them on every
 claude plugin marketplace add https://github.com/nyldn/plugins.git
 claude plugin install octo@nyldn-plugins
 
-
 # Then inside Claude Code:
 /octo:setup
 ```
@@ -165,7 +164,6 @@ rm -rf ~/.claude/plugins/cache/nyldn-plugins/octo
 claude plugin marketplace remove nyldn-plugins
 claude plugin marketplace add https://github.com/nyldn/plugins.git
 claude plugin install octo@nyldn-plugins
-claude plugin install img@nyldn-plugins # optional, same shared marketplace
 ```
 </details>
 

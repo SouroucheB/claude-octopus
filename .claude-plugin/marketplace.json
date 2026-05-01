@@ -1,17 +1,21 @@
 {
   "name": "nyldn-plugins",
   "owner": {
-    "name": "nyldn"
+    "name": "nyldn",
+    "url": "https://github.com/nyldn"
   },
   "metadata": {
-    "description": "Multi-tentacled orchestration plugin for Claude Code",
-    "version": "9.30.0"
+    "description": "nyldn plugins for Claude Code workflows.",
+    "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "octo",
-      "source": "./",
-      "description": "v9.30.0 - Multi-LLM orchestration for Claude Code. Route tasks to Codex, Gemini, Perplexity, Copilot, Qwen, Ollama, OpenCode. 137 CC feature flags, token compression (~7K/session saved), interactive setup wizard. 32 personas, 48 commands, 52 skills. Run /octo:setup.",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/nyldn/claude-octopus.git"
+      },
+      "description": "v9.30.0 - Multi-LLM orchestration for Claude Code. Route tasks to Codex, Gemini, Perplexity, Copilot, Qwen, Ollama, and OpenCode. 32 personas, 48 commands, 52 skills. Run /octo:setup.",
       "version": "9.30.0",
       "author": {
         "name": "nyldn",
@@ -25,14 +29,36 @@
         "multi-agent",
         "orchestration",
         "claude-code-plugin",
-        "double-diamond",
         "codex",
         "gemini",
-        "copilot",
         "code-review",
         "automation"
       ],
       "category": "orchestration"
+    },
+    {
+      "name": "img",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/nyldn/img.git"
+      },
+      "description": "Generate and edit images with OpenAI GPT Image 2 and Gemini 3.1 Flash Image Preview.",
+      "version": "0.1.0",
+      "author": {
+        "name": "nyldn",
+        "url": "https://github.com/nyldn"
+      },
+      "repository": "https://github.com/nyldn/img",
+      "homepage": "https://github.com/nyldn/img",
+      "license": "MIT",
+      "keywords": [
+        "image-generation",
+        "gpt-image-2",
+        "gemini-3.1-flash-image-preview",
+        "claude-code-plugin",
+        "codex"
+      ],
+      "category": "creative"
     }
   ]
 }

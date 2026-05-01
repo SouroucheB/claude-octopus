@@ -47,12 +47,17 @@ Every AI model has blind spots. Claude Octopus puts up to eight of them on every
 
 ```bash
 # Terminal (not inside a Claude Code session):
-claude plugin marketplace add https://github.com/nyldn/claude-octopus.git
+claude plugin marketplace add https://github.com/nyldn/plugins.git
 claude plugin install octo@nyldn-plugins
+claude plugin install img@nyldn-plugins # optional, same shared marketplace
 
 # Then inside Claude Code:
 /octo:setup
 ```
+
+`nyldn-plugins` is a shared marketplace catalog at
+`https://github.com/nyldn/plugins.git`, and it also makes
+`img@nyldn-plugins` available.
 
 That's it. Setup detects installed providers, shows what's missing, and walks you through configuration. You need **zero** external providers to start — Claude is built in.
 
@@ -154,16 +159,17 @@ droid plugin install octo@nyldn-plugins
 
 ```bash
 # Update
-claude plugin marketplace update https://github.com/nyldn/claude-octopus.git
-claude plugin update octo
+claude plugin marketplace update nyldn-plugins
+claude plugin update octo@nyldn-plugins
 
 # Clean reinstall (if update fails)
 claude plugin uninstall claude-octopus 2>/dev/null
 claude plugin uninstall octo 2>/dev/null
-rm -rf ~/.claude/plugins/cache/nyldn-plugins/claude-octopus
-claude plugin marketplace remove https://github.com/nyldn/claude-octopus.git
-claude plugin marketplace add https://github.com/nyldn/claude-octopus.git
+rm -rf ~/.claude/plugins/cache/nyldn-plugins/octo
+claude plugin marketplace remove nyldn-plugins
+claude plugin marketplace add https://github.com/nyldn/plugins.git
 claude plugin install octo@nyldn-plugins
+claude plugin install img@nyldn-plugins # optional, same shared marketplace
 ```
 </details>
 

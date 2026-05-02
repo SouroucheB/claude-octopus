@@ -222,8 +222,33 @@ ${provider_ctx}"
     local _dispatch_start _dispatch_cwd
     _dispatch_start=$(date +%s)
     _dispatch_cwd=$(pwd)
+
+    # Quota fast-fail watcher for Gemini (mirrors spawn.sh) — Gemini CLI retries
+    # internally for hours on QUOTA_EXHAUSTED instead of exiting; kill early.
+    local _quota_watcher_pid=""
+    if [[ "$agent_type" == gemini* ]]; then
+        local _sync_pid=$BASHPID
+        > "$temp_err"
+        (
+            local _n=0
+            while [[ $((_n++)) -lt 150 ]]; do
+                sleep 2
+                if grep -cE "QUOTA_EXHAUSTED|TerminalQuotaError|exhausted your capacity" "$temp_err" >/dev/null 2>&1; then
+                    log "WARN" "[$agent_type] Quota exhaustion detected in sync agent — fast-failing"
+                    pkill -TERM -P "$_sync_pid" 2>/dev/null || true
+                    sleep 1
+                    pkill -KILL -P "$_sync_pid" 2>/dev/null || true
+                    break
+                fi
+            done
+        ) &
+        _quota_watcher_pid=$!
+    fi
+
     output=$(printf '%s' "$enhanced_prompt" | run_with_timeout "$timeout_secs" "${cmd_array[@]}" 2>"$temp_err")
     exit_code=$?
+
+    [[ -n "$_quota_watcher_pid" ]] && { kill "$_quota_watcher_pid" 2>/dev/null; wait "$_quota_watcher_pid" 2>/dev/null || true; }
 
     # Tail-bias: the deliverable summary lives at the end of codex-style output.
     local _max_bytes="${OCTOPUS_AGENT_MAX_OUTPUT_BYTES:-262144}"

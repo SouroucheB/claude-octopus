@@ -49,21 +49,15 @@ build_provider_env() {
     # v9.2.1: Try resolving env vars before building isolated env (Issue #177)
     case "$provider" in
         codex*)
-            if [[ -z "${OPENAI_API_KEY:-}" ]]; then
-                resolve_provider_env "OPENAI_API_KEY" 2>/dev/null || true
-            fi
+            [[ -z "${OPENAI_API_KEY:-}" ]] && resolve_provider_env "OPENAI_API_KEY" 2>/dev/null || true
             PROVIDER_ENV_ARRAY=(env -i "PATH=$PATH" "HOME=$HOME" "OPENAI_API_KEY=${OPENAI_API_KEY:-}" "TMPDIR=${TMPDIR:-/tmp}")
             if [[ ${#_trace_env[@]} -gt 0 ]]; then
                 PROVIDER_ENV_ARRAY+=("${_trace_env[@]}")
             fi
             ;;
         gemini*)
-            if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-                resolve_provider_env "GEMINI_API_KEY" 2>/dev/null || true
-            fi
-            if [[ -z "${GOOGLE_API_KEY:-}" ]]; then
-                resolve_provider_env "GOOGLE_API_KEY" 2>/dev/null || true
-            fi
+            [[ -z "${GEMINI_API_KEY:-}" ]] && resolve_provider_env "GEMINI_API_KEY" 2>/dev/null || true
+            [[ -z "${GOOGLE_API_KEY:-}" ]] && resolve_provider_env "GOOGLE_API_KEY" 2>/dev/null || true
             PROVIDER_ENV_ARRAY=(env -i "PATH=$PATH" "HOME=$HOME" "GEMINI_API_KEY=${GEMINI_API_KEY:-}" "GOOGLE_API_KEY=${GOOGLE_API_KEY:-}" "NODE_NO_WARNINGS=1" "TMPDIR=${TMPDIR:-/tmp}")
             if [[ ${#_trace_env[@]} -gt 0 ]]; then
                 PROVIDER_ENV_ARRAY+=("${_trace_env[@]}")
@@ -71,16 +65,12 @@ build_provider_env() {
             ;;
         perplexity*)
             # perplexity_execute is a shell function — env -i cannot exec it (#300)
-            if [[ -z "${PERPLEXITY_API_KEY:-}" ]]; then
-                resolve_provider_env "PERPLEXITY_API_KEY" 2>/dev/null || true
-            fi
+            [[ -z "${PERPLEXITY_API_KEY:-}" ]] && resolve_provider_env "PERPLEXITY_API_KEY" 2>/dev/null || true
             return 0
             ;;
         openrouter*)
             # openrouter_execute is a shell function — env -i cannot exec it (#300)
-            if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-                resolve_provider_env "OPENROUTER_API_KEY" 2>/dev/null || true
-            fi
+            [[ -z "${OPENROUTER_API_KEY:-}" ]] && resolve_provider_env "OPENROUTER_API_KEY" 2>/dev/null || true
             return 0
             ;;
         *)

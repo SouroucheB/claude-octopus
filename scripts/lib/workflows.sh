@@ -804,6 +804,7 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
     log INFO "Step 2: Parallel execution..."
     local subtask_num=0
     local pids=()
+    local task_ids=()
 
     fleet_dispatch_begin
     while IFS= read -r line; do
@@ -835,25 +836,54 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
             pid=$(spawn_agent_capture_pid "$agent" "$subtask" "$task_id" "$role" "tangle")
             pids+=("$pid")
         fi
+        task_ids+=("$task_id")
         ((subtask_num++)) || true
     done <<< "$subtasks"
     fleet_dispatch_end
 
     log INFO "Spawned $subtask_num development threads"
 
-    # Wait with progress monitoring
+    # Wait with progress monitoring — poll .done marker files written by spawn_agent
+    # rather than kill -0 $pid (which tracks wrapper PID, not provider PID)
+    local _done_dir="${WORKSPACE_DIR}/.octo/agents"
+    local _deadline=$(( $(date +%s) + 600 ))
     local completed=0
-    while [[ $completed -lt ${#pids[@]} ]]; do
+    local _failed_tasks=()
+    while [[ $completed -lt ${#task_ids[@]} ]]; do
         completed=0
-        for pid in "${pids[@]}"; do
-            if ! kill -0 "$pid" 2>/dev/null; then
+        for i in "${!task_ids[@]}"; do
+            local _done_file="${_done_dir}/${task_ids[$i]}.done"
+            if [[ -f "$_done_file" ]]; then
                 ((completed++)) || true
+            elif (( $(date +%s) > _deadline )); then
+                log WARN "Thread ${task_ids[$i]} deadline exceeded — killing and marking timeout"
+                # Kill wrapper PID if still alive (best-effort)
+                local _wrapper_pid="${pids[$i]:-}"
+                [[ -n "$_wrapper_pid" ]] && kill "$_wrapper_pid" 2>/dev/null || true
+                echo "timeout" > "$_done_file" 2>/dev/null || true
             fi
         done
-        echo -ne "\r${CYAN}Progress: $completed/${#pids[@]} subtasks complete${NC}"
+        echo -ne "\r${CYAN}Progress: $completed/${#task_ids[@]} subtasks complete${NC}"
         sleep 2
     done
     echo ""
+
+    # Report any failed subtasks
+    for i in "${!task_ids[@]}"; do
+        local _done_file="${_done_dir}/${task_ids[$i]}.done"
+        local _exit_val
+        _exit_val=$(cat "$_done_file" 2>/dev/null || echo "unknown")
+        if [[ "$_exit_val" != "0" ]]; then
+            log WARN "Subtask ${task_ids[$i]} finished with status: $_exit_val"
+            _failed_tasks+=("${task_ids[$i]}")
+        fi
+    done
+    [[ ${#_failed_tasks[@]} -gt 0 ]] && log WARN "${#_failed_tasks[@]}/${#task_ids[@]} subtasks failed: ${_failed_tasks[*]}"
+
+    # Cleanup done markers
+    for i in "${!task_ids[@]}"; do
+        rm -f "${_done_dir}/${task_ids[$i]}.done" 2>/dev/null || true
+    done
 
     # Cleanup tmux if enabled
     if [[ "$TMUX_MODE" == "true" ]]; then

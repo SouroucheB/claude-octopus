@@ -22,6 +22,12 @@ printf "copilot:%s\n" "$(command -v copilot >/dev/null 2>&1 && echo installed ||
 printf "qwen:%s\n" "$(command -v qwen >/dev/null 2>&1 && echo installed || echo missing)"
 printf "ollama:%s\n" "$(command -v ollama >/dev/null 2>&1 && curl -sf http://localhost:11434/api/tags >/dev/null 2>&1 && echo running || command -v ollama >/dev/null 2>&1 && echo installed || echo missing)"
 printf "opencode:%s\n" "$(command -v opencode >/dev/null 2>&1 && echo installed || echo missing)"
+printf "remote_session:%s\n" "$([[ "${CLAUDE_CODE_REMOTE:-}" == "true" || "${OCTOPUS_REMOTE_SESSION:-}" == "true" ]] && echo true || echo false)"
+printf "octo_tier:%s\n" "${OCTO_TIER:-unset}"
+echo "=== Companions ==="
+printf "graphify:%s\n" "$(command -v graphify >/dev/null 2>&1 && echo installed || echo missing)"
+GRAPHIFY_OUT_DIR="${GRAPHIFY_OUT:-graphify-out}"
+printf "graphify_graph:%s\n" "$([ -f "${GRAPHIFY_OUT_DIR}/graph.json" ] && [ -f "${GRAPHIFY_OUT_DIR}/GRAPH_REPORT.md" ] && echo available || echo missing)"
 echo "=== Token Optimization ==="
 printf "rtk:%s\n" "$(command -v rtk >/dev/null 2>&1 && echo "installed $(rtk --version 2>&1 | head -1)" || echo missing)"
 printf "rtk_hook:%s\n" "$(grep -q 'rtk' "${HOME}/.claude/settings.json" 2>/dev/null && echo active || echo missing)"
@@ -50,6 +56,13 @@ Providers:
 
 Token Optimization:
   RTK:              [Installed + Hook active ✓ / Installed ✓ / Missing ✗]
+
+Companions:
+  Graphify:         [CLI installed ✓ / Missing] [Graph available ✓ / Missing]
+
+Session:
+  Remote/Web:       [Yes / No]
+  Project tier:     [unset / prototype / mvp / production]
 ```
 
 ## STEP 3: Interactive Menu (ALWAYS show this)
@@ -66,8 +79,10 @@ AskUserQuestion({
       {label: "Add or configure a provider", description: "Install Codex, Gemini, Perplexity, Copilot, Qwen, or OpenCode"},
       {label: "Configure models", description: "Set which models are used for each workflow phase → launches /octo:model-config"},
       {label: "Set up token optimization (RTK)", description: "Install RTK for 60-90% token savings on bash output"},
+      {label: "Set up Graphify companion", description: "Detect or install Graphify for optional knowledge-graph context"},
       {label: "Change work mode", description: "Switch between Dev mode and Knowledge Work mode"},
-      {label: "Fine-tune preferences", description: "Banner verbosity, telemetry, cost mode"},
+      {label: "Set project tier", description: "Set OCTO_TIER=prototype|mvp|production as a routing hint"},
+      {label: "Fine-tune preferences", description: "Auto-routing, banner verbosity, telemetry, cost mode"},
       {label: "Troubleshoot an issue", description: "Diagnose a problem → launches /octo:doctor"}
     ]
   }]
@@ -78,7 +93,44 @@ Then route to the appropriate section below.
 
 **If providers are NOT yet configured or this is a first run**, also proceed with the full setup flow below after showing the menu.
 
+## Remote/Web Session Defaults
+
+If `remote_session:true` appears in the detection output, assume the user is in a Claude Code web/remote session. Do not launch interactive provider logins from this command. Explain that Octopus will default to autonomous mode, skip provider probe calls, and use the lightweight statusline unless overridden with:
+
+```bash
+export OCTOPUS_REMOTE_STATUSLINE=full   # enable full local HUD behavior
+export OCTOPUS_REMOTE_STATUSLINE=off    # suppress statusline output
+```
+
+## Project Tier Hint
+
+`OCTO_TIER` is a recommendation hint, not a hard policy:
+
+| Tier | Recommended behavior |
+|------|----------------------|
+| `prototype` | Prefer speed, light review, lower provider spend |
+| `mvp` | Balanced checks, normal review, consensus on risky changes |
+| `production` | Full verification, security review, stronger consensus before merge/release |
+
+If unset, offer to add `export OCTO_TIER=<tier>` to the user's shell profile or project-local environment.
+
 ---
+
+## Graphify Companion
+
+Graphify is optional and is not a provider. If `graphify-out/GRAPH_REPORT.md` already exists, Octopus uses it as a compact architecture map for escalated workflows such as `/octo:review`; it does not build or refresh graphs automatically.
+
+Setup options:
+
+```bash
+uv tool install graphifyy
+graphify extract .
+graphify claude install
+graphify codex install
+graphify hook install
+```
+
+Use `OCTOPUS_GRAPHIFY=0` to disable passive Graphify context injection.
 
 ## Dependency Check
 
@@ -301,7 +353,7 @@ AskUserQuestion({
     header: "Fine-tune",
     multiSelect: false,
     options: [
-      {label: "Yes, let's configure it", description: "Set work mode, verbosity, and telemetry preferences"},
+      {label: "Yes, let's configure it", description: "Set work mode, auto-routing, verbosity, and telemetry preferences"},
       {label: "Skip for now", description: "Use defaults — you can run /octo:setup anytime to change these"}
     ]
   }]
@@ -320,6 +372,16 @@ AskUserQuestion({
       options: [
         {label: "Software development", description: "Dev mode — optimized for building features, debugging, code review"},
         {label: "Research & analysis", description: "Knowledge Work mode — optimized for research, reports, strategy work"}
+      ]
+    },
+    {
+      question: "How should Octopus handle strong plain-language intents like 'review this PR' or 'should we use X or Y'?",
+      header: "Auto-route",
+      multiSelect: false,
+      options: [
+        {label: "Auto-invoke strong matches (default)", description: "High-confidence prompts route directly to the matching /octo workflow"},
+        {label: "Suggest only", description: "Show the detected workflow but let Claude continue unless you choose it"},
+        {label: "Off", description: "Disable plain-language routing; explicit /octo:* commands still work"}
       ]
     },
     {
@@ -348,6 +410,9 @@ AskUserQuestion({
 
 - Work mode "Software development" → run `/octo:dev` or note that Dev mode is the default
 - Work mode "Research & analysis" → run `/octo:km on`
+- Auto-route "Auto-invoke strong matches" → write `{"auto_router_mode":"invoke"}` to `~/.claude-octopus/preferences.json`
+- Auto-route "Suggest only" → write `{"auto_router_mode":"suggest"}` to `~/.claude-octopus/preferences.json`
+- Auto-route "Off" → write `{"auto_router_mode":"off"}` to `~/.claude-octopus/preferences.json`
 - Compact banners selected → write `OCTOPUS_COMPACT_BANNERS=true` to shell profile and inform user to restart terminal (or add to `~/.zshrc`)
 - Telemetry opt-out selected → write `OCTOPUS_TELEMETRY_OPT_OUT=1` to shell profile and inform user
 

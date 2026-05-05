@@ -42,13 +42,118 @@ parse_review_md() {
     log DEBUG "parse_review_md: always=$(echo "$REVIEW_ALWAYS_CHECK" | wc -l) style=$(echo "$REVIEW_STYLE_RULES" | wc -l) skip=$(echo "$REVIEW_SKIP_PATTERNS" | wc -l)"
 }
 
-# build_review_fleet: builds active agent list based on available providers
-# WHY: fleet is dynamic — if Perplexity is not configured, fall back to
-# Gemini search; if Codex is unavailable, fall back to claude-sonnet.
+# _review_fleet_from_config (v9.31.0): build fleet from routing.features.review
+# in providers.json. /octo:model-config wizard already writes a "Review providers"
+# array to this path; before this change there was no consumer, so the wizard's
+# selection had no effect. Returns empty when config absent/empty so callers fall
+# back to the cascade.
+# Output: agent_type:role:specialty triples, newline-separated.
+_review_fleet_from_config() {
+    local config_file="${HOME}/.claude-octopus/config/providers.json"
+    [[ ! -f "$config_file" ]] && return 0
+    command -v jq >/dev/null 2>&1 || return 0
+
+    local participants
+    participants=$(jq -r '
+        (.routing.features.review // [])
+        | if type == "array" then .[] else empty end
+    ' "$config_file" 2>/dev/null)
+    [[ -z "$participants" ]] && return 0
+
+    local fleet=""
+    local has_logic=false has_security=false has_arch=false has_cve=false has_diversity=false
+
+    while IFS= read -r provider; do
+        [[ -z "$provider" ]] && continue
+        case "$provider" in
+            codex|codex-*)
+                if [[ "$has_logic" == "false" ]]; then
+                    fleet+="${provider}:logic-reviewer:correctness and logic bugs, edge cases, regressions"$'\n'
+                    has_logic=true
+                fi
+                ;;
+            opencode|opencode-*)
+                if [[ "$has_logic" == "false" ]]; then
+                    fleet+="${provider}:logic-reviewer:correctness and logic bugs, edge cases, regressions"$'\n'
+                    has_logic=true
+                fi
+                ;;
+            gemini|gemini-*)
+                if [[ "$has_security" == "false" ]]; then
+                    fleet+="${provider}:security-reviewer:OWASP vulnerabilities, injection, auth flaws, data exposure"$'\n'
+                    has_security=true
+                fi
+                ;;
+            claude|claude-sonnet|claude-opus)
+                if [[ "$has_arch" == "false" ]]; then
+                    local agent="${provider}"
+                    [[ "$provider" == "claude" ]] && agent="claude-sonnet"
+                    fleet+="${agent}:arch-reviewer:architecture, integration, API contracts, breaking changes"$'\n'
+                    has_arch=true
+                fi
+                ;;
+            perplexity|perplexity-*)
+                if [[ "$has_cve" == "false" ]]; then
+                    fleet+="${provider}:cve-reviewer:known CVEs, library advisories, live web search"$'\n'
+                    has_cve=true
+                fi
+                ;;
+            openrouter|openrouter-*)
+                if [[ "$has_diversity" == "false" ]]; then
+                    fleet+="${provider}:diversity-reviewer:cross-family perspective on logic, missed assumptions, training-data divergence from primary providers"$'\n'
+                    has_diversity=true
+                fi
+                ;;
+            qwen|qwen-*)
+                if [[ "$has_security" == "false" ]]; then
+                    fleet+="${provider}:security-reviewer:OWASP vulnerabilities, injection, auth flaws, data exposure"$'\n'
+                    has_security=true
+                elif [[ "$has_diversity" == "false" ]]; then
+                    fleet+="${provider}:diversity-reviewer:cross-family perspective on logic and assumptions"$'\n'
+                    has_diversity=true
+                fi
+                ;;
+            copilot|copilot-*)
+                if [[ "$has_cve" == "false" ]]; then
+                    fleet+="${provider}:cve-reviewer:known CVEs via web search, library advisories"$'\n'
+                    has_cve=true
+                elif [[ "$has_diversity" == "false" ]]; then
+                    fleet+="${provider}:diversity-reviewer:cross-perspective review"$'\n'
+                    has_diversity=true
+                fi
+                ;;
+        esac
+    done <<< "$participants"
+
+    [[ -z "$fleet" ]] && return 0
+
+    # Anchor: always include arch-reviewer (claude-sonnet) if config didn't supply one.
+    # Architecture context bridges per-finding noise from the specialist agents.
+    if [[ "$has_arch" == "false" ]]; then
+        fleet+="claude-sonnet:arch-reviewer:architecture, integration, API contracts, breaking changes"$'\n'
+    fi
+
+    log INFO "review fleet: config-driven (.routing.features.review)"
+    echo "$fleet"
+}
+
+# build_review_fleet: builds active agent list. Config-driven if
+# .routing.features.review is set in ~/.claude-octopus/config/providers.json
+# (the path /octo:model-config writes to); otherwise falls back to the original
+# command -v cascade so existing installations are unchanged.
 # Returns a newline-separated list of "agent_type:role:specialty" triples.
 # NOTE: Uses command -v for provider detection — safe with set -euo pipefail.
 build_review_fleet() {
     local fleet=""
+
+    # v9.31.0: honor wizard-configured participants if present
+    fleet=$(_review_fleet_from_config)
+    if [[ -n "$fleet" ]]; then
+        echo "$fleet"
+        return 0
+    fi
+
+    # ── Cascade fallback (original behavior — no config or empty config) ──
 
     # logic-reviewer: Codex (OpenAI) → OpenCode → Copilot → claude-sonnet fallback
     if command -v codex >/dev/null 2>&1; then
@@ -198,13 +303,18 @@ review_run() {
     local profile_json="${1:-"{}"}"
 
     # Parse profile fields (with defaults)
-    local target focus provenance autonomy publish debate
+    local target focus provenance autonomy publish debate history
     target=$(echo "$profile_json"     | jq -r '.target     // "staged"')
     focus=$(echo "$profile_json"      | jq -r '.focus      // ["correctness","security","architecture","tdd"]  | join(",")')
     provenance=$(echo "$profile_json" | jq -r '.provenance // "unknown"')
     autonomy=$(echo "$profile_json"   | jq -r '.autonomy   // "supervised"')
     publish=$(echo "$profile_json"    | jq -r '.publish    // "ask"')
     debate=$(echo "$profile_json"     | jq -r '.debate     // "auto"')
+    history=$(echo "$profile_json"    | jq -r '.history    // "auto"')
+    if [[ "$target" == "fresh" ]]; then
+        target="working-tree"
+        history="fresh"
+    fi
 
     # v9.0: Provider status tracking for post-run report card
     local provider_status_file
@@ -228,13 +338,27 @@ review_run() {
     local findings_file="$results_dir/review-findings-${timestamp}.json"
     mkdir -p "$results_dir"
 
-    log INFO "review_run: target=$target focus=$focus provenance=$provenance autonomy=$autonomy"
+    local proof_dir=""
+    if declare -F octo_proof_init >/dev/null 2>&1 && octo_proof_enabled; then
+        proof_dir=$(octo_proof_init "review" "target=${target} focus=${focus}" "$profile_json" 2>/dev/null || true)
+    fi
+
+    log INFO "review_run: target=$target focus=$focus provenance=$provenance autonomy=$autonomy history=$history"
 
     # ── REVIEW.md ────────────────────────────────────────────────────────────
     parse_review_md
     local review_context=""
     if [[ -n "$REVIEW_ALWAYS_CHECK" || -n "$REVIEW_STYLE_RULES" ]]; then
         review_context="Repository review rules (from REVIEW.md):\nAlways check:\n${REVIEW_ALWAYS_CHECK}\nStyle:\n${REVIEW_STYLE_RULES}"
+    fi
+
+    # Graphify companion context is passive: use an existing graph report when
+    # present, but never build or refresh a graph from /octo:review itself.
+    local graphify_context=""
+    if declare -F octo_graphify_context_for_prompt >/dev/null 2>&1; then
+        local graphify_root
+        graphify_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+        graphify_context=$(octo_graphify_context_for_prompt "$graphify_root" 12000 2>/dev/null || true)
     fi
 
     # ── Collect diff ─────────────────────────────────────────────────────────
@@ -249,6 +373,14 @@ review_run() {
     if [[ -z "$diff_content" ]]; then
         log WARN "review_run: no diff found for target=$target"
         echo '{"findings":[],"message":"No changes found to review"}' > "$findings_file"
+        if [[ -n "$proof_dir" ]]; then
+            octo_proof_artifact "$proof_dir" "review-findings" "$findings_file" "no changes found"
+            octo_proof_claim "$proof_dir" "No changes found to review" "verified" "$findings_file"
+            octo_proof_capture_provider_status "$proof_dir" "$provider_status_file"
+            octo_proof_finalize "$proof_dir" "no_changes" "No changes found to review."
+            echo "Proof packet: $proof_dir"
+        fi
+        rm -f "$provider_status_file"
         render_terminal_report "$findings_file"
         return 0
     fi
@@ -259,6 +391,43 @@ review_run() {
             [[ -z "$pattern" ]] && continue
             diff_content=$(echo "$diff_content" | grep -v "$pattern" || true)
         done <<< "$REVIEW_SKIP_PATTERNS"
+    fi
+
+    # ── Round-aware PR review state (#322) ───────────────────────────────────
+    # OCTOPUS_PR_HISTORY=0 disables all local history read/write.
+    local review_pr_number="" review_repo="" review_host="github.com" review_head_sha=""
+    local review_state_file="" review_previous_findings="[]" review_history_context="" review_timeline=""
+    if declare -F pr_review_state_enabled >/dev/null 2>&1 && pr_review_state_enabled; then
+        if [[ "$target" =~ ^[0-9]+$ ]]; then
+            review_pr_number="$target"
+            review_head_sha=$(gh pr view "$target" --json headRefOid -q .headRefOid 2>/dev/null || true)
+        else
+            review_pr_number=$(gh pr view --json number -q .number 2>/dev/null || true)
+            review_head_sha=$(gh pr view --json headRefOid -q .headRefOid 2>/dev/null || true)
+        fi
+        [[ -z "$review_head_sha" ]] && review_head_sha=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+
+        if [[ -n "$review_pr_number" ]]; then
+            local repo_json
+            repo_json=$(gh repo view --json nameWithOwner,url 2>/dev/null || echo '{}')
+            review_repo=$(echo "$repo_json" | jq -r '.nameWithOwner // empty')
+            review_host=$(echo "$repo_json" | jq -r '(.url // "") | sub("^https?://";"") | split("/")[0] // "github.com"')
+            [[ -z "$review_host" || "$review_host" == "null" ]] && review_host="github.com"
+
+            if [[ -n "$review_repo" ]]; then
+                review_state_file=$(pr_review_state_path "$review_host" "$review_repo" "$review_pr_number")
+                if [[ "$history" != "fresh" ]] && pr_review_state_validate "$review_state_file"; then
+                    local previous_round previous_head since_last_round_diff
+                    previous_round=$(pr_review_state_previous_round "$review_state_file" 2>/dev/null || true)
+                    previous_head=$(echo "$previous_round" | jq -r '.head_sha // empty' 2>/dev/null || true)
+                    review_previous_findings=$(echo "$previous_round" | jq -c '.findings // []' 2>/dev/null || echo "[]")
+                    if [[ -n "$previous_head" && "$previous_head" != "unknown" ]]; then
+                        since_last_round_diff=$(pr_review_state_diff_since "$previous_head" "$review_head_sha" 2>/dev/null || true)
+                    fi
+                    review_history_context=$(pr_review_state_context_for_prompt "$review_state_file" "$since_last_round_diff" 12000)
+                fi
+            fi
+        fi
     fi
 
     # ── Scale timeout by diff size (#303) ───────────────────────────────────
@@ -274,10 +443,27 @@ review_run() {
     fi
     export TIMEOUT="$review_timeout"
 
+    if [[ -n "$proof_dir" ]]; then
+        octo_proof_event "$proof_dir" "review_scope" "$(jq -n \
+            --arg target "$target" \
+            --arg focus "$focus" \
+            --arg provenance "$provenance" \
+            --arg autonomy "$autonomy" \
+            --arg publish "$publish" \
+            --arg debate "$debate" \
+            --arg history "$history" \
+            --argjson diff_lines "$diff_lines" \
+            '{target:$target, focus:$focus, provenance:$provenance, autonomy:$autonomy, publish:$publish, debate:$debate, history:$history, diff_lines:$diff_lines}')"
+    fi
+
     # ── ROUND 1: Parallel agent fleet ────────────────────────────────────────
     log INFO "review_run: Round 1 — parallel specialist fleet (timeout=${review_timeout}s, diff=${diff_lines} lines)"
     local fleet
     fleet=$(build_review_fleet)
+
+    if [[ -n "$proof_dir" ]]; then
+        octo_proof_event "$proof_dir" "provider_fleet" "$(printf '%s\n' "$fleet" | jq -R -s 'split("\n")[:-1]')"
+    fi
 
     local agent_prompt_base
     agent_prompt_base="You are a code reviewer. Review the following diff and return ONLY a JSON object with a 'findings' array.
@@ -290,6 +476,8 @@ Severity guide:
 - pre-existing: bug not introduced by this PR (purple)
 
 ${review_context}
+${review_history_context}
+${graphify_context}
 
 Focus areas for this review: ${focus}
 Provenance: ${provenance}
@@ -383,6 +571,13 @@ ${agent_prompt_base}"
     if [[ $_r1_failed -ge $_r1_total ]] && [[ $_r1_total -gt 0 ]]; then
         log ERROR "review_run: ALL Round 1 providers failed ($_r1_failed/$_r1_total). Review output is unreliable."
         echo "{\"findings\":[],\"warning\":\"All $_r1_total review providers failed. No code was actually reviewed. Run /octo:doctor to diagnose provider issues.\"}" > "$findings_file"
+        if [[ -n "$proof_dir" ]]; then
+            octo_proof_artifact "$proof_dir" "review-findings" "$findings_file" "all providers failed"
+            octo_proof_claim "$proof_dir" "Code was reviewed by at least one provider" "contradicted" "$findings_file"
+            octo_proof_capture_provider_status "$proof_dir" "$provider_status_file"
+            octo_proof_finalize "$proof_dir" "fail" "All ${_r1_total} Round 1 review providers failed."
+            echo "Proof packet: $proof_dir"
+        fi
         render_terminal_report "$findings_file"
         print_provider_report "$provider_status_file"
         return 1
@@ -485,6 +680,26 @@ Return ONLY JSON: {\"findings\": [...ranked, deduplicated findings...]}"
     echo "$final_json" > "$findings_file"
     log INFO "review_run: findings saved to $findings_file"
 
+    if [[ -n "$proof_dir" ]]; then
+        octo_proof_artifact "$proof_dir" "review-findings" "$findings_file" "final review findings"
+    fi
+
+    if [[ -n "$review_state_file" ]] && declare -F pr_review_state_append_round >/dev/null 2>&1; then
+        local final_findings classification providers_json
+        final_findings=$(echo "$final_json" | jq -c '.findings // []' 2>/dev/null || echo "[]")
+        classification=$(pr_review_state_classify_findings "$review_previous_findings" "$final_findings" 2>/dev/null || echo '{"addressed":0,"persistent":0,"new":0,"regressed":0}')
+        providers_json=$(printf '%s\n' "${round1_agent_types[@]}" | jq -R -s 'split("\n")[:-1]' 2>/dev/null || echo "[]")
+        local current_round
+        current_round=$(pr_review_state_next_round "$review_state_file")
+        review_timeline=$(pr_review_state_render_timeline "$review_state_file" "$review_head_sha" "$classification" "$current_round" 2>/dev/null || true)
+        if pr_review_state_append_round "$review_state_file" "$review_host" "$review_repo" "$review_pr_number" "$review_head_sha" "$providers_json" "$final_findings" "$classification" 2>/dev/null; then
+            log INFO "review_run: round-aware state saved to $review_state_file"
+            if [[ -n "$proof_dir" ]]; then
+                octo_proof_artifact "$proof_dir" "review-history-state" "$review_state_file" "round-aware PR review state"
+            fi
+        fi
+    fi
+
     # ── Output ────────────────────────────────────────────────────────────────
     local pr_number=""
     pr_number=$(gh pr view --json number -q .number 2>/dev/null || true)
@@ -505,6 +720,30 @@ Return ONLY JSON: {\"findings\": [...ranked, deduplicated findings...]}"
         fi
     else
         render_terminal_report "$findings_file"
+    fi
+
+    if [[ -n "$review_timeline" ]]; then
+        echo ""
+        echo "$review_timeline"
+    fi
+
+    if [[ -n "$proof_dir" ]]; then
+        local proof_finding_count proof_warning proof_verdict proof_summary
+        proof_finding_count=$(jq '.findings | length' "$findings_file" 2>/dev/null || echo "0")
+        proof_warning=$(jq -r '.warning // empty' "$findings_file" 2>/dev/null || true)
+        if [[ -n "$proof_warning" ]]; then
+            proof_verdict="fail"
+        elif [[ "$proof_finding_count" -gt 0 ]]; then
+            proof_verdict="findings"
+        else
+            proof_verdict="pass"
+        fi
+        proof_summary="/octo:review completed with ${proof_finding_count} finding(s)."
+        octo_proof_claim "$proof_dir" "Review findings were written to disk" "verified" "$findings_file"
+        octo_proof_capture_provider_status "$proof_dir" "$provider_status_file"
+        octo_proof_finalize "$proof_dir" "$proof_verdict" "$proof_summary"
+        echo ""
+        echo "Proof packet: $proof_dir"
     fi
 
     # v9.0: Print provider report card — always last, impossible to miss

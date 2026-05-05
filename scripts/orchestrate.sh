@@ -37,6 +37,18 @@ else
     OCTOPUS_HOST="standalone"
 fi
 
+# Claude Code web/remote sessions should bias toward unattended execution and
+# avoid expensive local terminal affordances unless explicitly re-enabled.
+OCTOPUS_REMOTE_SESSION="${OCTOPUS_REMOTE_SESSION:-false}"
+if [[ "${CLAUDE_CODE_REMOTE:-}" == "true" || "${CLAUDE_CODE_WEB:-}" == "true" || "${OCTOPUS_REMOTE_SESSION}" == "true" ]]; then
+    OCTOPUS_REMOTE_SESSION="true"
+    export OCTOPUS_REMOTE_SESSION
+    export CLAUDE_OCTOPUS_AUTONOMY="${CLAUDE_OCTOPUS_AUTONOMY:-${OCTOPUS_AUTONOMY:-autonomous}}"
+    export OCTOPUS_AUTONOMY="${OCTOPUS_AUTONOMY:-$CLAUDE_OCTOPUS_AUTONOMY}"
+    export OCTOPUS_REMOTE_STATUSLINE="${OCTOPUS_REMOTE_STATUSLINE:-minimal}"
+    export OCTOPUS_SKIP_PROVIDER_PROBES="${OCTOPUS_SKIP_PROVIDER_PROBES:-true}"
+fi
+
 # Keep debug flag defined even when nounset is enabled by sourced scripts.
 OCTOPUS_DEBUG="${OCTOPUS_DEBUG:-false}"
 
@@ -79,9 +91,13 @@ source "${SCRIPT_DIR}/lib/providers.sh"
 source "${SCRIPT_DIR}/lib/preflight.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/dispatch.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/progressive.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/pr-review-state.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/proof-packet.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/graphify.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/review.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/workflows.sh"
 source "${SCRIPT_DIR}/lib/doctor.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/quota-watcher.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/agent-sync.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/persona-loader.sh" 2>/dev/null || true
 
@@ -2158,8 +2174,29 @@ case "$COMMAND" in
     probe-single)
         # v8.54.0: Single-agent probe for multi-agentic skill dispatch
         # Called by Claude's Agent tool (one per perspective) instead of monolithic probe
+        # v9.29.3: Parse --output-dir flag from any position (fixes #340)
+        _ps_args=()
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --output-dir)
+                    if [[ -n "${2:-}" ]]; then
+                        RESULTS_DIR="$2"
+                        mkdir -p "$RESULTS_DIR" 2>/dev/null || true
+                        shift 2
+                    else
+                        echo "Error: --output-dir requires a directory argument" >&2
+                        exit 1
+                    fi
+                    ;;
+                *)
+                    _ps_args+=("$1")
+                    shift
+                    ;;
+            esac
+        done
+        set -- "${_ps_args[@]}"
         if [[ $# -lt 3 ]]; then
-            echo "Usage: $(basename "$0") probe-single <agent_type> <perspective> <task_id> [original_prompt]"
+            echo "Usage: $(basename "$0") probe-single <agent_type> <perspective> <task_id> [original_prompt] [--output-dir <dir>]"
             exit 1
         fi
         probe_single_agent "$1" "$2" "$3" "${4:-}"
@@ -2565,9 +2602,9 @@ case "$COMMAND" in
             echo "Usage: $(basename "$0") agent-resume <agent-id> [prompt] [task-id]"
             exit 1
         fi
-        local _agent_id="$1"
-        local _resume_prompt="${2:-Continue where you left off.}"
-        local _resume_task="${3:-$(date +%s)}"
+        _agent_id="$1"
+        _resume_prompt="${2:-Continue where you left off.}"
+        _resume_task="${3:-$(date +%s)}"
         resume_agent "$_agent_id" "$_resume_prompt" "$_resume_task" || {
             log ERROR "resume_agent failed for agent_id=$_agent_id"
             log INFO "Requirements: SUPPORTS_CONTINUATION=true (CC v2.1.55+) AND SUPPORTS_STABLE_AGENT_TEAMS=true"

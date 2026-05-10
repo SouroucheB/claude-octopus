@@ -1,5 +1,5 @@
 ---
-description: "Remove freeze mode edit restriction"
+description: "\"[advanced] Remove freeze mode edit restriction\""
 ---
 
 # Unfreeze - Remove Edit Boundary
@@ -13,7 +13,8 @@ When the user invokes `/octo:unfreeze`, remove the freeze mode restriction.
 Remove the freeze state file:
 
 ```bash
-rm -f "/tmp/octopus-freeze-${CLAUDE_SESSION_ID:-$$}.txt"
+_OCTO_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-$$}}"
+rm -f "/tmp/octopus-freeze-${_OCTO_SESSION_ID}.txt"
 ```
 
 ### What It Does

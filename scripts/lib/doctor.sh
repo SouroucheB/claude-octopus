@@ -549,6 +549,73 @@ doctor_check_config() {
     local backend="${OCTOPUS_BACKEND:-api}"
     doctor_add "backend-detection" "config" "pass" \
         "Backend: $backend" ""
+
+    # v9.36: CC v2.1.126-129 compatibility checks
+    if [[ "${SUPPORTS_GATEWAY_MODEL_DISCOVERY:-false}" == "true" ]]; then
+        if [[ -n "${ANTHROPIC_BASE_URL:-}" && "${CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:-0}" != "1" ]]; then
+            doctor_add "gateway-model-discovery" "config" "warn" \
+                "Gateway model discovery is opt-in on current Claude Code" \
+                "ANTHROPIC_BASE_URL is set; set CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 to populate /model from /v1/models"
+        elif [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+            doctor_add "gateway-model-discovery" "config" "pass" \
+                "Gateway model discovery enabled" "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1"
+        else
+            doctor_add "gateway-model-discovery" "config" "info" \
+                "Gateway model discovery available" "Set ANTHROPIC_BASE_URL plus CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1 for compatible gateways"
+        fi
+    fi
+
+    if [[ "${SUPPORTS_FORCE_SYNC_OUTPUT:-false}" == "true" ]]; then
+        if [[ "${CLAUDE_CODE_FORCE_SYNC_OUTPUT:-0}" == "1" ]]; then
+            doctor_add "force-sync-output" "config" "pass" \
+                "Synchronized terminal output forced" "CLAUDE_CODE_FORCE_SYNC_OUTPUT=1"
+        else
+            doctor_add "force-sync-output" "config" "info" \
+                "CC v2.1.129 CLAUDE_CODE_FORCE_SYNC_OUTPUT available" \
+                "Set CLAUDE_CODE_FORCE_SYNC_OUTPUT=1 if your terminal misses synchronized-output auto-detection"
+        fi
+    fi
+
+    if [[ "${SUPPORTS_PACKAGE_MANAGER_AUTO_UPDATE:-false}" == "true" ]]; then
+        if [[ "${CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE:-0}" == "1" ]]; then
+            doctor_add "package-manager-auto-update" "config" "pass" \
+                "Claude Code package-manager auto-update enabled" "CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1"
+        else
+            doctor_add "package-manager-auto-update" "config" "info" \
+                "CC v2.1.129 package-manager auto-update available" \
+                "Set CLAUDE_CODE_PACKAGE_MANAGER_AUTO_UPDATE=1 for Homebrew/WinGet installs to prompt after background upgrades"
+        fi
+    fi
+
+    if [[ "${SUPPORTS_EXPERIMENTAL_MANIFEST_KEYS:-false}" == "true" ]] && command -v jq &>/dev/null; then
+        if jq -e 'has("themes") or has("monitors")' "$plugin_json" >/dev/null 2>&1; then
+            doctor_add "experimental-manifest-keys" "config" "warn" \
+                "Plugin manifest still uses top-level themes/monitors" \
+                "CC v2.1.129 validates these under experimental.themes / experimental.monitors"
+        else
+            doctor_add "experimental-manifest-keys" "config" "pass" \
+                "No top-level themes/monitors manifest keys" "CC v2.1.129 experimental manifest layout is clean"
+        fi
+    fi
+
+    if [[ "${SUPPORTS_MCP_WORKSPACE_RESERVED:-false}" == "true" ]] && command -v jq &>/dev/null; then
+        local _workspace_mcp_files=""
+        local _mcp_file
+        for _mcp_file in "$PLUGIN_DIR/.mcp.json" "$PWD/.mcp.json" "$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json"; do
+            [[ -f "$_mcp_file" ]] || continue
+            if jq -e '.mcpServers.workspace? // empty' "$_mcp_file" >/dev/null 2>&1; then
+                _workspace_mcp_files="${_workspace_mcp_files:+$_workspace_mcp_files, }$_mcp_file"
+            fi
+        done
+        if [[ -n "$_workspace_mcp_files" ]]; then
+            doctor_add "mcp-workspace-reserved" "config" "warn" \
+                "MCP server named 'workspace' will be skipped by Claude Code" \
+                "Rename mcpServers.workspace in: $_workspace_mcp_files"
+        else
+            doctor_add "mcp-workspace-reserved" "config" "pass" \
+                "No reserved MCP server name 'workspace' detected" ""
+        fi
+    fi
 }
 
 # --- Category 4: State ---
@@ -1049,6 +1116,69 @@ doctor_check_skills() {
         doctor_add "multiline-deep-links" "skills" "info" \
             "CC v2.1.91 multi-line deep link prompts available" \
             "claude-cli://open?q= supports encoded newlines (%0A) for multi-step prompts"
+    fi
+
+    # ── v9.36.0: CC v2.1.126-129 doctor tips ───────────────────────────────────
+
+    if [[ "${SUPPORTS_PROJECT_PURGE:-false}" == "true" ]]; then
+        doctor_add "project-purge" "skills" "info" \
+            "CC v2.1.126 claude project purge available" \
+            "Use 'claude project purge --dry-run .' to inspect stale Claude Code project state before deleting transcripts/tasks/config"
+    fi
+
+    if [[ "${SUPPORTS_SKILL_ACTIVATED_OTEL_TRIGGER:-false}" == "true" ]]; then
+        doctor_add "skill-activated-otel" "skills" "info" \
+            "CC v2.1.126 skill activation telemetry includes invocation_trigger" \
+            "claude_code.skill_activated can distinguish user-slash, claude-proactive, and nested-skill activations"
+    fi
+
+    if [[ "${SUPPORTS_PLUGIN_ZIP_DIR:-false}" == "true" ]]; then
+        doctor_add "plugin-zip-dir" "skills" "info" \
+            "CC v2.1.128 --plugin-dir accepts .zip plugin archives" \
+            "Release validation can smoke-test the packaged plugin archive, not just the source directory"
+    fi
+
+    if [[ "${SUPPORTS_INIT_PLUGIN_ERRORS:-false}" == "true" ]]; then
+        doctor_add "init-plugin-errors" "skills" "info" \
+            "CC v2.1.128 stream-json init.plugin_errors reports plugin-dir load failures" \
+            "Use --output-format stream-json --include-hook-events in release smoke tests to catch plugin load errors"
+    fi
+
+    if [[ "${SUPPORTS_PLUGIN_URL:-false}" == "true" ]]; then
+        doctor_add "plugin-url" "skills" "info" \
+            "CC v2.1.129 --plugin-url can load a plugin zip for the current session" \
+            "Use --plugin-url with a release artifact URL to reproduce marketplace/plugin loading without installing"
+    fi
+
+    if [[ "${SUPPORTS_SKILL_OVERRIDES:-false}" == "true" ]]; then
+        local _settings_file _has_skill_overrides="false"
+        for _settings_file in "$PWD/.claude/settings.json" "$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json"; do
+            [[ -f "$_settings_file" ]] || continue
+            if command -v jq &>/dev/null && jq -e 'has("skillOverrides")' "$_settings_file" >/dev/null 2>&1; then
+                _has_skill_overrides="true"
+                break
+            fi
+        done
+        if [[ "$_has_skill_overrides" == "true" ]]; then
+            doctor_add "skill-overrides" "skills" "pass" \
+                "CC v2.1.129 skillOverrides configured" "Use off, user-invocable-only, or name-only to tune Octopus skill context"
+        else
+            doctor_add "skill-overrides" "skills" "info" \
+                "CC v2.1.129 skillOverrides available for reducing Octopus skill context" \
+                "Set skillOverrides in Claude settings to hide niche skills or collapse them to name-only"
+        fi
+    fi
+
+    if [[ "${SUPPORTS_PR_COUNT_MCP_OTEL:-false}" == "true" ]]; then
+        doctor_add "pr-count-mcp-otel" "skills" "info" \
+            "CC v2.1.129 PR count telemetry includes MCP-created PRs/MRs" \
+            "claude_code.pull_request.count now covers GitHub/GitLab MCP creation as well as shell-created PRs"
+    fi
+
+    if [[ "${SUPPORTS_BASH_SESSION_ID_ENV:-false}" == "true" ]]; then
+        doctor_add "bash-session-id-env" "skills" "pass" \
+            "CC v2.1.132 CLAUDE_CODE_SESSION_ID is available in Bash tool subprocesses" \
+            "Octopus uses it for Claude-specific careful/freeze state, proof packets, usage files, and session-scoped caches"
     fi
 
     # v9.20.0: Output compression

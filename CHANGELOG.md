@@ -1,5 +1,75 @@
 # Changelog
 
+## [Unreleased]
+
+---
+
+## [9.37.1] - 2026-05-08
+
+### Fixed
+
+- Resolve the installed Octopus plugin root in `/octo:doctor` before invoking scripts so Windows Git Bash installs do not depend on `~/.claude-octopus/plugin` symlink creation (#360).
+- Skip RTK hook remediation warnings on Windows Git Bash, where RTK uses CLAUDE.md injection mode instead of the macOS/Linux hook path (#361).
+
+---
+
+## [9.37.0] - 2026-05-08
+
+### Added
+
+- Add provider-aware prompt-size preflight with summarize, truncate, and fail strategies plus oversize run telemetry for multi-provider dispatch.
+- Add per-agent status ledgers and visible agent summary tables so multi-LLM workflows show ok, degraded, failed, and timeout providers before synthesis.
+- Add research breadth routing for light, standard, and exhaustive fanout with status-aware synthesis attribution.
+
+### Changed
+
+- Strengthen `/octo:research` and Discover guidance to build dynamic multi-provider fleets across Codex, Gemini, Copilot, Qwen, OpenCode, Ollama, Perplexity, OpenRouter, Cursor Agent, and Claude.
+- Promote named option and comparison prompts to debate so substantial "A or B" decisions route through multi-model scoring instead of plain chat.
+- Regenerate Claude, Codex, OpenClaw, and Factory surfaces, including the generated `octo-discipline` command.
+
+### Fixed
+
+- Route setup/configure aliases and mistyped `/octo:*` commands to canonical commands with fuzzy suggestions.
+- Skip failed or rejected provider outputs during aggregation while preserving visible failure reasons in summaries.
+- Surface oversize provider rejections instead of allowing empty outputs to look like successful provider contributions.
+
+---
+
+## [9.36.1] - 2026-05-07
+
+### Added
+
+- Sync Claude Code v2.1.132 Bash session ID support with `SUPPORTS_BASH_SESSION_ID_ENV`, `/octo:doctor` guidance, and a shared session resolver that prefers `CLAUDE_CODE_SESSION_ID` for Claude Code subprocess state.
+- Add a plugin assembly standard and dependency-free validator for skills, agents, commands, connector metadata, and manifest structure, informed by Anthropic's newer multi-plugin packaging patterns.
+- Add portable root Codex skills with per-skill OpenAI interface metadata and a Codex host adapter block.
+
+### Changed
+
+- Use Claude Code's official Bash `CLAUDE_CODE_SESSION_ID` for careful/freeze/guard state files, proof packets, cost tracking, statusline/HUD context, and compression analytics while preserving Codex/Gemini host-specific session fallbacks.
+- Point the Codex manifest at the portable root `skills/` tree and remove Claude-only hook references from the Codex package surface.
+- Preserve Claude command and skill registration while adapting generated Codex skill wording for runtime provider availability.
+
+### Fixed
+
+- Preserve the released `skill-verify` Codex skill name as a compatibility alias for the new verification gate source skill.
+
+---
+
+## [9.36.0] - 2026-05-06
+
+### Added
+
+- Sync Claude Code compatibility flags through v2.1.131, including plugin zip/URL loading, skillOverrides, gateway model discovery opt-in, MCP workspace diagnostics, init.plugin_errors, and package-manager auto-update guidance.
+- Add `/octo:doctor` checks for modern Claude Code features that Octopus can use or should warn about, including reserved MCP server names, experimental manifest key placement, gateway model discovery, and skillOverrides.
+- Add release validation for packaged plugin zip support and optional runtime smoke tests using `--plugin-dir` and `--plugin-url`.
+- Document the v2.1.14 minimum runtime, modern `/octo:doctor` compatibility checks, gateway model discovery opt-in, skillOverrides guidance, and the opt-in zip/plugin-url release smoke workflow.
+
+### Fixed
+
+- Treat Claude Code v2.1.131 as newer than the v2.1.14 minimum by using the explicit `>=` version comparison operator in the version preflight.
+
+---
+
 ## [9.35.0] - 2026-05-05
 
 ### Added

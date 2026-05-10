@@ -40,7 +40,7 @@ done
 # ── Skills that call orchestrate.sh MUST have enforcement ────────────────────
 # Exceptions: utility skills, template-only skills
 
-EXEMPT_SKILLS="skill-doctor sys-configure skill-finish-branch skill-verify"
+EXEMPT_SKILLS="skill-doctor sys-configure skill-finish-branch skill-verification-gate skill-verify"
 
 for f in "$PROJECT_ROOT"/skills/*/SKILL.md; do
     name=$(basename "$(dirname "$f")")

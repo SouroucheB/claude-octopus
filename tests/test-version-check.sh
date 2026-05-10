@@ -195,7 +195,32 @@ else
     test_fail "Minimum version should be 2.1.14, got: $min_version"
 fi
 
-# Test 9: Test version comparison logic with manual test script
+# Test 9: Current Claude Code 2.1.132 must not be classified as outdated
+test_start "Claude Code 2.1.132 satisfies minimum version"
+if echo "$output" | grep -q "CLAUDE_CODE_VERSION=2.1.132"; then
+    if echo "$output" | grep -q "CLAUDE_CODE_STATUS=ok"; then
+        test_pass "Claude Code 2.1.132 reports status ok"
+    else
+        test_fail "Claude Code 2.1.132 should report CLAUDE_CODE_STATUS=ok"
+    fi
+else
+    echo -e "${YELLOW}⚠ INFO${NC}: Local Claude Code is not v2.1.132; checking version_compare directly"
+    if bash -lc 'source scripts/lib/providers.sh; version_compare 2.1.132 2.1.14 ">="'; then
+        test_pass "version_compare treats 2.1.132 as >= 2.1.14"
+    else
+        test_fail "version_compare should treat 2.1.132 as >= 2.1.14"
+    fi
+fi
+
+# Test 10: check_claude_version must call version_compare with explicit >= operator
+test_start "check_claude_version uses explicit >= comparison"
+if grep -q 'version_compare "$current_version" "$min_version" ">="' "$ORCHESTRATE"; then
+    test_pass "check_claude_version uses explicit >= operator"
+else
+    test_fail "check_claude_version must call version_compare with explicit >= operator"
+fi
+
+# Test 11: Test version comparison logic with manual test script
 test_start "Version comparison logic (manual test)"
 
 cat > /tmp/test_version_compare.sh <<'EOF'
@@ -266,6 +291,15 @@ else
     ((tests_passed++)) || true
 fi
 
+# 2.1.131 > 2.1.14 (should pass; regression for three-digit patch versions)
+if version_compare "2.1.131" "2.1.14"; then
+    echo "PASS: 2.1.131 >= 2.1.14"
+    ((tests_passed++)) || true
+else
+    echo "FAIL: 2.1.131 >= 2.1.14"
+    ((tests_failed++)) || true
+fi
+
 echo ""
 echo "Version comparison tests: $tests_passed passed, $tests_failed failed"
 exit $tests_failed
@@ -279,7 +313,7 @@ else
 fi
 rm /tmp/test_version_compare.sh
 
-# Test 10: Check that detect-providers can be run multiple times
+# Test 12: Check that detect-providers can be run multiple times
 test_start "Run detect-providers multiple times (idempotency test)"
 output1=$("$ORCHESTRATE" detect-providers 2>&1 | grep "CLAUDE_CODE_VERSION=")
 output2=$("$ORCHESTRATE" detect-providers 2>&1 | grep "CLAUDE_CODE_VERSION=")

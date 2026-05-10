@@ -433,6 +433,41 @@ detect_claude_code_version() {
         SUPPORTS_ULTRAREVIEW=true
     fi
 
+    # v9.36: Claude Code v2.1.126+ (gateway models, project purge, skill activation trigger telemetry)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.126" ">="; then
+        SUPPORTS_GATEWAY_MODEL_DISCOVERY=true
+        SUPPORTS_PROJECT_PURGE=true
+        SUPPORTS_SKILL_ACTIVATED_OTEL_TRIGGER=true
+    fi
+
+    # v9.36: Claude Code v2.1.128+ (plugin zip loading, MCP diagnostics, init.plugin_errors)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.128" ">="; then
+        SUPPORTS_PLUGIN_ZIP_DIR=true
+        SUPPORTS_MCP_TOOL_COUNTS=true
+        SUPPORTS_MCP_WORKSPACE_RESERVED=true
+        SUPPORTS_LOCAL_SETTINGS_SUGGESTIONS=true
+        SUPPORTS_SUBPROCESS_OTEL_SCRUB=true
+        SUPPORTS_INIT_PLUGIN_ERRORS=true
+        SUPPORTS_PARALLEL_SHELL_READONLY_RESILIENCE=true
+        SUPPORTS_PLUGIN_UPDATE_NPM=true
+    fi
+
+    # v9.36: Claude Code v2.1.129+ (plugin URL loading, skillOverrides, gateway discovery opt-in)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.129" ">="; then
+        SUPPORTS_PLUGIN_URL=true
+        SUPPORTS_FORCE_SYNC_OUTPUT=true
+        SUPPORTS_PACKAGE_MANAGER_AUTO_UPDATE=true
+        SUPPORTS_EXPERIMENTAL_MANIFEST_KEYS=true
+        SUPPORTS_GATEWAY_MODEL_DISCOVERY_OPT_IN=true
+        SUPPORTS_SKILL_OVERRIDES=true
+        SUPPORTS_PR_COUNT_MCP_OTEL=true
+    fi
+
+    # v9.37: Claude Code v2.1.132+ (session ID exposed to Bash tool subprocess env)
+    if version_compare "$CLAUDE_CODE_VERSION" "2.1.132" ">="; then
+        SUPPORTS_BASH_SESSION_ID_ENV=true
+    fi
+
     log "INFO" "Claude Code v$CLAUDE_CODE_VERSION detected"
     log "INFO" "Task Management: $SUPPORTS_TASK_MANAGEMENT | Fork Context: $SUPPORTS_FORK_CONTEXT | Agent Teams: $SUPPORTS_AGENT_TEAMS"
     log "INFO" "Persistent Memory: $SUPPORTS_PERSISTENT_MEMORY | Hook Events: $SUPPORTS_HOOK_EVENTS | Agent Type Routing: $SUPPORTS_AGENT_TYPE_ROUTING"
@@ -472,6 +507,12 @@ detect_claude_code_version() {
     log "INFO" "Default Effort High: $SUPPORTS_DEFAULT_EFFORT_HIGH | Statusline Refresh Interval: $SUPPORTS_STATUSLINE_REFRESH_INTERVAL"
     log "INFO" "Exclude Dynamic Prompt: $SUPPORTS_EXCLUDE_DYNAMIC_PROMPT | Perforce Mode: $SUPPORTS_PERFORCE_MODE | Monitor Tool: $SUPPORTS_MONITOR_TOOL | Traceparent: $SUPPORTS_TRACEPARENT"
     log "INFO" "Settings Resilience: $SUPPORTS_SETTINGS_RESILIENCE | OS CA Certs: $SUPPORTS_OS_CA_CERTS | Auto Cloud Env: $SUPPORTS_AUTO_CLOUD_ENV"
+    log "INFO" "Gateway Models: $SUPPORTS_GATEWAY_MODEL_DISCOVERY | Project Purge: $SUPPORTS_PROJECT_PURGE | Skill OTel Trigger: $SUPPORTS_SKILL_ACTIVATED_OTEL_TRIGGER"
+    log "INFO" "Plugin Zip Dir: $SUPPORTS_PLUGIN_ZIP_DIR | MCP Tool Counts: $SUPPORTS_MCP_TOOL_COUNTS | MCP Workspace Reserved: $SUPPORTS_MCP_WORKSPACE_RESERVED"
+    log "INFO" "Local Settings Suggestions: $SUPPORTS_LOCAL_SETTINGS_SUGGESTIONS | Subprocess OTEL Scrub: $SUPPORTS_SUBPROCESS_OTEL_SCRUB | Init Plugin Errors: $SUPPORTS_INIT_PLUGIN_ERRORS"
+    log "INFO" "Plugin URL: $SUPPORTS_PLUGIN_URL | Force Sync Output: $SUPPORTS_FORCE_SYNC_OUTPUT | Package Manager Auto Update: $SUPPORTS_PACKAGE_MANAGER_AUTO_UPDATE"
+    log "INFO" "Experimental Manifest Keys: $SUPPORTS_EXPERIMENTAL_MANIFEST_KEYS | Gateway Discovery Opt-in: $SUPPORTS_GATEWAY_MODEL_DISCOVERY_OPT_IN | Skill Overrides: $SUPPORTS_SKILL_OVERRIDES"
+    log "INFO" "Bash Session ID Env: $SUPPORTS_BASH_SESSION_ID_ENV"
 
     # v8.29.0: Context window control
     OCTOPUS_CONTEXT_WINDOW="${OCTOPUS_CONTEXT_WINDOW:-auto}"

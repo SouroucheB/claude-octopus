@@ -139,6 +139,8 @@ command -v gemini &> /dev/null && gemini_status="Available" || gemini_status="No
 "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" ink "Security audit for delivery - comprehensive review of all code changes for production readiness"
 ```
 
+## MANDATORY COMPLIANCE
+
 **CRITICAL: You are PROHIBITED from:**
 - Skipping Multi-AI validation
 - Doing single-provider analysis instead

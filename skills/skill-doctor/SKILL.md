@@ -1,8 +1,13 @@
 ---
 name: skill-doctor
-version: 1.0.0
-description: "Environment diagnostics — check providers, auth, config, hooks, scheduler, and more. Use when: AUTOMATICALLY ACTIVATE when user asks about:. \"doctor\" or \"run doctor\" or \"diagnostics\". \"check my setup\" or \"is everything working\""
+description: "Environment diagnostics — check providers, auth, config, hooks, scheduler, and more"
 ---
+
+> **Host: Codex CLI** — This skill was designed for Claude Code and adapted for Codex.
+> Cross-reference commands use installed skill names in Codex rather than `/octo:*` slash commands.
+> Use the active Codex shell and subagent tools. Do not claim a provider, model, or host subagent is available until the current session exposes it.
+> For host tool equivalents, see `skills/blocks/codex-host-adapter.md`.
+
 
 # Environment Doctor
 
@@ -12,7 +17,6 @@ Run environment diagnostics across 11 check categories. Identifies misconfigured
 
 **Core principle:** Detect problems before they surface in workflows.
 
----
 
 ## When to Use
 
@@ -28,14 +32,41 @@ Run environment diagnostics across 11 check categories. Identifies misconfigured
 - Project workflow status (use `/octo:status`)
 - Debugging application code (use `/octo:debug`)
 
----
 
 ## The Process
 
-### Step 1: Run Full Diagnostics
+### Step 1: Resolve Plugin Root and Run Full Diagnostics
+
+Use this resolver before running Octopus scripts. Do not assume
+`~/.claude-octopus/plugin` exists; Windows Git Bash installs may not support the
+stable symlink. Run this as a single Bash call.
 
 ```bash
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh doctor
+OCTO_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+if [[ -z "$OCTO_PLUGIN_ROOT" || ! -x "$OCTO_PLUGIN_ROOT/scripts/orchestrate.sh" ]]; then
+  OCTO_PLUGIN_ROOT="${HOME}/.claude-octopus/plugin"
+fi
+if [[ ! -x "$OCTO_PLUGIN_ROOT/scripts/orchestrate.sh" ]] && command -v octopus >/dev/null 2>&1; then
+  OCTO_BIN="$(command -v octopus)"
+  OCTO_PLUGIN_ROOT="$(cd "$(dirname "$OCTO_BIN")/.." && pwd)"
+fi
+if [[ ! -x "$OCTO_PLUGIN_ROOT/scripts/orchestrate.sh" ]]; then
+  OCTO_PLUGIN_ROOT="$(
+    find "${HOME}/.claude/plugins" -type f -path "*/scripts/orchestrate.sh" -print 2>/dev/null \
+      | sed 's#/scripts/orchestrate.sh$##' \
+      | grep -E '(nyldn-plugins|claude-octopus|/octo(/[0-9]|$))' \
+      | sort \
+      | tail -1
+  )"
+fi
+if [[ -z "$OCTO_PLUGIN_ROOT" || ! -x "$OCTO_PLUGIN_ROOT/scripts/orchestrate.sh" ]]; then
+  echo "Claude Octopus plugin root not found. Reinstall the octo plugin, then retry /octo:doctor."
+  exit 1
+fi
+mkdir -p "${HOME}/.claude-octopus"
+ln -sfn "$OCTO_PLUGIN_ROOT" "${HOME}/.claude-octopus/plugin" 2>/dev/null || true
+export OCTO_PLUGIN_ROOT
+cd "$OCTO_PLUGIN_ROOT" && bash scripts/orchestrate.sh doctor
 ```
 
 This runs all 11 check categories and displays a formatted report.
@@ -87,7 +118,67 @@ cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh doctor --json
 cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh doctor auth --verbose
 ```
 
----
+### Step 5: Interactive Remediation (MANDATORY for fixable issues)
+
+After running diagnostics, if ANY fixable issues are found, you MUST use AskUserQuestion to offer fixes. Do NOT just print instructions — offer to execute them.
+
+**RTK not installed:**
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "RTK saves 60-90% on bash output tokens. Install it now?",
+    header: "Install RTK",
+    multiSelect: false,
+    options: [
+      {label: "Install via brew (Recommended)", description: "brew install rtk — fast, macOS"},
+      {label: "Install via cargo", description: "cargo install rtk-token-killer"},
+      {label: "Skip", description: "Continue without RTK"}
+    ]
+  }]
+})
+```
+If user chooses install, run it, then offer hook setup.
+
+**RTK installed but hook not configured on macOS/Linux:**
+
+On Windows Git Bash, do not offer `rtk init -g`. RTK uses CLAUDE.md injection
+mode there, so report the hook check as skipped.
+
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "RTK is installed but the Claude Code hook isn't active. Configure it?",
+    header: "RTK Hook",
+    multiSelect: false,
+    options: [
+      {label: "Run rtk init -g (Recommended)", description: "Auto-installs Claude Code bash hook on macOS/Linux"},
+      {label: "Skip", description: "I'll configure it later"}
+    ]
+  }]
+})
+```
+
+**Missing providers (Codex/Gemini not installed):**
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "Some providers are missing. Install them?",
+    header: "Providers",
+    multiSelect: true,
+    options: [
+      {label: "Codex CLI", description: "npm install -g @openai/codex"},
+      {label: "Gemini CLI", description: "brew install gemini-cli (macOS)"},
+      {label: "Skip all", description: "Continue with available providers"}
+    ]
+  }]
+})
+```
+
+**Auth expired:**
+Offer to run the login command for the expired provider.
+
+**Multiple fixable issues:** Batch them into a single AskUserQuestion with multiSelect where appropriate, rather than asking one at a time.
+
 
 ## Check Categories
 
@@ -104,9 +195,8 @@ cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh doctor auth -
 | `conflicts` | Conflicting plugins detection |
 | `agents` | Agent definitions, worktree isolation, CLI registration, version compatibility |
 | `recurrence` | Failure pattern detection — flags repeated quality gate failures, source hotspots, 48h trends |
-| `deps` | Software dependencies — Node.js, jq, Codex/Gemini CLIs, RTK token compression, statusline resolver, recommended plugins |
+| `deps` | Software dependencies — Node.js, jq, Codex/Gemini CLIs, RTK token compression (gain stats + hook status), statusline resolver, recommended plugins |
 
----
 
 ## Interpreting Results
 
@@ -125,10 +215,11 @@ All checks pass — no action needed.
 | Circuit breaker OPEN | Provider had 3+ consecutive transient failures — wait for cooldown or check provider status |
 | Stale state | Delete `.octo/state.json` and re-initialize |
 | Invalid hooks.json | Check `hooks.json` syntax — must be valid JSON |
-| RTK not installed | `brew install rtk && rtk init -g` (optional — saves 60-90% tokens on bash output) |
+| RTK not installed | Offer to install: `brew install rtk && rtk init -g` (saves 60-90% tokens). Use AskUserQuestion to offer brew vs cargo install. |
+| RTK installed but hook not configured | On macOS/Linux, offer `rtk init -g`; on Windows Git Bash, report skipped because RTK uses CLAUDE.md injection mode |
+| RTK gain stats unavailable | Run some bash commands first, then check `rtk gain` to see token savings |
 | Conflicting plugins | Uninstall conflicting plugins or adjust scope |
 
----
 
 ## Integration with Other Skills
 
@@ -139,7 +230,6 @@ All checks pass — no action needed.
 | Doctor finds hook errors | Guide user to fix hooks.json |
 | All checks pass, user still has issues | Suggest `/octo:debug` for deeper investigation |
 
----
 
 ## Hook Profile
 
@@ -154,7 +244,6 @@ Available profiles:
 
 Override: Set `OCTO_PROFILE=budget|balanced|quality` or `OCTO_DISABLED_HOOKS=hook1,hook2` to fine-tune. Legacy `OCTO_HOOK_PROFILE` still works (minimal→budget, standard→balanced, strict→quality).
 
----
 
 ## Intensity Profile
 
@@ -177,11 +266,10 @@ The doctor reports the active intensity profile — a single knob controlling ho
 | Phases | Skip discover if context given | Skip re-discovery | All phases run |
 | Context | Compressed | Standard | Full inlining |
 
----
 
 ## Project Tier Hint
 
-The doctor should also report `OCTO_TIER` when it is set. This is a project-level recommendation hint, not a hard policy.
+Also report `OCTO_TIER` when set. This is a recommendation hint, not a hard policy.
 
 | Tier | Doctor guidance |
 |------|-----------------|
@@ -191,7 +279,6 @@ The doctor should also report `OCTO_TIER` when it is set. This is a project-leve
 
 If unset, show `OCTO_TIER=unset` and suggest setting it only when the project has a stable risk profile.
 
----
 
 ## Remote Session Checks
 
@@ -205,7 +292,6 @@ If `CLAUDE_CODE_REMOTE=true` or `OCTOPUS_REMOTE_SESSION=true`, report:
 
 Suggest `/octo:setup` only for configuration guidance; do not recommend interactive provider logins inside the remote session.
 
----
 
 ## Runtime Context
 
@@ -221,7 +307,6 @@ The doctor checks for project-level `RUNTIME.md` — a file that provides projec
 
 Without a `RUNTIME.md`, orchestration prompts lack project-specific details — leading to generic advice about test commands, environment variables, and build steps. A populated `RUNTIME.md` makes every workflow more accurate.
 
----
 
 ## Quick Reference
 

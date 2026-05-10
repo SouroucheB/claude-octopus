@@ -170,7 +170,96 @@ fi
 echo ""
 
 # ============================================================================
-# 4. COMMAND REGISTRATION CHECK
+# 4. PLUGIN ZIP / URL RELEASE SMOKE
+# ============================================================================
+echo "📦 Checking plugin zip/plugin-url release smoke..."
+
+if command -v claude >/dev/null 2>&1; then
+    CLAUDE_HELP=$(claude --help 2>/dev/null || true)
+    if echo "$CLAUDE_HELP" | grep -q -- '--plugin-url'; then
+        echo -e "  ${GREEN}✓ Claude Code supports --plugin-url${NC}"
+    else
+        echo -e "  ${YELLOW}WARNING: Claude Code does not advertise --plugin-url; update to v2.1.129+ for URL smoke tests${NC}"
+        ((warnings++)) || true
+    fi
+
+    if echo "$CLAUDE_HELP" | grep -q -- '--plugin-dir' && echo "$CLAUDE_HELP" | grep -q '\.zip'; then
+        echo -e "  ${GREEN}✓ Claude Code supports --plugin-dir .zip archives${NC}"
+    else
+        echo -e "  ${YELLOW}WARNING: Claude Code does not advertise --plugin-dir .zip support; update to v2.1.128+ for archive smoke tests${NC}"
+        ((warnings++)) || true
+    fi
+
+    if command -v zip >/dev/null 2>&1; then
+        PLUGIN_ZIP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/octo-release-smoke.XXXXXX")
+        PLUGIN_ZIP="$PLUGIN_ZIP_DIR/octo-plugin.zip"
+        cleanup_release_smoke() {
+            if [[ -n "${PLUGIN_URL_SERVER_PID:-}" ]]; then
+                kill "$PLUGIN_URL_SERVER_PID" >/dev/null 2>&1 || true
+            fi
+            rm -rf "$PLUGIN_ZIP_DIR"
+        }
+        trap cleanup_release_smoke EXIT
+
+        if (cd "$ROOT_DIR" && zip -qr "$PLUGIN_ZIP" . \
+            -x '.git/*' './.git/*' '.claude-octopus/*' './.claude-octopus/*' \
+               'node_modules/*' './node_modules/*' '.DS_Store' './.DS_Store' \
+               '.tmp.*' './.tmp.*'); then
+            echo -e "  ${GREEN}✓ Packaged plugin zip for release smoke: $PLUGIN_ZIP${NC}"
+        else
+            echo -e "  ${RED}ERROR: Failed to package plugin zip for --plugin-dir smoke${NC}"
+            ((errors++)) || true
+        fi
+
+        if [[ "${OCTOPUS_RELEASE_RUNTIME_SMOKE:-0}" == "1" && -s "$PLUGIN_ZIP" ]]; then
+            RUNTIME_ZIP_OUT="$PLUGIN_ZIP_DIR/plugin-dir-runtime.jsonl"
+            if claude --plugin-dir "$PLUGIN_ZIP" --print --output-format stream-json --include-hook-events \
+                --max-budget-usd "${OCTOPUS_RELEASE_SMOKE_MAX_BUDGET_USD:-0.05}" \
+                "Reply exactly: octo plugin-dir zip smoke ok" >"$RUNTIME_ZIP_OUT" 2>&1; then
+                echo -e "  ${GREEN}✓ Runtime --plugin-dir zip smoke passed${NC}"
+            else
+                echo -e "  ${RED}ERROR: Runtime --plugin-dir zip smoke failed${NC}"
+                sed 's/^/    /' "$RUNTIME_ZIP_OUT" | tail -20
+                ((errors++)) || true
+            fi
+
+            if command -v python3 >/dev/null 2>&1 && echo "$CLAUDE_HELP" | grep -q -- '--plugin-url'; then
+                PLUGIN_URL_PORT="${OCTOPUS_RELEASE_SMOKE_PORT:-48731}"
+                (cd "$PLUGIN_ZIP_DIR" && python3 -m http.server "$PLUGIN_URL_PORT" --bind 127.0.0.1 >"$PLUGIN_ZIP_DIR/http.log" 2>&1) &
+                PLUGIN_URL_SERVER_PID=$!
+                sleep 1
+                PLUGIN_URL="http://127.0.0.1:${PLUGIN_URL_PORT}/$(basename "$PLUGIN_ZIP")"
+                RUNTIME_URL_OUT="$PLUGIN_ZIP_DIR/plugin-url-runtime.jsonl"
+                if claude --plugin-url "$PLUGIN_URL" --print --output-format stream-json --include-hook-events \
+                    --max-budget-usd "${OCTOPUS_RELEASE_SMOKE_MAX_BUDGET_USD:-0.05}" \
+                    "Reply exactly: octo plugin-url smoke ok" >"$RUNTIME_URL_OUT" 2>&1; then
+                    echo -e "  ${GREEN}✓ Runtime --plugin-url smoke passed${NC}"
+                else
+                    echo -e "  ${RED}ERROR: Runtime --plugin-url smoke failed${NC}"
+                    sed 's/^/    /' "$RUNTIME_URL_OUT" | tail -20
+                    ((errors++)) || true
+                fi
+            else
+                echo -e "  ${YELLOW}WARNING: python3 or --plugin-url unavailable; skipping URL runtime smoke${NC}"
+                ((warnings++)) || true
+            fi
+        else
+            echo -e "  ${GREEN}✓ Runtime plugin load smoke is opt-in${NC}"
+            echo "    Set OCTOPUS_RELEASE_RUNTIME_SMOKE=1 to exercise --plugin-dir zip and --plugin-url with Claude Code"
+        fi
+    else
+        echo -e "  ${YELLOW}WARNING: zip command not found; skipping plugin archive smoke package${NC}"
+        ((warnings++)) || true
+    fi
+else
+    echo -e "  ${YELLOW}WARNING: claude CLI not installed; skipping plugin zip/plugin-url smoke${NC}"
+    ((warnings++)) || true
+fi
+
+echo ""
+
+# ============================================================================
+# 5. COMMAND REGISTRATION CHECK
 # ============================================================================
 echo "📝 Checking command registration..."
 

@@ -14,6 +14,14 @@
 # v9.19.0: Safe default for --bare flag (set by providers.sh, but guard for standalone sourcing)
 _BARE_OPT="${_BARE_OPT:-}"
 
+if ! declare -f claude_progression_exclusion_opt >/dev/null 2>&1; then
+    claude_progression_exclusion_opt() {
+        if [[ "${SUPPORTS_EXCLUDE_DYNAMIC_PROMPT:-false}" == "true" && "${OCTOPUS_DISABLE_PROGRESSION_EXCLUSION:-0}" != "1" ]]; then
+            printf '%s' ' --exclude-dynamic-system-prompt-sections'
+        fi
+    }
+fi
+
 # Role-to-agent mapping (function-based for bash 3.x compatibility)
 # Returns agent:model format for a given role
 #
@@ -335,7 +343,9 @@ run_with_claude_code_ralph() {
     # Check if ralph-wiggum plugin is installed
     if claude plugin list 2>/dev/null | grep -q "ralph-wiggum"; then
         # Use actual ralph-wiggum
-        claude "/ralph-loop \"$prompt\" --max-iterations $max_iterations --completion-promise \"$promise\""
+        local progression_opt
+        progression_opt=$(claude_progression_exclusion_opt)
+        claude${_BARE_OPT}${progression_opt} "/ralph-loop \"$prompt\" --max-iterations $max_iterations --completion-promise \"$promise\""
     else
         # Use Claude Code with manual iteration prompt
         local iteration_prompt="$prompt
@@ -343,7 +353,9 @@ run_with_claude_code_ralph() {
 IMPORTANT: When task is complete, output exactly: $promise
 Do not output this promise until the task is truly finished."
 
-        claude${_BARE_OPT} --print "$iteration_prompt"
+        local progression_opt
+        progression_opt=$(claude_progression_exclusion_opt)
+        claude${_BARE_OPT}${progression_opt} --print "$iteration_prompt"
     fi
 }
 

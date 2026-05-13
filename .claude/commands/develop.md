@@ -32,7 +32,7 @@ When the user invokes this command (e.g., `/octo:develop <arguments>`):
 **Step 1 — Run provider preflight via Bash tool:**
 
 ```bash
-bash "${HOME}/.claude-octopus/plugin/scripts/helpers/check-providers.sh"
+bash /Users/sourouche/.claude-octopus/plugin/scripts/helpers/check-providers.sh
 ```
 
 Use the actual preflight output to display the workflow indicator before dispatch:
@@ -52,7 +52,7 @@ If no external provider is available, stop and tell the user to run `/octo:setup
 **Step 2 — Run orchestrate.sh via Bash tool:**
 
 ```bash
-bash "${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh" develop "<user's arguments here>"
+bash /Users/sourouche/.claude-octopus/plugin/scripts/orchestrate.sh develop "<user's arguments here>"
 ```
 
 **✗ INCORRECT:**

@@ -1,8 +1,8 @@
 {
   "name": "nyldn-plugins",
   "owner": {
-    "name": "nyldn",
-    "url": "https://github.com/nyldn"
+    "name": "SouroucheB",
+    "url": "https://github.com/SouroucheB"
   },
   "metadata": {
     "description": "nyldn plugins for Claude Code workflows.",
@@ -13,16 +13,16 @@
       "name": "octo",
       "source": {
         "source": "url",
-        "url": "https://github.com/nyldn/claude-octopus.git"
+        "url": "https://github.com/SouroucheB/claude-octopus.git"
       },
       "description": "v9.37.3 - Multi-LLM orchestration for Claude Code with agent summaries, prompt-size preflight, research fanout, and Codex-compatible skills. 32 personas, 48 commands, 52 skills. Run /octo:setup.",
       "version": "9.37.3",
       "author": {
-        "name": "nyldn",
-        "url": "https://github.com/nyldn"
+        "name": "SouroucheB",
+        "url": "https://github.com/SouroucheB"
       },
-      "repository": "https://github.com/nyldn/claude-octopus",
-      "homepage": "https://github.com/nyldn/claude-octopus",
+      "repository": "https://github.com/SouroucheB/claude-octopus",
+      "homepage": "https://github.com/SouroucheB/claude-octopus",
       "license": "MIT",
       "keywords": [
         "multi-llm",

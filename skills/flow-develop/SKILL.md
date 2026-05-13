@@ -115,7 +115,7 @@ orchestrate.sh develop "<user prompt>\n\nQuality requirements for this deliverab
 **MANDATORY: You MUST use the native shell command tool to run this provider check BEFORE displaying the banner. Do NOT skip it. Do NOT assume availability.**
 
 ```bash
-bash "${HOME}/.claude-octopus/plugin/scripts/helpers/check-providers.sh"
+bash /Users/sourouche/.claude-octopus/plugin/scripts/helpers/check-providers.sh
 ```
 
 **Use the ACTUAL results below. PROHIBITED: Showing only "🔵 Claude: Available ✓" without listing all providers.**
@@ -203,7 +203,7 @@ fi
 **You MUST execute this command via the native shell command tool:**
 
 ```bash
-${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh develop "<user's implementation request>"
+/Users/sourouche/.claude-octopus/plugin/scripts/orchestrate.sh develop "<user's implementation request>"
 ```
 
 **CRITICAL: You are PROHIBITED from:**
@@ -427,7 +427,7 @@ Providers:
 ### Step 1: Invoke Tangle Phase
 
 ```bash
-${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh develop "<user's implementation request>"
+/Users/sourouche/.claude-octopus/plugin/scripts/orchestrate.sh develop "<user's implementation request>"
 ```
 
 ### Step 2: Multi-Provider Implementation
@@ -562,7 +562,7 @@ Claude:
 🐙 **CLAUDE OCTOPUS ACTIVATED** - Multi-provider implementation mode
 🛠️ Develop Phase: Building authentication system
 
-[Executes: ${HOME}/.claude-octopus/plugin/scripts/orchestrate.sh develop "Build a user authentication system with JWT"]
+[Executes: /Users/sourouche/.claude-octopus/plugin/scripts/orchestrate.sh develop "Build a user authentication system with JWT"]
 
 [After completion, reads synthesis and presents:]
 

@@ -5,7 +5,12 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve the physical path (pwd -P) so SCRIPT_DIR points at the real install
+# directory even when the script is invoked through the ~/.claude-octopus/plugin
+# convenience symlink. Without -P, PLUGIN_DIR would equal the symlink itself,
+# which causes octo_ensure_stable_plugin_root to recreate the symlink pointing
+# at itself (ELOOP). See #371.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 source "${SCRIPT_DIR}/lib/plugin-root.sh" 2>/dev/null || true
 

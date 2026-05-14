@@ -10,8 +10,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 source "${PLUGIN_ROOT}/scripts/lib/cursor-agent.sh" 2>/dev/null || true
 source "${PLUGIN_ROOT}/scripts/lib/plugin-root.sh" 2>/dev/null || true
 

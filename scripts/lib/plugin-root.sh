@@ -50,6 +50,20 @@ octo_ensure_stable_plugin_root() {
 
     mkdir -p "$(dirname "$stable_root")"
 
+    # Defense in depth: if the existing stable_root already resolves to the same
+    # physical directory as plugin_root, leave it alone. Without this guard, a
+    # caller that passes the stable_root path as plugin_root (e.g., from a
+    # SCRIPT_DIR resolved without `pwd -P`) would cause us to `rm -f` the
+    # symlink and then `ln -s` it pointing at itself → ELOOP. See #371.
+    if [[ -L "$stable_root" ]]; then
+        local _resolved_plugin _resolved_stable
+        _resolved_plugin="$(cd "$plugin_root" 2>/dev/null && pwd -P)" || _resolved_plugin=""
+        _resolved_stable="$(cd "$stable_root" 2>/dev/null && pwd -P)" || _resolved_stable=""
+        if [[ -n "$_resolved_plugin" && "$_resolved_plugin" == "$_resolved_stable" ]]; then
+            return 0
+        fi
+    fi
+
     if [[ -L "$stable_root" || -f "$stable_root" ]]; then
         rm -f "$stable_root" 2>/dev/null || true
     fi

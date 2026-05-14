@@ -4,7 +4,10 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve physical path so the fallback `dirname "$SCRIPT_DIR"` plugin_root
+# (used when CLAUDE_PLUGIN_ROOT is unset) is the real install path rather than
+# the convenience symlink — prevents self-referential symlink creation. See #371.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "${SCRIPT_DIR}/lib/session-id.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/plugin-root.sh" 2>/dev/null || true
 
@@ -30,7 +33,14 @@ export_session_variables() {
     # available in the LLM's Bash shell. This symlink makes all skill
     # references to ${HOME}/.claude-octopus/plugin/scripts/... resolve correctly.
     # Created BEFORE session directories so the symlink exists even if mkdir fails.
-    local plugin_root="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
+    #
+    # IMPORTANT: canonicalize plugin_root to its physical path before passing
+    # to the self-heal. Claude Code may set CLAUDE_PLUGIN_ROOT to the stable
+    # symlink path itself, which would otherwise cause octo_ensure_stable_plugin_root
+    # to recreate the symlink pointing at itself (ELOOP). See #371.
+    local plugin_root_raw="${CLAUDE_PLUGIN_ROOT:-$(dirname "$SCRIPT_DIR")}"
+    local plugin_root
+    plugin_root="$(cd "$plugin_root_raw" 2>/dev/null && pwd -P)" || plugin_root="$plugin_root_raw"
     if declare -f octo_ensure_stable_plugin_root >/dev/null 2>&1; then
         octo_ensure_stable_plugin_root "$plugin_root" >/dev/null 2>&1 || true
     else

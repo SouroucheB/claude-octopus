@@ -141,7 +141,7 @@ EOFSET
 fi
 
 # --- 5. Query claude-mem for recent project context (v8.57.0) ---
-BRIDGE_SCRIPT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts/claude-mem-bridge.sh"
+BRIDGE_SCRIPT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}/scripts/claude-mem-bridge.sh"
 if [[ -x "$BRIDGE_SCRIPT" ]]; then
     MEM_CONTEXT=$("$BRIDGE_SCRIPT" context "" 3 2>/dev/null || echo "")
     if [[ -n "$MEM_CONTEXT" ]]; then
@@ -154,7 +154,7 @@ fi  # end SKIP_PREFS guard
 # --- 6. Cache hygiene advisory (v9.29.0) ---
 # Notify when 3+ stale octo cache versions exist. Auto-clean only when explicitly
 # opted in via OCTOPUS_AUTO_CLEAN_CACHE=1 — never delete without consent.
-HYGIENE_LIB="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}/scripts/lib/cache-hygiene.sh"
+HYGIENE_LIB="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd -P)}/scripts/lib/cache-hygiene.sh"
 if [[ -r "$HYGIENE_LIB" ]]; then
     # shellcheck disable=SC1090
     source "$HYGIENE_LIB"

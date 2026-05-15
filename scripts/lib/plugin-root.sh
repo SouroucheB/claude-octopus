@@ -44,10 +44,6 @@ octo_ensure_stable_plugin_root() {
 
     [[ -n "$plugin_root" && -d "$plugin_root" ]] || return 1
 
-    local resolved_plugin_root
-    resolved_plugin_root="$(cd -P "$plugin_root" 2>/dev/null && pwd)" || return 1
-    plugin_root="$resolved_plugin_root"
-
     mkdir -p "$(dirname "$stable_root")"
 
     # Defense in depth: if the existing stable_root already resolves to the same

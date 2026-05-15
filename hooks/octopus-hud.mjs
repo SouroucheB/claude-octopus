@@ -1095,10 +1095,7 @@ function render(input, session, usage, transcript, latestVersion, config) {
 
   const agentName = input?.agent?.name;
   if (agentName) {
-    const isUnknownSender = String(agentName).trim().toUpperCase() === "UNKNOWN";
-    const label = isUnknownSender ? "Sender" : "Agent";
-    const color = isUnknownSender ? C.yellow : C.magenta;
-    line3.push(`${C.slate800bold}${label}:${C.reset} ${color}${agentName}${C.reset}`);
+    line3.push(`${C.slate800bold}Agent:${C.reset} ${C.magenta}${agentName}${C.reset}`);
   }
 
   // v9.10.2: Enhanced todo progress — show active task text, not just count

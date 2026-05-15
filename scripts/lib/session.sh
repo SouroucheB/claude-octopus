@@ -351,11 +351,7 @@ init_session() {
     # v8.8: Auto-name session via claude rename (non-blocking, best-effort)
     if [[ "$SUPPORTS_AUTH_CLI" == "true" ]] && [[ -n "$CLAUDE_CODE_SESSION" ]]; then
         # Use /rename auto-naming by setting a meaningful name
-        local progression_opt=""
-        if declare -f claude_progression_exclusion_opt >/dev/null 2>&1; then
-            progression_opt=$(claude_progression_exclusion_opt)
-        fi
-        claude${_BARE_OPT:-}${progression_opt} --no-input --print "Session: ${session_name}" &>/dev/null &
+        claude --no-input --print "Session: ${session_name}" &>/dev/null &
         log "DEBUG" "Auto-naming session: ${session_name}"
     fi
 

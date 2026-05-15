@@ -243,16 +243,6 @@ if command -v node &>/dev/null; then
         fail "HUD output shows model name" "model not in output"
     fi
 
-    UNKNOWN_SENDER_INPUT='{"session_id":"test-unknown-sender","agent":{"name":"UNKNOWN"},"model":{"id":"claude-sonnet-4-5","display_name":"Sonnet 4.5"},"context_window":{"used_percentage":10},"version":"2.1.79"}'
-    UNKNOWN_SENDER_OUTPUT=$(echo "$UNKNOWN_SENDER_INPUT" | node "$HUD" 2>/dev/null | sed $'s/\x1b\[[0-9;]*m//g') || UNKNOWN_SENDER_OUTPUT=""
-    if echo "$UNKNOWN_SENDER_OUTPUT" | grep -q "Sender:" && \
-       echo "$UNKNOWN_SENDER_OUTPUT" | grep -q "UNKNOWN" && \
-       ! echo "$UNKNOWN_SENDER_OUTPUT" | grep -q "Agent:"; then
-        pass "HUD renders UNKNOWN sender as sender badge"
-    else
-        fail "HUD renders UNKNOWN sender as sender badge" "expected Sender badge with UNKNOWN and no Agent badge"
-    fi
-
     # Verify bridge file was written with correct session_id
     BRIDGE_FILE="/tmp/octopus-ctx-test-123.json"
     if [[ -f "$BRIDGE_FILE" ]]; then

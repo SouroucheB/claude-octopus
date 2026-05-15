@@ -8,14 +8,6 @@
 # Source-safe: no main execution block.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_BARE_OPT="${_BARE_OPT:-}"
-
-claude_progression_exclusion_opt() {
-    if [[ "${SUPPORTS_EXCLUDE_DYNAMIC_PROMPT:-false}" == "true" && "${OCTOPUS_DISABLE_PROGRESSION_EXCLUSION:-0}" != "1" ]]; then
-        printf '%s' ' --exclude-dynamic-system-prompt-sections'
-    fi
-}
-
 #                    gpt-5.2-codex, gpt-5.4-mini (budget), gpt-5 (standard), gpt-5.2, gpt-5.1
 # - OpenAI Reasoning: o3, o3-pro (API-key only), o3 (API-key only), o3-mini (API-key only)
 # - OpenAI Large Context: gpt-4.1 (1M ctx, API-key only), gpt-5.4 (1M ctx, API-key only)
@@ -44,10 +36,6 @@ get_agent_command() {
     esac
 
     local sandbox_flag="--sandbox ${codex_sandbox}"
-    local claude_progression_opt=""
-    case "$agent_type" in
-        claude|claude-*) claude_progression_opt="$(claude_progression_exclusion_opt)" ;;
-    esac
 
     case "$agent_type" in
         codex|codex-standard|codex-max|codex-mini|codex-general)
@@ -89,20 +77,20 @@ get_agent_command() {
             echo "${gemini_env} ${gemini_exec} ${model} ${gemini_flags}"
             ;;
         codex-review) echo "codex exec --skip-git-repo-check review" ;; # Code review mode (no sandbox support)
-        claude) echo "claude${_BARE_OPT}${claude_progression_opt} --print" ;;                         # Claude Sonnet 4.6
-        claude-sonnet) echo "claude${_BARE_OPT}${claude_progression_opt} --print --model sonnet" ;;        # Claude Sonnet explicit
+        claude) echo "claude${_BARE_OPT} --print" ;;                         # Claude Sonnet 4.6
+        claude-sonnet) echo "claude${_BARE_OPT} --print --model sonnet" ;;        # Claude Sonnet explicit
         claude-opus)
             # v9.23: Opus alias — resolves to 4.7 on Anthropic API (v2.1.111+), 4.6 on Bedrock/Vertex.
             # Use `env VAR=val` prefix so the assignment survives read -ra word-splitting
             # in spawn.sh — a bare VAR=val prefix only works in shell eval context.
             if [[ "${SUPPORTS_XHIGH_EFFORT:-false}" == "true" ]]; then
-                echo "env CLAUDE_CODE_EFFORT_LEVEL=xhigh claude${_BARE_OPT}${claude_progression_opt} --print --model opus"
+                echo "env CLAUDE_CODE_EFFORT_LEVEL=xhigh claude${_BARE_OPT} --print --model opus"
             else
-                echo "claude${_BARE_OPT}${claude_progression_opt} --print --model opus"
+                echo "claude${_BARE_OPT} --print --model opus"
             fi
             ;;
-        claude-opus-fast) echo "claude${_BARE_OPT}${claude_progression_opt} --print --model claude-opus-4-6 --fast" ;; # Claude Opus 4.6 Fast (v8.4: v2.1.36+) — pinned to 4.6 (no 4.7 fast variant)
-        claude-opus-legacy) echo "claude${_BARE_OPT}${claude_progression_opt} --print --model claude-opus-4-6" ;; # v9.23: explicit 4.6 opt-in
+        claude-opus-fast) echo "claude${_BARE_OPT} --print --model claude-opus-4-6 --fast" ;; # Claude Opus 4.6 Fast (v8.4: v2.1.36+) — pinned to 4.6 (no 4.7 fast variant)
+        claude-opus-legacy) echo "claude${_BARE_OPT} --print --model claude-opus-4-6" ;; # v9.23: explicit 4.6 opt-in
         openrouter) echo "openrouter_execute" ;;                 # OpenRouter API (v4.8)
         openrouter-glm5) echo "openrouter_execute_model z-ai/glm-5" ;;           # v8.11.0: GLM-5 via OpenRouter
         openrouter-kimi) echo "openrouter_execute_model moonshotai/kimi-k2.5" ;; # v8.11.0: Kimi K2.5 via OpenRouter

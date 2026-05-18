@@ -4,6 +4,43 @@
 
 # Validate tangle results with quality gate
 # v3.0: Supports configurable threshold and loop-until-approved retry logic
+
+extract_explicit_file_refs() {
+    local text="$1"
+
+    printf '%s\n' "$text" \
+        | grep -oE '(src|lib|app|test|tests|docs|pkg|cmd|internal|scripts|config|public|assets|components|pages|utils|hooks|services|models|controllers|routes|middleware|api)/[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,5}|\./[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,5}' 2>/dev/null \
+        | sed 's#^\./##' \
+        | head -100 \
+        | sort -u || true
+}
+
+extract_tangle_result_output() {
+    local result_file="$1"
+
+    awk '
+        /^## Output[[:space:]]*$/ { capture = 1; next }
+        /^## Status:/ { capture = 0 }
+        capture { print }
+    ' "$result_file" 2>/dev/null || true
+}
+
+check_explicit_file_coverage() {
+    local original_prompt="$1"
+    local output_corpus="$2"
+    local missing=""
+    local ref
+
+    while IFS= read -r ref; do
+        [[ -z "$ref" ]] && continue
+        if [[ "$output_corpus" != *"$ref"* ]]; then
+            missing+="${ref}"$'\n'
+        fi
+    done <<< "$(extract_explicit_file_refs "$original_prompt")"
+
+    printf '%s' "$missing"
+}
+
 validate_tangle_results() {
     local task_group="$1"
     local original_prompt="$2"
@@ -13,6 +50,7 @@ validate_tangle_results() {
     while true; do
         # Collect all results
         local results=""
+        local result_outputs=""
         local success_count=0
         local fail_count=0
         FAILED_SUBTASKS=""  # Reset for this validation pass (string-based)
@@ -43,7 +81,11 @@ validate_tangle_results() {
                 fi
             fi
             results+="$(<"$result")\n\n---\n\n"
+            result_outputs+="$(extract_tangle_result_output "$result")"$'\n'
         done
+
+        local missing_explicit_files
+        missing_explicit_files=$(check_explicit_file_coverage "$original_prompt" "$result_outputs")
 
         # Quality gate check (using configurable per-phase threshold - v8.19.0)
         local tangle_threshold
@@ -60,6 +102,12 @@ validate_tangle_results() {
         elif [[ $success_rate -lt 90 ]]; then
             gate_status="WARNING"
             gate_color="${YELLOW}"
+        fi
+
+        if [[ -n "$missing_explicit_files" ]]; then
+            gate_status="FAILED"
+            gate_color="${RED}"
+            log WARN "Tangle missing explicit file coverage: $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
         fi
 
         # v8.20.1: Record quality gate metric
@@ -194,6 +242,14 @@ $challenge_result
 - Successful: ${success_count}/${total} providers
 - Failed: ${fail_count}/${total} providers
 - Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
+
+### Explicit File Coverage
+$(if [[ -n "$missing_explicit_files" ]]; then
+    echo "#### Missing Explicit File Coverage"
+    echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
+else
+    echo "All explicit file references from the task were covered by tangle outputs."
+fi)
 
 ### Subtask Results
 $results

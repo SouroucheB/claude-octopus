@@ -135,4 +135,89 @@ assert_contains "$(cat "$MCP_INDEX" 2>/dev/null)" \
 OPENCLAW_INDEX="$PROJECT_ROOT/openclaw/src/index.ts"
 assert_contains "$(cat "$OPENCLAW_INDEX" 2>/dev/null)" \
   "focus|provenance|autonomy|publish|debate" "openclaw: review tool has typed profile fields"
+
+# ── behavior checks for review targets ───────────────────────────────────────
+# A patch file passed as target should be reviewed as the diff itself. A plain
+# file should still use git diff semantics so /octo:review does not review
+# arbitrary file contents when the user meant "changes in this path".
+
+source "$PROJECT_ROOT/scripts/lib/review.sh"
+
+REVIEW_BEHAVIOR_DIR="$TMPDIR_TEST/review-behavior"
+mkdir -p "$REVIEW_BEHAVIOR_DIR/home" "$REVIEW_BEHAVIOR_DIR/results"
+export HOME="$REVIEW_BEHAVIOR_DIR/home"
+export RESULTS_DIR="$REVIEW_BEHAVIOR_DIR/results"
+CAPTURED_REVIEW_PROMPT="$REVIEW_BEHAVIOR_DIR/review-prompt.txt"
+SPAWN_COUNT_FILE="$REVIEW_BEHAVIOR_DIR/spawn-count"
+printf '0' > "$SPAWN_COUNT_FILE"
+
+log() { :; }
+check_codex_auth_freshness() { return 0; }
+parse_review_md() {
+  REVIEW_ALWAYS_CHECK=""
+  REVIEW_STYLE_RULES=""
+  REVIEW_SKIP_PATTERNS=""
+}
+build_review_fleet() {
+  printf '%s\n' "fake-reviewer:logic-reviewer:correctness"
+}
+spawn_agent() {
+  local agent_type="$1"
+  local prompt="$2"
+  local task_id="$3"
+  local count
+  count=$(<"$SPAWN_COUNT_FILE")
+  printf '%s' "$((count + 1))" > "$SPAWN_COUNT_FILE"
+  printf '%s' "$prompt" > "$CAPTURED_REVIEW_PROMPT"
+
+  local result_file="${RESULTS_DIR}/${agent_type}-${task_id}.md"
+  mkdir -p "$(dirname "$result_file")"
+  {
+    printf '%s\n' "## Output"
+    printf '%s\n' '```'
+    printf '%s\n' '{"findings":[{"file":"sample.txt","line":1,"severity":"normal","category":"correctness","title":"captured","detail":"captured","confidence":0.9}]}'
+    printf '%s\n' '```'
+    printf '%s\n' "## Status: SUCCESS"
+  } > "$result_file"
+}
+run_agent_sync() {
+  printf '%s\n' '{"findings":[]}'
+}
+render_terminal_report() { :; }
+print_provider_report() {
+  rm -f "$1"
+}
+
+test_case "review_run reviews an explicit diff file target"
+PATCH_TARGET="$REVIEW_BEHAVIOR_DIR/changes.patch"
+cat > "$PATCH_TARGET" <<'EOF'
+diff --git a/sample.txt b/sample.txt
+--- a/sample.txt
++++ b/sample.txt
+@@ -1 +1 @@
+-old
++new
+EOF
+profile_json=$(jq -nc --arg target "$PATCH_TARGET" '{target:$target,publish:"never",debate:"off"}')
+if review_run "$profile_json" >/dev/null 2>&1 && \
+   [[ $(<"$SPAWN_COUNT_FILE") == "1" ]] && \
+   [[ "$(<"$CAPTURED_REVIEW_PROMPT")" == *"diff --git a/sample.txt b/sample.txt"* ]]; then
+  test_pass
+else
+  test_fail "patch file content was not passed to the review fleet"
+fi
+
+test_case "review_run does not treat a plain readable file as a diff"
+PLAIN_TARGET="$REVIEW_BEHAVIOR_DIR/plain.txt"
+printf '%s\n' "plain source text, not a patch" > "$PLAIN_TARGET"
+printf '0' > "$SPAWN_COUNT_FILE"
+rm -f "$CAPTURED_REVIEW_PROMPT"
+profile_json=$(jq -nc --arg target "$PLAIN_TARGET" '{target:$target,publish:"never",debate:"off"}')
+if review_run "$profile_json" >/dev/null 2>&1 && \
+   [[ $(<"$SPAWN_COUNT_FILE") == "0" ]] && \
+   [[ ! -f "$CAPTURED_REVIEW_PROMPT" ]]; then
+  test_pass
+else
+  test_fail "plain file target was reviewed as raw content instead of git diff"
+fi
 test_summary

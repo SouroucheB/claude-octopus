@@ -42,6 +42,18 @@ else
     test_fail "expected provider status table, got: ${summary:-<empty>}"
 fi
 
+test_case "classify_agent_output detects Codex closed stdin tool error"
+codex_empty_output="$WORKSPACE_DIR/results/codex-empty.out"
+codex_stderr="$WORKSPACE_DIR/results/codex-stderr.err"
+> "$codex_empty_output"
+printf '%s\n' '2026-05-15T10:03:10Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open' > "$codex_stderr"
+classification="$(classify_agent_output "$codex_empty_output" 0 "codex" "$codex_stderr")"
+if [[ "$classification" == "failed:Codex tool stdin closed"* ]]; then
+    test_pass
+else
+    test_fail "expected Codex stdin-closed classification, got: ${classification:-<empty>}"
+fi
+
 test_case "OCTOPUS_REQUIRE_ALL fails when any provider failed"
 set +e
 OCTOPUS_REQUIRE_ALL=true render_agent_summary >/tmp/octopus-agent-summary-test.out 2>/dev/null

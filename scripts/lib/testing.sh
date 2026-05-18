@@ -41,9 +41,53 @@ check_explicit_file_coverage() {
     printf '%s' "$missing"
 }
 
+snapshot_tangle_worktree_paths() {
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+    {
+        git diff --name-only 2>/dev/null || true
+        git diff --cached --name-only 2>/dev/null || true
+        git ls-files --others --exclude-standard 2>/dev/null || true
+    } | sed '/^$/d' | sort -u
+}
+
+tangle_prompt_requires_worktree_changes() {
+    local original_prompt="$1"
+    local mode="${OCTOPUS_TANGLE_REQUIRE_WORKTREE_CHANGES:-auto}"
+
+    case "$mode" in
+        false|off|0|no)
+            return 1
+            ;;
+        true|on|1|yes)
+            return 0
+            ;;
+    esac
+
+    if [[ -n "$(extract_explicit_file_refs "$original_prompt")" ]]; then
+        return 0
+    fi
+
+    printf '%s\n' "$original_prompt" \
+        | grep -Eiq '\b(implement|build|create|add|update|modify|edit|fix|refactor|wire|integrate|feature|component|command|route|hook|template|test|tests|typescript|javascript|code|app|ui)\b'
+}
+
+check_tangle_worktree_changes() {
+    local before_file="$1"
+    local current_file
+    current_file=$(mktemp "${TMPDIR:-/tmp}/octo-tangle-worktree-after.XXXXXX") || return 0
+
+    snapshot_tangle_worktree_paths > "$current_file" 2>/dev/null || true
+    if [[ -f "$before_file" ]]; then
+        comm -13 <(sort -u "$before_file") <(sort -u "$current_file")
+    fi
+    rm -f "$current_file"
+}
+
 validate_tangle_results() {
     local task_group="$1"
     local original_prompt="$2"
+    local worktree_before_file="${3:-}"
     local validation_file="${RESULTS_DIR}/tangle-validation-${task_group}.md"
     local quality_retry_count=0
 
@@ -86,6 +130,13 @@ validate_tangle_results() {
 
         local missing_explicit_files
         missing_explicit_files=$(check_explicit_file_coverage "$original_prompt" "$result_outputs")
+        local worktree_changes=""
+        local requires_worktree_changes=false
+        if [[ -n "$worktree_before_file" && -f "$worktree_before_file" ]] && \
+           tangle_prompt_requires_worktree_changes "$original_prompt"; then
+            requires_worktree_changes=true
+            worktree_changes=$(check_tangle_worktree_changes "$worktree_before_file")
+        fi
 
         # Quality gate check (using configurable per-phase threshold - v8.19.0)
         local tangle_threshold
@@ -108,6 +159,12 @@ validate_tangle_results() {
             gate_status="FAILED"
             gate_color="${RED}"
             log WARN "Tangle missing explicit file coverage: $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+        fi
+
+        if [[ "$requires_worktree_changes" == "true" && -z "$worktree_changes" ]]; then
+            gate_status="FAILED"
+            gate_color="${RED}"
+            log WARN "Tangle produced no new worktree changes for an implementation task" 2>/dev/null || true
         fi
 
         # v8.20.1: Record quality gate metric
@@ -249,6 +306,19 @@ $(if [[ -n "$missing_explicit_files" ]]; then
     echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
 else
     echo "All explicit file references from the task were covered by tangle outputs."
+fi)
+
+### Worktree Change Evidence
+$(if [[ "$requires_worktree_changes" == "true" ]]; then
+    if [[ -n "$worktree_changes" ]]; then
+        echo "Tangle produced worktree changes:"
+        echo "$worktree_changes" | sed '/^$/d; s/^/- /'
+    else
+        echo "#### Missing Worktree Changes"
+        echo "This prompt was classified as implementation work, but tangle produced no new modified, staged, or untracked paths. Agents likely returned analysis/plans instead of applying edits."
+    fi
+else
+    echo "Not required for this prompt."
 fi)
 
 ### Subtask Results

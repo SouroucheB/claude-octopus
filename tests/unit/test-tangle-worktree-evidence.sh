@@ -49,6 +49,21 @@ $body
 EOF
 }
 
+write_failed_result() {
+    local path="$1"
+    local body="$2"
+    cat > "$path" <<EOF
+# Agent: codex
+# Task ID: tangle-evidence-0
+# Phase: tangle
+
+## Output
+$body
+
+## Status: FAILED (Empty output)
+EOF
+}
+
 git -C "$REPO_DIR" init -q
 git -C "$REPO_DIR" config user.email test@example.com
 git -C "$REPO_DIR" config user.name "Octopus Test"
@@ -102,6 +117,27 @@ if (
     test_pass
 else
     test_fail "analysis prompt unexpectedly required worktree changes"
+fi
+
+test_case "failed quality gate writes validation report before abort"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-abort.txt"
+    write_failed_result "$RESULTS_DIR/codex-tangle-evidence-abort.md" \
+        "Provider produced no usable implementation."
+    evaluate_quality_branch() { echo "abort"; }
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-abort" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-abort.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "### Quality Gate: FAILED" "$RESULTS_DIR/tangle-validation-evidence-abort.md" && \
+    grep -q "Decision Branch: abort" "$RESULTS_DIR/tangle-validation-evidence-abort.md" && \
+    grep -q "threshold: 70%" "$RESULTS_DIR/tangle-validation-evidence-abort.md" && \
+    grep -q "Failed: 1/1 result files" "$RESULTS_DIR/tangle-validation-evidence-abort.md"
+); then
+    test_pass
+else
+    test_fail "abort path did not leave a useful validation report"
 fi
 
 test_summary

@@ -230,6 +230,45 @@ $challenge_result
         local quality_branch
         quality_branch=$(evaluate_quality_branch "$success_rate" "$quality_retry_count")
 
+        # Write validation report before branching so abort/escalate/retry paths
+        # still leave an actionable artifact for embrace and post-run diagnosis.
+        cat > "$validation_file" << EOF
+# TANGLE Phase Validation Report
+## Task: $original_prompt
+## Generated: $(date)
+
+### Quality Gate: ${gate_status}
+- Success Rate: ${success_rate}% (threshold: ${tangle_threshold}%)
+- Successful: ${success_count}/${total} result files
+- Failed: ${fail_count}/${total} result files
+- Decision Branch: ${quality_branch}
+- Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
+
+### Explicit File Coverage
+$(if [[ -n "$missing_explicit_files" ]]; then
+    echo "#### Missing Explicit File Coverage"
+    echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
+else
+    echo "All explicit file references from the task were covered by tangle outputs."
+fi)
+
+### Worktree Change Evidence
+$(if [[ "$requires_worktree_changes" == "true" ]]; then
+    if [[ -n "$worktree_changes" ]]; then
+        echo "Tangle produced worktree changes:"
+        echo "$worktree_changes" | sed '/^$/d; s/^/- /'
+    else
+        echo "#### Missing Worktree Changes"
+        echo "This prompt was classified as implementation work, but tangle produced no new modified, staged, or untracked paths. Agents likely returned analysis/plans instead of applying edits."
+    fi
+else
+    echo "Not required for this prompt."
+fi)
+
+### Subtask Results
+$results
+EOF
+
         case "$quality_branch" in
             proceed|proceed_warn)
                 # Quality gate passed - continue to delivery
@@ -288,46 +327,9 @@ $challenge_result
                 ;;
         esac
 
-        # Write validation report
-        cat > "$validation_file" << EOF
-# TANGLE Phase Validation Report
-## Task: $original_prompt
-## Generated: $(date)
-
-### Quality Gate: ${gate_status}
-- Success Rate: ${success_rate}% (threshold: ${QUALITY_THRESHOLD}%)
-- Successful: ${success_count}/${total} providers
-- Failed: ${fail_count}/${total} providers
-- Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
-
-### Explicit File Coverage
-$(if [[ -n "$missing_explicit_files" ]]; then
-    echo "#### Missing Explicit File Coverage"
-    echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
-else
-    echo "All explicit file references from the task were covered by tangle outputs."
-fi)
-
-### Worktree Change Evidence
-$(if [[ "$requires_worktree_changes" == "true" ]]; then
-    if [[ -n "$worktree_changes" ]]; then
-        echo "Tangle produced worktree changes:"
-        echo "$worktree_changes" | sed '/^$/d; s/^/- /'
-    else
-        echo "#### Missing Worktree Changes"
-        echo "This prompt was classified as implementation work, but tangle produced no new modified, staged, or untracked paths. Agents likely returned analysis/plans instead of applying edits."
-    fi
-else
-    echo "Not required for this prompt."
-fi)
-
-### Subtask Results
-$results
-EOF
-
         echo ""
         echo -e "${gate_color}${_BOX_TOP}${NC}"
-        echo -e "${gate_color}║  Quality Gate: ${gate_status} (${success_rate}% of providers succeeded)${NC}"
+        echo -e "${gate_color}║  Quality Gate: ${gate_status} (${success_rate}% of tangle results succeeded)${NC}"
         echo -e "${gate_color}${_BOX_BOT}${NC}"
 
         if [[ "$gate_status" == "FAILED" ]]; then

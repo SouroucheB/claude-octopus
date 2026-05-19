@@ -203,6 +203,13 @@ octo_file_has_codex_stdin_closed() {
     grep -q 'write_stdin failed: stdin is closed' "$stderr_file" 2>/dev/null
 }
 
+octo_file_has_codex_recoverable_stderr() {
+    local stderr_file="${1:-}"
+    [[ -n "$stderr_file" && -s "$stderr_file" ]] || return 1
+
+    grep -qE '^# Completed:|^## Worktree Changes$|^## Integration Evidence$|^## Verification$|^tokens used$' "$stderr_file" 2>/dev/null
+}
+
 classify_agent_output() {
     local output_file="$1"
     local exit_code="${2:-0}"
@@ -230,6 +237,10 @@ classify_agent_output() {
     fi
 
     if [[ ! -s "$output_file" ]]; then
+        if [[ "$agent" == codex* ]] && octo_file_has_codex_recoverable_stderr "$stderr_file"; then
+            echo "degraded:Codex response captured on stderr"
+            return 0
+        fi
         echo "failed:Empty output"
         return 0
     fi

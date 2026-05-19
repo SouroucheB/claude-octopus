@@ -255,6 +255,12 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
                 -e '^Run /mcp' \
                 "$temp_output" >> "$result_file" 2>/dev/null || cat "$temp_output" >> "$result_file"
         fi
+        if [[ "$agent_type" == codex* ]] \
+            && ! grep -q '[[:alnum:]]' "$temp_output" 2>/dev/null \
+            && type octo_file_has_codex_recoverable_stderr >/dev/null 2>&1 \
+            && octo_file_has_codex_recoverable_stderr "$temp_errors"; then
+            echo "(Codex response was emitted on stderr; see Errors transcript below.)" >> "$result_file"
+        fi
 
         # Trust marker for external CLI output
         case "$agent_type" in codex*|gemini*|perplexity*|cursor-agent*)

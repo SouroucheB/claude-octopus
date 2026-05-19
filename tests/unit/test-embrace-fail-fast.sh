@@ -10,6 +10,11 @@ WORKFLOWS="$PROJECT_ROOT/scripts/lib/workflows.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/../helpers/test-framework.sh"
 
+# This suite intentionally exercises non-zero workflow exits. Keep errexit off
+# after loading the shared framework so Bash 5/Linux does not abort before
+# assertions run.
+set +e
+
 test_suite "embrace phase fail-fast"
 
 test_case "workflows.sh has valid bash syntax"
@@ -41,6 +46,7 @@ LOOP_UNTIL_APPROVED=false
 RESUME_SESSION=false
 DRY_RUN=false
 OCTOPUS_YAML_RUNTIME=disabled
+OCTOPUS_EMBRACE_DEBATE_GATES=none
 SUPPORTS_DISABLE_CRON_ENV=false
 
 CASE_NAME=""
@@ -64,6 +70,12 @@ complete_session() { :; }
 write_structured_decision() { :; }
 earn_skill() { :; }
 sleep() { :; }
+run_agent_sync() {
+    if [[ "$CASE_NAME" == "gate_agents_fail" && "${5:-}" == "embrace-gate" ]]; then
+        return 2
+    fi
+    printf '%s\n' "gate response from ${1:-agent}"
+}
 save_session_checkpoint() {
     CHECKPOINTS+="${1}:${2}:${3:-}"$'\n'
 }
@@ -94,21 +106,60 @@ ink_deliver() {
 }
 
 run_embrace_case() {
+    set +e
     CASE_NAME="$1"
+    OCTOPUS_EMBRACE_DEBATE_GATES="${2:-none}"
     PHASE_CALLS=""
     CHECKPOINTS=""
     EMBRACE_STATUS=0
+    EMBRACE_DEBATE_GATE_OUTPUT=""
     rm -rf "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR"
     mkdir -p "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR" "$HOME"
 
-    if embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1; then
-        EMBRACE_STATUS=0
-    else
-        EMBRACE_STATUS=$?
-    fi
+    embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
+    EMBRACE_STATUS=$?
+
+    return 0
 }
 
-run_embrace_case "missing_probe_output"
+run_embrace_case "all_ok" "none" || true
+
+test_case "no debate gates by default"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   [[ "$CHECKPOINTS" != *"debate-"* ]] && \
+   ! ls "$RESULTS_DIR"/embrace-gate-*.md >/dev/null 2>&1; then
+    test_pass
+else
+    test_fail "embrace ran debate gates even though none were requested"
+fi
+
+run_embrace_case "all_ok" "both" || true
+
+test_case "requested debate gates run before develop and deliver"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   [[ "$CHECKPOINTS" == *"debate-define-develop:completed:"* ]] && \
+   [[ "$CHECKPOINTS" == *"debate-develop-deliver:completed:"* ]] && \
+   ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md >/dev/null 2>&1 && \
+   ls "$RESULTS_DIR"/embrace-gate-develop-deliver-*.md >/dev/null 2>&1; then
+    test_pass
+else
+    test_fail "embrace did not run both requested debate gates"
+fi
+
+run_embrace_case "gate_agents_fail" "define" || true
+
+test_case "requested debate gate failure stops before tangle"
+if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp " ]] && \
+   [[ "$CHECKPOINTS" == *"debate-define-develop:failed:"* ]]; then
+    test_pass
+else
+    test_fail "embrace continued after requested debate gate failure"
+fi
+
+run_embrace_case "missing_probe_output" || true
 
 test_case "missing probe synthesis stops before grasp"
 if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
@@ -119,7 +170,7 @@ else
     test_fail "embrace did not stop cleanly when probe produced no synthesis artifact"
 fi
 
-run_embrace_case "tangle_fails"
+run_embrace_case "tangle_fails" || true
 
 test_case "tangle failure stops before ink"
 if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
@@ -130,7 +181,7 @@ else
     test_fail "embrace did not stop cleanly when tangle returned non-zero"
 fi
 
-run_embrace_case "missing_ink_output"
+run_embrace_case "missing_ink_output" || true
 
 test_case "missing delivery artifact fails after ink"
 if [[ "$EMBRACE_STATUS" -ne 0 ]] && \

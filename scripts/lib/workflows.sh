@@ -1507,6 +1507,224 @@ format_workflow_banner() {
     fi
 }
 
+# ── Embrace debate gates ────────────────────────────────────────────────
+embrace_normalize_debate_gates() {
+    local raw="${OCTOPUS_EMBRACE_DEBATE_GATES:-${EMBRACE_DEBATE_GATES:-none}}"
+    raw=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')
+    raw="${raw#-}"
+    raw="${raw%-}"
+
+    case "$raw" in
+        ""|none|no|false|off|skip|skipped)
+            printf '%s\n' "none"
+            ;;
+        define|define-develop|define-to-develop|first|one|single|yes|true|on)
+            printf '%s\n' "define"
+            ;;
+        both|all|two|full)
+            printf '%s\n' "both"
+            ;;
+        auto|if-disagreement|only-if-disagreement|disagreement|detected)
+            printf '%s\n' "auto"
+            ;;
+        *)
+            log WARN "Unknown OCTOPUS_EMBRACE_DEBATE_GATES='$raw'; treating as none"
+            printf '%s\n' "none"
+            ;;
+    esac
+}
+
+embrace_debate_gate_requested() {
+    local gate="$1"
+    local requested
+    requested=$(embrace_normalize_debate_gates)
+
+    case "$requested:$gate" in
+        define:define-develop|both:define-develop|both:develop-deliver)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+embrace_debate_gate() {
+    local gate="$1"
+    local prompt="$2"
+    local context_file="${3:-}"
+    local gate_slug title style focus expected_pattern
+    local task_group="${OCTOPUS_TASK_GROUP:-$(date +%s)}"
+    EMBRACE_DEBATE_GATE_OUTPUT=""
+
+    case "$gate" in
+        define|define-develop)
+            gate_slug="define-develop"
+            title="Define → Develop"
+            style="adversarial"
+            focus="Challenge the proposed approach before implementation. Identify blockers, weak assumptions, missing requirements, and alternatives dismissed too quickly."
+            expected_pattern="${RESULTS_DIR}/grasp-consensus-*.md"
+            ;;
+        develop|develop-deliver)
+            gate_slug="develop-deliver"
+            title="Develop → Deliver"
+            style="collaborative"
+            focus="Review implementation readiness before delivery. Identify missing scope, unverified claims, quality gaps, regressions, and follow-up work that must not be hidden."
+            expected_pattern="${RESULTS_DIR}/tangle-validation-*.md"
+            ;;
+        *)
+            log ERROR "Unknown embrace debate gate: $gate"
+            return 1
+            ;;
+    esac
+
+    if [[ -z "$context_file" ]]; then
+        context_file=$(ls -t $expected_pattern 2>/dev/null | head -1) || true
+    fi
+    if [[ -z "$context_file" || ! -f "$context_file" ]]; then
+        log ERROR "Embrace debate gate '${gate_slug}' missing context artifact"
+        echo -e "${RED:-}✗${NC:-} Debate gate ${title} cannot run: context artifact missing"
+        return 1
+    fi
+
+    if ! declare -f run_agent_sync >/dev/null 2>&1; then
+        log ERROR "Embrace debate gate '${gate_slug}' cannot run: run_agent_sync is unavailable"
+        return 1
+    fi
+
+    mkdir -p "$RESULTS_DIR" "$LOGS_DIR"
+
+    echo ""
+    echo -e "${CYAN:-}Debate gate: ${title} (${style})${NC:-}"
+    echo ""
+
+    local context_excerpt gate_prompt
+    context_excerpt=$(head -c "${OCTOPUS_EMBRACE_GATE_CONTEXT_BYTES:-12000}" "$context_file" 2>/dev/null || true)
+    gate_prompt="EMBRACE ${title} DEBATE GATE
+
+Style: ${style}
+Task: ${prompt}
+Context artifact: ${context_file}
+
+${focus}
+
+Context excerpt:
+${context_excerpt}
+
+Return a concise gate review with:
+1. Verdict: PROCEED, PROCEED_WITH_RISKS, REVISE, or STOP
+2. Blocking issues, if any
+3. Non-blocking risks
+4. Concrete changes needed before the next phase
+5. Evidence from the context artifact"
+
+    local codex_view="" gemini_view="" claude_view="" synthesis=""
+    local codex_status="failed" gemini_status="failed" claude_status="failed"
+    local successful=0
+
+    if codex_view=$(run_agent_sync "codex" "$gate_prompt" 120 "code-reviewer" "embrace-gate" 2>/dev/null); then
+        if [[ -n "$codex_view" ]]; then
+            codex_status="ok"
+            successful=$((successful + 1))
+        fi
+    fi
+    if gemini_view=$(run_agent_sync "gemini" "$gate_prompt" 120 "researcher" "embrace-gate" 2>/dev/null); then
+        if [[ -n "$gemini_view" ]]; then
+            gemini_status="ok"
+            successful=$((successful + 1))
+        fi
+    fi
+    if claude_view=$(run_agent_sync "claude-sonnet" "$gate_prompt" 120 "code-reviewer" "embrace-gate" 2>/dev/null); then
+        if [[ -n "$claude_view" ]]; then
+            claude_status="ok"
+            successful=$((successful + 1))
+        fi
+    fi
+
+    if [[ "$successful" -eq 0 ]]; then
+        log ERROR "Embrace debate gate '${gate_slug}' produced no provider output"
+        echo -e "${RED:-}✗${NC:-} Debate gate ${title} produced no provider output"
+        return 1
+    fi
+
+    local synthesis_prompt="Synthesize this Embrace ${title} debate gate.
+
+Task: ${prompt}
+Gate style: ${style}
+Provider statuses: codex=${codex_status}, gemini=${gemini_status}, claude=${claude_status}
+
+Codex:
+${codex_view:-[no output]}
+
+Gemini:
+${gemini_view:-[no output]}
+
+Claude:
+${claude_view:-[no output]}
+
+Return:
+1. Gate verdict
+2. Required actions before next phase
+3. Risks accepted if proceeding
+4. Provider participation summary"
+
+    synthesis=$(run_agent_sync "claude-sonnet" "$synthesis_prompt" 120 "synthesizer" "embrace-gate" 2>/dev/null) || true
+    if [[ -z "$synthesis" ]]; then
+        synthesis="Synthesis unavailable. Review provider outputs below before proceeding."
+    fi
+
+    local gate_file="${RESULTS_DIR}/embrace-gate-${gate_slug}-${task_group}.md"
+    cat > "$gate_file" << EOF
+# EMBRACE Debate Gate: ${title}
+
+**Generated:** $(date)
+**Task:** ${prompt}
+**Style:** ${style}
+**Context Artifact:** ${context_file}
+**Provider Statuses:** codex=${codex_status}, gemini=${gemini_status}, claude=${claude_status}
+
+---
+
+## Synthesis
+
+${synthesis}
+
+---
+
+## Provider Views
+
+### Codex (${codex_status})
+
+${codex_view:-No output.}
+
+### Gemini (${gemini_status})
+
+${gemini_view:-No output.}
+
+### Claude (${claude_status})
+
+${claude_view:-No output.}
+EOF
+
+    if declare -f save_session_checkpoint >/dev/null 2>&1; then
+        save_session_checkpoint "debate-${gate_slug}" "completed" "$gate_file"
+    fi
+    if declare -f write_structured_decision >/dev/null 2>&1; then
+        write_structured_decision \
+            "debate-synthesis" \
+            "embrace_debate_gate/${gate_slug}" \
+            "Embrace debate gate completed: ${prompt:0:80}" \
+            "" \
+            "high" \
+            "Provider statuses: codex=${codex_status}, gemini=${gemini_status}, claude=${claude_status}" \
+            "" 2>/dev/null || true
+    fi
+
+    EMBRACE_DEBATE_GATE_OUTPUT="$gate_file"
+    echo -e "${GREEN:-}✓${NC:-} Debate gate completed: $gate_file"
+    return 0
+}
+
 # ── embrace_full_workflow (moved from orchestrate.sh v9.22.1) ──
 embrace_full_workflow() {
     local prompt="$1"
@@ -1557,8 +1775,12 @@ ${obs_ctx}"
         log DEBUG "Injected ${#obs_ctx} chars of high-importance observations"
     fi
 
+    local requested_debate_gates
+    requested_debate_gates=$(embrace_normalize_debate_gates)
+
     log INFO "Task: $prompt"
     log INFO "Autonomy mode: $AUTONOMY_MODE"
+    log INFO "Requested debate gates: $requested_debate_gates"
     [[ "$LOOP_UNTIL_APPROVED" == "true" ]] && log INFO "Loop-until-approved: enabled"
 
     # v8.3: Export workflow phase for event-driven hooks (TeammateIdle, TaskCompleted)
@@ -1707,6 +1929,11 @@ ${obs_ctx}"
             ;;
     esac
 
+    if [[ "$use_yaml_runtime" == "true" && ( "$requested_debate_gates" == "define" || "$requested_debate_gates" == "both" ) ]]; then
+        log "INFO" "YAML runtime disabled for this embrace run because explicit debate gates were requested"
+        use_yaml_runtime=false
+    fi
+
     if [[ "$use_yaml_runtime" == "true" ]]; then
         log "INFO" "Delegating to YAML workflow runtime for embrace workflow"
         echo -e "${CYAN}Using YAML-driven workflow runtime (embrace.yaml)${NC}"
@@ -1759,6 +1986,7 @@ ${obs_ctx}"
     # HARDCODED PHASE LOGIC (fallback when YAML runtime not available)
     # ═══════════════════════════════════════════════════════════════════════════
     local probe_synthesis grasp_consensus tangle_validation
+    local define_gate_output="" develop_gate_output=""
 
     # Phase 1: PROBE (Discover)
     if [[ -z "$resume_from" || "$resume_from" == "null" ]]; then
@@ -1840,6 +2068,26 @@ ${obs_ctx}"
         log INFO "Skipping grasp phase (resuming)"
     fi
 
+    # Optional requested gate: Define → Develop.
+    # Autonomy controls whether humans are asked between phases; it must not
+    # silently waive a gate the user explicitly selected.
+    if embrace_debate_gate_requested "define-develop"; then
+        export OCTOPUS_WORKFLOW_PHASE="debate-define-develop"
+        _write_embrace_session_state "debate-define-develop" "running"
+        if ! embrace_debate_gate "define-develop" "$prompt" "$grasp_consensus"; then
+            _abort_embrace_phase "debate-define-develop" "requested debate gate failed" "$grasp_consensus"
+            return 1
+        fi
+        define_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
+        if [[ -z "$define_gate_output" || ! -f "$define_gate_output" ]]; then
+            _abort_embrace_phase "debate-define-develop" "requested debate gate produced no artifact" "$grasp_consensus"
+            return 1
+        fi
+        _write_embrace_session_state "debate-define-develop" "completed"
+        handle_autonomy_checkpoint "debate-define-develop" "completed"
+        sleep 1
+    fi
+
     # Phase 3: TANGLE (Develop)
     if [[ -z "$resume_from" || "$resume_from" == "null" || "$resume_from" == "probe" || "$resume_from" == "grasp" ]]; then
         export OCTOPUS_WORKFLOW_PHASE="tangle"
@@ -1884,6 +2132,24 @@ ${obs_ctx}"
             return 1
         fi
         log INFO "Skipping tangle phase (resuming)"
+    fi
+
+    # Optional requested gate: Develop → Deliver.
+    if embrace_debate_gate_requested "develop-deliver"; then
+        export OCTOPUS_WORKFLOW_PHASE="debate-develop-deliver"
+        _write_embrace_session_state "debate-develop-deliver" "running"
+        if ! embrace_debate_gate "develop-deliver" "$prompt" "$tangle_validation"; then
+            _abort_embrace_phase "debate-develop-deliver" "requested debate gate failed" "$tangle_validation"
+            return 1
+        fi
+        develop_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
+        if [[ -z "$develop_gate_output" || ! -f "$develop_gate_output" ]]; then
+            _abort_embrace_phase "debate-develop-deliver" "requested debate gate produced no artifact" "$tangle_validation"
+            return 1
+        fi
+        _write_embrace_session_state "debate-develop-deliver" "completed"
+        handle_autonomy_checkpoint "debate-develop-deliver" "completed"
+        sleep 1
     fi
 
     # Phase 4: INK (Deliver)
@@ -1952,7 +2218,9 @@ ${obs_ctx}"
     echo -e "${CYAN}Phase outputs:${NC}"
     [[ -n "$probe_synthesis" ]] && echo -e "  Probe:  $probe_synthesis"
     [[ -n "$grasp_consensus" ]] && echo -e "  Grasp:  $grasp_consensus"
+    [[ -n "$define_gate_output" ]] && echo -e "  Gate:   $define_gate_output"
     [[ -n "$tangle_validation" ]] && echo -e "  Tangle: $tangle_validation"
+    [[ -n "$develop_gate_output" ]] && echo -e "  Gate:   $develop_gate_output"
     echo -e "  Ink:    $(ls -t "$RESULTS_DIR"/delivery-*.md 2>/dev/null | head -1)"
     echo ""
 

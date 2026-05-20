@@ -10,30 +10,23 @@ aliases:
 
 **Your first output line MUST be:** `🐙 Octopus Embrace`
 
-## MANDATORY COMPLIANCE — DO NOT SKIP
+## Non-Negotiable Runner Contract
 
-**When the user invokes `/octo:embrace`, you MUST execute the full multi-LLM workflow below. You are PROHIBITED from:**
-- Deciding the task is "too simple" for the workflow
-- Doing the task directly instead of running the phases
-- Skipping phases because you judge them unnecessary
-- Substituting your own approach for the structured workflow
+When the user invokes `/octo:embrace`, you MUST delegate the workflow to the unified Embrace runner:
 
-**The user chose `/octo:embrace` deliberately.** Respect that choice.
+```bash
+cd "${HOME}/.claude-octopus/plugin" && OCTOPUS_EMBRACE_DEBATE_GATES="${DEBATE_GATES}" AUTONOMY_MODE="${AUTONOMY_MODE}" ON_FAIL_ACTION=abort bash scripts/orchestrate.sh embrace "<user's prompt>"
+```
 
-## EXECUTION MECHANISM — NON-NEGOTIABLE
+You are PROHIBITED from driving Embrace phase by phase from this markdown command. Do not manually run the individual Discover, Define, Develop, Deliver, or debate-gate subcommands as a substitute for the unified runner. Do not implement code directly if the runner fails. If the runner exits non-zero, STOP and report the failed phase, exit status, and artifact path shown by the runner.
 
-**Each phase MUST be executed through the `orchestrate.sh` entrypoint. Direct Skill calls for the workflow phases are not permitted because they can recursively reload command instructions. You are PROHIBITED from:**
-- Using the Agent tool to do research yourself instead of running the discovery phase
-- Using WebFetch/Read/Grep as a substitute for multi-provider research
-- Implementing code directly instead of running the develop phase
-- Using a single code-reviewer agent instead of running the deliver phase
-- Skipping `orchestrate.sh` calls because "I can do this faster directly"
-
-**The ENTIRE POINT of `/octo:embrace` is multi-LLM orchestration.** If you execute phases using only Claude-native tools (Agent, WebFetch, Write, Edit), you have violated the command's purpose even if you followed the phase structure.
-
-**Self-check after completion:** You should be able to list the `orchestrate.sh` commands you ran. If you used only Claude-native tools, you executed incorrectly.
-
----
+The runner owns:
+- phase ordering
+- requested debate gates
+- required artifact checks
+- fail-fast behavior
+- fallbacks for degraded providers
+- delivery synthesis
 
 ## Step 1: Ask Clarifying Questions
 
@@ -88,30 +81,18 @@ AskUserQuestion({
 })
 ```
 
-After receiving answers, incorporate them into all subsequent phase invocations — use the scope to calibrate research depth, focus areas to weight provider perspectives, autonomy level to control phase transitions, and debate preference to gate handoffs.
-
-Normalize the debate preference immediately:
+Normalize the answers before running the command:
+- `AUTONOMY_MODE=supervised`, `semi-autonomous`, `autonomous`, or `manual`
 - `DEBATE_GATES=define` for "Yes — debate at Define→Develop gate"
 - `DEBATE_GATES=both` for "Yes — debate at both gates"
 - `DEBATE_GATES=none` for "No — skip debates"
 - `DEBATE_GATES=auto` for "Only if disagreement detected"
 
-**Gate ledger invariant:** if `DEBATE_GATES=define`, a `embrace-gate-define-develop-*.md` artifact from the current run MUST exist before Phase 3 starts. If `DEBATE_GATES=both`, both `embrace-gate-define-develop-*.md` and `embrace-gate-develop-deliver-*.md` artifacts from the current run MUST exist before their next phases. Autonomy mode does not waive requested gates. If a requested gate command fails or produces no artifact, STOP and report the failed gate instead of continuing.
+If `CLAUDE_CODE_REMOTE=true` or `OCTOPUS_REMOTE_SESSION=true`, do not block on clarifying questions. Infer scope and focus from the prompt, use `AUTONOMY_MODE=autonomous`, and use `DEBATE_GATES=auto` unless the user's prompt says otherwise.
 
-### Remote/Cloud Defaults
+## Step 2: Display Provider Banner
 
-If `CLAUDE_CODE_REMOTE=true` or `OCTOPUS_REMOTE_SESSION=true`, do not block on clarifying questions. Use these defaults unless the user's prompt says otherwise:
-
-- scope: infer from the prompt
-- focus: all relevant areas
-- autonomy: autonomous
-- debate gates: only if provider disagreement is detected
-
-Plan locally first, then run the approved `/octo:embrace` prompt in the hosted or remote-control session with `OCTOPUS_REMOTE_SESSION=true` set in that environment.
-
-## Step 2: Check Provider Availability & Display Banner
-
-**MANDATORY: Run this bash command BEFORE the banner.**
+Run this check before the banner:
 
 ```bash
 echo "PROVIDER_CHECK_START"
@@ -126,160 +107,40 @@ printf "openrouter:%s\n" "$([ -n "${OPENROUTER_API_KEY:-}" ] && echo available |
 echo "PROVIDER_CHECK_END"
 ```
 
-Display banner with ACTUAL results:
+Display a concise banner with the actual provider status, selected scope/focus, autonomy, and debate-gate mode.
 
-```
-🐙 **CLAUDE OCTOPUS ACTIVATED** - Full Double Diamond Workflow
-🐙 Embrace: [Brief description]
+## Step 3: Run The Unified Workflow
 
-Phases: 🔍 Discover → 🎯 Define → 🛠️ Develop → ✅ Deliver
-
-Provider Availability:
-🔴 Codex CLI: [status]    🟡 Gemini CLI: [status]
-🟣 Perplexity: [status]   🟤 OpenCode: [status]
-🔵 Claude: Available ✓
-
-Scope: [answer]  Focus: [answer]  Autonomy: [answer]
-```
-
-## Step 3: Execute Phases via orchestrate.sh
-
-**CRITICAL: Each phase MUST run through `orchestrate.sh`. Do not invoke `/octo:discover`, `/octo:define`, `/octo:develop`, or `/octo:deliver` via Skill calls inside this command; direct phase dispatch prevents recursive command loading.**
-
-### Phase 1 — Discover
-
-Run the Discover phase via orchestrate.sh:
+Run exactly one Embrace workflow command:
 
 ```bash
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh probe <user's prompt>
+cd "${HOME}/.claude-octopus/plugin" && OCTOPUS_EMBRACE_DEBATE_GATES="${DEBATE_GATES}" AUTONOMY_MODE="${AUTONOMY_MODE}" ON_FAIL_ACTION=abort bash scripts/orchestrate.sh embrace "<user's prompt>"
 ```
 
-This will dispatch to Codex, Gemini, and other available providers. Results saved to `~/.claude-octopus/results/probe-synthesis-*.md`.
+If the command succeeds, summarize the phase outputs and artifact paths printed by the runner.
 
-**Supervised mode:** After Discover completes, present key findings and ask to proceed.
-**Semi-autonomous/Autonomous:** Proceed automatically.
+If the command fails, do not continue locally. Report:
+- failed phase
+- runner reason
+- artifact path, if printed
+- next safe action: inspect, retry with adjusted provider settings, or stop
 
-### Phase 2 — Define
+## Step 4: Ask What To Do Next
 
-Run the define phase via orchestrate.sh:
-
-```bash
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh grasp <user's prompt>
-```
-
-This builds consensus across providers. Results saved to `~/.claude-octopus/results/grasp-consensus-*.md`.
-
-**Supervised mode:** Present consensus and ask to proceed.
-
-### Debate Gate (if enabled)
-
-If user selected debate gates at Define→Develop transition:
-1. Read consensus from `~/.claude-octopus/results/grasp-consensus-*.md`
-2. Run the explicit Embrace gate via orchestrate.sh:
-
-```bash
-latest_consensus="$(ls -t ~/.claude-octopus/results/grasp-consensus-*.md | head -1)"
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh embrace-gate define-develop "<user's prompt>" "$latest_consensus"
-```
-
-3. Verify `~/.claude-octopus/results/embrace-gate-define-develop-*.md` exists for this run before Phase 3. If the command fails or no artifact exists, STOP.
-
-4. If risks surface and autonomy is supervised/manual, present via AskUserQuestion:
-```javascript
-AskUserQuestion({
-  questions: [{
-    question: "The debate gate surfaced concerns. How should we proceed?",
-    header: "Debate Gate",
-    multiSelect: false,
-    options: [
-      {label: "Proceed anyway", description: "Accept risks and continue to Develop"},
-      {label: "Revise approach", description: "Adjust plan based on debate findings"},
-      {label: "Run deeper debate", description: "Thorough 3-round debate before deciding"},
-      {label: "Stop and review", description: "Pause for manual review"}
-    ]
-  }]
-})
-```
-
-### Phase 3 — Develop
-
-Run the develop phase via orchestrate.sh:
-
-```bash
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh tangle <user's prompt>
-```
-
-This dispatches implementation with quality gates. Results saved to `~/.claude-octopus/results/tangle-validation-*.md`.
-
-### Second Debate Gate (if "both gates" selected)
-
-If `DEBATE_GATES=both`, run this before Phase 4:
-
-```bash
-latest_tangle="$(ls -t ~/.claude-octopus/results/tangle-validation-*.md | head -1)"
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh embrace-gate develop-deliver "<user's prompt>" "$latest_tangle"
-```
-
-Verify `~/.claude-octopus/results/embrace-gate-develop-deliver-*.md` exists for this run before Phase 4. If the command fails or no artifact exists, STOP. In autonomous mode, continue only after the gate artifact exists; do not silently skip this gate.
-
-### Phase 4 — Deliver
-
-Run the deliver phase via orchestrate.sh:
-
-```bash
-cd "${HOME}/.claude-octopus/plugin" && bash scripts/orchestrate.sh ink <user's prompt>
-```
-
-This runs multi-provider validation. Results saved to `~/.claude-octopus/results/delivery-*.md`.
-
-### Auto Code Review (MANDATORY)
-
-After Develop completes, launch two verification agents in background:
-
-```
-Agent(model: "sonnet", subagent_type: "feature-dev:code-reviewer", run_in_background: true,
-  description: "Code review: embrace deliver",
-  prompt: "Review all code changes from this session. Check git diff. Focus on bugs, security, logic errors. Report only high-confidence issues.")
-
-Agent(model: "sonnet", run_in_background: true,
-  description: "E2E test: embrace deliver",
-  prompt: "Run the project's test suite and verify no regressions. Report tests passed/failed.")
-```
-
-Include findings in final results.
-
-## Step 4: Present Results & Next Steps
-
-**MANDATORY: Present results AND ask what to do next.**
-
-Read result files from `~/.claude-octopus/results/` and present a concise synthesis. Then:
+After a successful run, ask:
 
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "The embrace workflow has completed all 4 phases. What next?",
+    question: "The embrace workflow has completed. What next?",
     header: "Next Steps",
     multiSelect: false,
     options: [
-      {label: "Review phase outputs in detail", description: "Walk through each phase's findings"},
-      {label: "Refine the implementation", description: "Make adjustments based on results"},
-      {label: "Run another iteration", description: "Re-run specific phases with updated context"},
-      {label: "Start a new task", description: "Move on to something else"},
+      {label: "Review phase outputs", description: "Walk through each phase's findings"},
+      {label: "Refine implementation", description: "Make adjustments based on results"},
+      {label: "Run another iteration", description: "Re-run with updated context"},
       {label: "Export results", description: "Save a summary document"}
     ]
   }]
 })
 ```
-
-**PROHIBITED: Ending the session without asking this question.**
-
----
-
-## Quick Reference
-
-| Phase | Command | orchestrate.sh | Output |
-|-------|---------|----------------|--------|
-| Discover | `/octo:discover` | `probe-single` per provider | `probe-synthesis-*.md` |
-| Define | `/octo:define` | `grasp` | `grasp-consensus-*.md` |
-| Develop | `/octo:develop` | `tangle` | `tangle-validation-*.md` |
-| Deliver | `/octo:deliver` | `ink` | `delivery-*.md` |

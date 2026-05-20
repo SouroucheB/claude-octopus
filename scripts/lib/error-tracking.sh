@@ -207,7 +207,28 @@ octo_file_has_codex_recoverable_stderr() {
     local stderr_file="${1:-}"
     [[ -n "$stderr_file" && -s "$stderr_file" ]] || return 1
 
-    grep -qE '^# Completed:|^## Worktree Changes$|^## Integration Evidence$|^## Verification$|^tokens used$' "$stderr_file" 2>/dev/null
+    octo_file_has_provider_rejection "$stderr_file" && return 1
+    octo_file_has_codex_stdin_closed "$stderr_file" && return 1
+
+    if grep -qE '^# Completed:|^## Worktree Changes$|^## Integration Evidence$|^## Verification$|^tokens used$' "$stderr_file" 2>/dev/null; then
+        return 0
+    fi
+
+    local useful_stderr
+    useful_stderr=$(grep -vE \
+        -e '^MCP issues detected' \
+        -e '^Loading extension:' \
+        -e '^YOLO mode is enabled' \
+        -e '^Keychain initialization' \
+        -e '^Using FileKeychain' \
+        -e '^Loaded cached credentials' \
+        -e '^Run /mcp' \
+        -e '^warning:' \
+        -e '^Warning:' \
+        "$stderr_file" 2>/dev/null | tr -d '\000-\011\013-\037' || true)
+
+    [[ "$useful_stderr" =~ [[:alnum:]] ]] || return 1
+    [[ ${#useful_stderr} -ge ${OCTOPUS_CODEX_RECOVERABLE_STDERR_MIN_CHARS:-120} ]]
 }
 
 classify_agent_output() {

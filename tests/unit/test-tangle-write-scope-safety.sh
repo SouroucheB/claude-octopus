@@ -73,6 +73,22 @@ else
     test_fail "directory/file overlap detection is incorrect"
 fi
 
+test_case "absolute write scopes are recognized"
+absolute_subtasks="1. [CODING] Update canary. Files: /private/tmp/embrace-canary.abc/canary.txt"
+if tangle_validate_parallel_write_scopes "$absolute_subtasks"; then
+    test_pass
+else
+    test_fail "absolute Files: scope was treated as missing"
+fi
+
+test_case "root file write scopes are recognized"
+root_file_subtasks="1. [CODING] Update canary. Files: \`canary.txt\`. Rationale: single root file."
+if tangle_validate_parallel_write_scopes "$root_file_subtasks"; then
+    test_pass
+else
+    test_fail "root file Files: scope was treated as missing"
+fi
+
 original_prompt="Update src/lib/templates/NA02_REQUEST_REPORT.ts and src/lib/legal/legalReferenceCatalog.ts without producing duplicate subject prefixes."
 
 tangle_develop "$original_prompt" >/dev/null
@@ -93,11 +109,11 @@ else
     test_fail "direct fallback prompt did not preserve the overlap reason and original scope"
 fi
 
-test_case "unsafe fallback returns before tangle validation"
-if [[ "$VALIDATION_CALLED" == "false" ]]; then
+test_case "unsafe fallback still runs tangle validation"
+if [[ "$VALIDATION_CALLED" == "true" ]]; then
     test_pass
 else
-    test_fail "validation ran even though unsafe decomposition was not spawned"
+    test_fail "unsafe direct fallback returned before producing tangle validation"
 fi
 
 test_summary

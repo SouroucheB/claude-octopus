@@ -104,6 +104,40 @@ else
     test_fail "validation failed despite a new worktree path"
 fi
 
+test_case "implementation prompt with verified current worktree path passes validation"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    mkdir -p src/app
+    printf 'export const alreadyDone = true\n' > src/app/already-done.ts
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-current.txt"
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-current.md" \
+        "Verified src/app/already-done.ts is already in the target state; no extra edit required."
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-current" "Implement the app change in src/app/already-done.ts" "$RESULTS_DIR/before-current.txt" >/dev/null 2>&1
+    grep -q "Tangle verified current worktree changes" "$RESULTS_DIR/tangle-validation-evidence-current.md" && \
+    grep -q "src/app/already-done.ts" "$RESULTS_DIR/tangle-validation-evidence-current.md"
+); then
+    test_pass
+else
+    test_fail "validation failed despite verified current worktree evidence"
+fi
+
+test_case "octopus internal artifacts are not worktree evidence"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    mkdir -p .claude-octopus .octo results
+    printf '{}\n' > .claude-octopus/state.json
+    printf '{}\n' > .octo/state.json
+    printf 'artifact\n' > results/output.md
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/internal-paths.txt"
+    ! grep -qE '^(\.claude-octopus|\.octo|results)(/|$)' "$RESULTS_DIR/internal-paths.txt"
+); then
+    test_pass
+else
+    test_fail "octopus internal paths were counted as implementation evidence"
+fi
+
 test_case "analysis prompt does not require worktree changes"
 if (
     cd "$REPO_DIR"

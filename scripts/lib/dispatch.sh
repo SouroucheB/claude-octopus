@@ -65,9 +65,9 @@ get_agent_command() {
             # NOTE: .toml custom commands exist in .gemini/commands/octo/ for human use,
             # but stdin+slash-command don't compose in headless mode (Codex source analysis)
             # Routed through helpers/gemini-exec.sh for 404/ModelNotFound fallback.
-            local gemini_env="env NODE_NO_WARNINGS=1"
+            local gemini_env="env NODE_NO_WARNINGS=1 GEMINI_CLI_TRUST_WORKSPACE=true"
             if [[ "$OCTOPUS_PLATFORM" == "Darwin" && -z "${GEMINI_API_KEY:-}" ]]; then
-                gemini_env="env NODE_NO_WARNINGS=1 GEMINI_FORCE_FILE_STORAGE=true"
+                gemini_env="env NODE_NO_WARNINGS=1 GEMINI_CLI_TRUST_WORKSPACE=true GEMINI_FORCE_FILE_STORAGE=true"
             fi
             local gemini_exec="${PLUGIN_DIR}/scripts/helpers/gemini-exec.sh"
             local gemini_flags="-o text --approval-mode yolo"

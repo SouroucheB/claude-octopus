@@ -716,25 +716,28 @@ grasp_define() {
     # Multiple agents define the problem from their perspective
     log INFO "Gathering problem definitions from multiple perspectives..."
 
+    local define_readonly_guard="IMPORTANT: This is the read-only Define phase. Do NOT modify, create, delete, stage, or commit files. Do NOT run shell commands that write to the workspace. If inspection is needed, use read-only commands only and return text."
     local def1 def2 def3
-    def1=$(run_agent_sync "codex" "Based on: $prompt\n${context}Define the core problem statement in 2-3 sentences. What is the essential challenge?" 120 "backend-architect" "grasp") || {
+    def1=$(run_agent_sync "codex" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define the core problem statement in 2-3 sentences. What is the essential challenge?" 120 "backend-architect" "grasp") || {
         log WARN "Codex failed for problem definition, falling back to Claude"
         echo -e " ${YELLOW}⚠${NC}  Codex unavailable for problem definition — falling back to Claude"
-        def1=$(run_agent_sync "claude-sonnet" "Based on: $prompt\n${context}Define the core problem statement in 2-3 sentences. What is the essential challenge?" 120 "backend-architect" "grasp") || true
+        def1=$(run_agent_sync "claude-sonnet" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define the core problem statement in 2-3 sentences. What is the essential challenge?" 120 "backend-architect" "grasp") || true
     }
-    def2=$(run_agent_sync "gemini" "Based on: $prompt\n${context}Define success criteria. How will we know when this is solved correctly? List 3-5 measurable criteria." 120 "researcher" "grasp") || {
+    def2=$(run_agent_sync "gemini" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define success criteria. How will we know when this is solved correctly? List 3-5 measurable criteria." 120 "researcher" "grasp") || {
         log WARN "Gemini failed for success criteria, falling back to Claude"
         echo -e " ${YELLOW}⚠${NC}  Gemini unavailable for success criteria — falling back to Claude"
-        def2=$(run_agent_sync "claude-sonnet" "Based on: $prompt\n${context}Define success criteria. How will we know when this is solved correctly? List 3-5 measurable criteria." 120 "researcher" "grasp") || true
+        def2=$(run_agent_sync "claude-sonnet" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define success criteria. How will we know when this is solved correctly? List 3-5 measurable criteria." 120 "researcher" "grasp") || true
     }
-    def3=$(run_agent_sync "claude-sonnet" "Based on: $prompt\n${context}Define constraints and boundaries. What are we NOT solving? What are hard limits?" 120 "researcher" "grasp")
+    def3=$(run_agent_sync "claude-sonnet" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define constraints and boundaries. What are we NOT solving? What are hard limits?" 120 "researcher" "grasp")
 
     # Build consensus
     local consensus_file="${RESULTS_DIR}/grasp-consensus-${task_group}.md"
 
     log INFO "Building consensus from perspectives..."
 
-    local consensus_prompt="Review these different problem definitions and create a unified problem statement.
+    local consensus_prompt="${define_readonly_guard}
+
+Review these different problem definitions and create a unified problem statement.
 Resolve any conflicts and synthesize the best elements from each.
 
 Problem Statement Perspective:
@@ -813,7 +816,10 @@ tangle_extract_write_scopes() {
 
     printf '%s\n' "$text" \
         | tr ' `",;()[]{}' '\n' \
-        | sed -nE '/^[A-Za-z0-9_.@%+-]+\/[A-Za-z0-9_.@%+\/-]+(\*|\/)?(:[0-9]+)?$/p' \
+        | sed -nE '
+            /^\/?[A-Za-z0-9_.@%+-]+\/[A-Za-z0-9_.@%+\/-]+(\*|\/)?(:[0-9]+)?$/p
+            /^[A-Za-z0-9_.@%+-]*\.[A-Za-z_][A-Za-z0-9_@%+-]*(:[0-9]+)?$/p
+        ' \
         | sed -E 's/:([0-9]+)$//; s/[[:punct:]]+$//' \
         | sed -E 's#^\./##; s#/\*$#/#; s#//+#/#g' \
         | sed '/^$/d' \
@@ -1014,7 +1020,9 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
         direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because decomposition failed with all providers.")
         spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
-        return
+        log INFO "Step 3: Validation gate..."
+        validate_tangle_results "$task_group" "$resolved_prompt" "$worktree_before_file"
+        return $?
     }
 
     echo -e "${CYAN}Decomposed into subtasks:${NC}"
@@ -1033,7 +1041,9 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
         direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because decomposition produced no parseable subtasks.")
         spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
-        return
+        log INFO "Step 3: Validation gate..."
+        validate_tangle_results "$task_group" "$resolved_prompt" "$worktree_before_file"
+        return $?
     fi
 
     local parallel_safety_reason=""
@@ -1043,7 +1053,9 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
         direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because parallel decomposition is unsafe: ${parallel_safety_reason}")
         spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
-        return
+        log INFO "Step 3: Validation gate..."
+        validate_tangle_results "$task_group" "$resolved_prompt" "$worktree_before_file"
+        return $?
     fi
 
     # Step 2: Parallel execution with progress tracking
@@ -1644,6 +1656,8 @@ embrace_debate_gate() {
     local context_excerpt gate_prompt
     context_excerpt=$(head -c "${OCTOPUS_EMBRACE_GATE_CONTEXT_BYTES:-12000}" "$context_file" 2>/dev/null || true)
     gate_prompt="EMBRACE ${title} DEBATE GATE
+
+IMPORTANT: This debate gate is read-only. Do NOT modify, create, delete, stage, or commit files. Do NOT run shell commands that write to the workspace. If inspection is needed, use read-only commands only and return text.
 
 Style: ${style}
 Task: ${prompt}

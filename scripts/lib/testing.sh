@@ -48,7 +48,9 @@ snapshot_tangle_worktree_paths() {
         git diff --name-only 2>/dev/null || true
         git diff --cached --name-only 2>/dev/null || true
         git ls-files --others --exclude-standard 2>/dev/null || true
-    } | sed '/^$/d' | sort -u
+    } | sed '/^$/d' \
+      | grep -Ev '^(\.claude-octopus|\.octo|results)(/|$)' \
+      | sort -u
 }
 
 tangle_prompt_requires_worktree_changes() {
@@ -81,6 +83,22 @@ check_tangle_worktree_changes() {
     if [[ -f "$before_file" ]]; then
         comm -13 <(sort -u "$before_file") <(sort -u "$current_file")
     fi
+    rm -f "$current_file"
+}
+
+check_tangle_current_worktree_evidence() {
+    local output_corpus="$1"
+    local current_file
+    current_file=$(mktemp "${TMPDIR:-/tmp}/octo-tangle-worktree-current.XXXXXX") || return 0
+
+    snapshot_tangle_worktree_paths > "$current_file" 2>/dev/null || true
+    while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        local base="${path##*/}"
+        if [[ "$output_corpus" == *"$path"* || "$output_corpus" == *"$base"* ]]; then
+            printf '%s\n' "$path"
+        fi
+    done < "$current_file"
     rm -f "$current_file"
 }
 
@@ -131,11 +149,20 @@ validate_tangle_results() {
         local missing_explicit_files
         missing_explicit_files=$(check_explicit_file_coverage "$original_prompt" "$result_outputs")
         local worktree_changes=""
+        local current_worktree_evidence=""
+        local worktree_change_mode="new"
         local requires_worktree_changes=false
         if [[ -n "$worktree_before_file" && -f "$worktree_before_file" ]] && \
            tangle_prompt_requires_worktree_changes "$original_prompt"; then
             requires_worktree_changes=true
             worktree_changes=$(check_tangle_worktree_changes "$worktree_before_file")
+            if [[ -z "$worktree_changes" ]]; then
+                current_worktree_evidence=$(check_tangle_current_worktree_evidence "$result_outputs")
+                if [[ -n "$current_worktree_evidence" ]]; then
+                    worktree_changes="$current_worktree_evidence"
+                    worktree_change_mode="current"
+                fi
+            fi
         fi
 
         # Quality gate check (using configurable per-phase threshold - v8.19.0)
@@ -255,7 +282,11 @@ fi)
 ### Worktree Change Evidence
 $(if [[ "$requires_worktree_changes" == "true" ]]; then
     if [[ -n "$worktree_changes" ]]; then
-        echo "Tangle produced worktree changes:"
+        if [[ "$worktree_change_mode" == "current" ]]; then
+            echo "Tangle verified current worktree changes:"
+        else
+            echo "Tangle produced worktree changes:"
+        fi
         echo "$worktree_changes" | sed '/^$/d; s/^/- /'
     else
         echo "#### Missing Worktree Changes"

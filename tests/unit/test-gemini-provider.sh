@@ -86,6 +86,15 @@ test_dispatch_gemini_node_no_warnings() {
     fi
 }
 
+test_dispatch_gemini_trust_workspace() {
+    test_case "dispatch: Gemini headless trusts workspace"
+    if sed -n '/gemini|gemini-fast/,/;;/p' "$DISPATCH" | grep -q 'GEMINI_CLI_TRUST_WORKSPACE=true'; then
+        test_pass
+    else
+        test_fail "dispatch should set GEMINI_CLI_TRUST_WORKSPACE=true for headless Gemini"
+    fi
+}
+
 test_dispatch_gemini_sandbox_modes() {
     test_case "dispatch: supports headless and interactive sandbox modes"
     if grep -q 'OCTOPUS_GEMINI_SANDBOX' "$DISPATCH"; then
@@ -501,6 +510,7 @@ test_dispatch_gemini_yolo_mode
 test_dispatch_gemini_model_selection
 test_dispatch_gemini_force_file_storage
 test_dispatch_gemini_node_no_warnings
+test_dispatch_gemini_trust_workspace
 test_dispatch_gemini_sandbox_modes
 test_dispatch_gemini_fast_variant
 test_dispatch_gemini_image_variant

@@ -76,11 +76,11 @@ else
     test_fail "direct fallback did not receive the original task constraints"
 fi
 
-test_case "fallback returns before tangle validation"
-if [[ "$VALIDATION_CALLED" == "false" ]]; then
+test_case "fallback still runs tangle validation"
+if [[ "$VALIDATION_CALLED" == "true" ]]; then
     test_pass
 else
-    test_fail "validation ran even though no subtasks were spawned"
+    test_fail "direct fallback returned before producing tangle validation"
 fi
 
 test_summary

@@ -1742,6 +1742,15 @@ embrace_full_workflow() {
     local task_group
     task_group=$(date +%s)
     local resume_from=""
+    local previous_octopus_run_id="${OCTOPUS_RUN_ID:-}"
+    local embrace_managed_run_id=false
+    local probe_synthesis="" grasp_consensus="" tangle_validation="" ink_output=""
+    local define_gate_output="" develop_gate_output="" embrace_report=""
+
+    if [[ -z "${OCTOPUS_RUN_ID:-}" ]]; then
+        export OCTOPUS_RUN_ID="embrace-${task_group}-$$"
+        embrace_managed_run_id=true
+    fi
 
     echo ""
     echo -e "${MAGENTA}${_BOX_TOP}${NC}"
@@ -1844,6 +1853,106 @@ ${obs_ctx}"
         unset OCTOPUS_TOTAL_PHASES
         unset OCTOPUS_COMPLETED_PHASES
         unset CLAUDE_CODE_DISABLE_CRON 2>/dev/null || true
+        if [[ "$embrace_managed_run_id" == "true" ]]; then
+            if [[ -n "$previous_octopus_run_id" ]]; then
+                export OCTOPUS_RUN_ID="$previous_octopus_run_id"
+            else
+                unset OCTOPUS_RUN_ID
+            fi
+        fi
+    }
+
+    _embrace_report_row() {
+        local label="$1"
+        local requested="$2"
+        local artifact="$3"
+
+        if [[ "$requested" != "true" ]]; then
+            printf '| %s | not-requested | |\n' "$label"
+        elif [[ -n "$artifact" && -f "$artifact" ]]; then
+            local bytes
+            bytes=$(wc -c < "$artifact" 2>/dev/null | tr -d ' ' || echo "0")
+            printf '| %s | present | `%s` (%s bytes) |\n' "$label" "$artifact" "$bytes"
+        else
+            printf '| %s | missing | `%s` |\n' "$label" "${artifact:-}"
+        fi
+    }
+
+    _write_embrace_run_report() {
+        local final_status="$1"
+        local stopped_phase="${2:-}"
+        local reason="${3:-}"
+        local duration_start="${start_time:-$SECONDS}"
+        local duration=$((SECONDS - duration_start))
+        local agent_dir agent_jsonl
+
+        embrace_report="${RESULTS_DIR}/embrace-report-${task_group}.md"
+        agent_dir=$(octo_run_dir 2>/dev/null || echo "${WORKSPACE_DIR:-$HOME/.claude-octopus}/runs/${OCTOPUS_RUN_ID:-unknown}")
+        agent_jsonl="${agent_dir}/agents.jsonl"
+
+        {
+            echo "# EMBRACE Run Report"
+            echo "## Generated: $(date)"
+            echo "## Final Status: ${final_status}"
+            echo ""
+            echo "- Task group: \`${task_group}\`"
+            echo "- Run id: \`${OCTOPUS_RUN_ID:-}\`"
+            echo "- Autonomy: \`${AUTONOMY_MODE}\`"
+            echo "- Requested debate gates: \`${requested_debate_gates}\`"
+            echo "- Results dir: \`${RESULTS_DIR}/\`"
+            echo "- Duration: ${duration}s"
+            [[ -n "$stopped_phase" ]] && echo "- Stopped phase: \`${stopped_phase}\`"
+            [[ -n "$reason" ]] && echo "- Reason: ${reason}"
+            echo ""
+            echo "## Artifact Inventory"
+            echo ""
+            echo "This inventory is generated from artifact paths captured by the runner during this run."
+            echo ""
+            echo "| Phase | Status | Artifact |"
+            echo "|---|---|---|"
+            _embrace_report_row "Probe" "true" "$probe_synthesis"
+            _embrace_report_row "Grasp" "true" "$grasp_consensus"
+            if embrace_debate_gate_requested "define-develop"; then
+                _embrace_report_row "Gate define-develop" "true" "$define_gate_output"
+            else
+                _embrace_report_row "Gate define-develop" "false" ""
+            fi
+            _embrace_report_row "Tangle" "true" "$tangle_validation"
+            if embrace_debate_gate_requested "develop-deliver"; then
+                _embrace_report_row "Gate develop-deliver" "true" "$develop_gate_output"
+            else
+                _embrace_report_row "Gate develop-deliver" "false" ""
+            fi
+            _embrace_report_row "Ink" "$([[ "$final_status" == "SUCCESS" ]] && echo true || echo false)" "$ink_output"
+            echo ""
+            echo "## Provider Status Summary"
+            echo ""
+            echo "- Agent status ledger: \`${agent_jsonl}\`"
+        } > "$embrace_report"
+
+        if [[ -s "$agent_jsonl" && "$(command -v jq 2>/dev/null)" ]]; then
+            jq -rs '
+                group_by(.agent)
+                | map(.[-1])
+                | sort_by(.agent)
+                | .[]
+                | "- \(.agent): \(.status)" + (if ((.reason // "") | length) > 0 then " - \(.reason)" else "" end) + (if ((.output_file // "") | length) > 0 then " - \(.output_file)" else "" end)
+            ' "$agent_jsonl" >> "$embrace_report" 2>/dev/null || echo "- Provider status summary unavailable: failed to parse ${agent_jsonl}" >> "$embrace_report"
+        elif [[ -s "$agent_jsonl" ]]; then
+            echo "- Provider status ledger exists but jq is unavailable for summarization." >> "$embrace_report"
+        else
+            echo "- No provider status ledger found for this run." >> "$embrace_report"
+        fi
+
+        {
+            echo ""
+            echo "## Report Contract"
+            echo ""
+            echo "- Phase status is derived from captured artifact paths, not from manual narration."
+            echo "- Provider status is derived from the current run agent ledger when available."
+        } >> "$embrace_report"
+
+        log INFO "Embrace run report: $embrace_report"
     }
 
     _abort_embrace_phase() {
@@ -1863,6 +1972,7 @@ ${obs_ctx}"
 
         _write_embrace_session_state "$phase" "failed"
         save_session_checkpoint "$phase" "failed" "$output"
+        _write_embrace_run_report "FAILED" "$phase" "$reason"
         handle_autonomy_checkpoint "$phase" "failed"
         _cleanup_embrace_exports
         return 1
@@ -1996,9 +2106,6 @@ ${obs_ctx}"
     # ═══════════════════════════════════════════════════════════════════════════
     # HARDCODED PHASE LOGIC (fallback when YAML runtime not available)
     # ═══════════════════════════════════════════════════════════════════════════
-    local probe_synthesis grasp_consensus tangle_validation
-    local define_gate_output="" develop_gate_output=""
-
     # Phase 1: PROBE (Discover)
     if [[ -z "$resume_from" || "$resume_from" == "null" ]]; then
         export OCTOPUS_WORKFLOW_PHASE="probe"
@@ -2180,7 +2287,6 @@ ${obs_ctx}"
     fi
 
     # v8.14.0: Capture phase context in persistent state
-    local ink_output
     ink_output=$(_latest_embrace_output "$RESULTS_DIR"/delivery-*.md)
     if [[ -z "$ink_output" ]]; then
         _abort_embrace_phase "ink" "missing delivery artifact (expected delivery-*.md)" "$tangle_validation"
@@ -2213,6 +2319,7 @@ ${obs_ctx}"
 
     # Mark session complete
     complete_session
+    _write_embrace_run_report "SUCCESS" "" ""
 
     # Summary
     local duration=$((SECONDS - start_time))
@@ -2225,6 +2332,7 @@ ${obs_ctx}"
     echo -e "Duration: ${duration}s"
     echo -e "Autonomy: ${AUTONOMY_MODE}"
     echo -e "Results: ${RESULTS_DIR}/"
+    [[ -n "$embrace_report" ]] && echo -e "Report: $embrace_report"
     echo ""
     echo -e "${CYAN}Phase outputs:${NC}"
     [[ -n "$probe_synthesis" ]] && echo -e "  Probe:  $probe_synthesis"

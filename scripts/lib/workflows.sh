@@ -1175,7 +1175,7 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
 }
 
 ink_delivery_sanitize_context() {
-    sed -e 's/\[Synthesis failed - raw results attached\]/[Upstream phase synthesis failed; raw fallback omitted from compact delivery context]/g'
+    LC_ALL=C sed -e 's/\[Synthesis failed - raw results attached\]/[Upstream phase synthesis failed; raw fallback omitted from compact delivery context]/g'
 }
 
 ink_delivery_file_label() {
@@ -1604,6 +1604,53 @@ embrace_debate_gate_requested() {
     esac
 }
 
+embrace_observation_keywords() {
+    local prompt="$1"
+
+    printf '%s\n' "$prompt" \
+        | tr ' `",;()[]{}' '\n' \
+        | sed -nE '
+            /^\/?[A-Za-z0-9_.@%+-]+\/[A-Za-z0-9_.@%+\/-]+(\*|\/)?(:[0-9]+)?$/p
+            /^[A-Za-z0-9_.@%+-]*\.[A-Za-z_][A-Za-z0-9_@%+-]*(:[0-9]+)?$/p
+            /^[A-Z]{2,}[0-9][A-Za-z0-9_-]*$/p
+        ' \
+        | sed -E 's/:([0-9]+)$//; s/[[:punct:]]+$//; s#^\./##; s#/\*$#/#; s#//+#/#g' \
+        | sed '/^$/d' \
+        | sort -u \
+        | head -10
+}
+
+embrace_build_observation_context() {
+    local prompt="$1"
+    local min_importance="${2:-7}"
+    local max_chars="${3:-1500}"
+    local mode="${OCTOPUS_EMBRACE_OBSERVATIONS:-relevant}"
+
+    [[ "$mode" == "off" ]] && return 0
+    if ! command -v search_observations >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [[ "$mode" == "all" ]]; then
+        search_observations "" "$min_importance" | head -c "$max_chars"
+        return 0
+    fi
+
+    local matches="" keyword observation
+    while IFS= read -r keyword; do
+        [[ -z "$keyword" ]] && continue
+        observation=$(search_observations "$keyword" "$min_importance" 2>/dev/null) || true
+        [[ -z "$observation" ]] && continue
+        if [[ "$matches" != *"$observation"* ]]; then
+            matches="${matches}${matches:+$'\n---\n'}${observation}"
+        fi
+        [[ ${#matches} -ge "$max_chars" ]] && break
+    done < <(embrace_observation_keywords "$prompt")
+
+    [[ -n "$matches" ]] && printf '%s' "${matches:0:max_chars}"
+    return 0
+}
+
 embrace_debate_gate() {
     local gate="$1"
     local prompt="$2"
@@ -1826,20 +1873,20 @@ embrace_full_workflow() {
     reset_provider_lockouts
     type reset_provider_quota_state >/dev/null 2>&1 && reset_provider_quota_state
 
-    # v8.19.0: Inject high-importance observations into workflow context
+    # v8.19.0: Inject relevant high-importance observations into workflow context
     # NOTE: Observations are VARIABLE content — appended after task prompt so that
     # the stable persona/skill prefix (injected later by spawn_agent) stays cacheable
     local high_obs
-    high_obs=$(search_observations "" 7 2>/dev/null) || true
+    high_obs=$(embrace_build_observation_context "$prompt" 7 1500 2>/dev/null) || true
     if [[ -n "$high_obs" ]]; then
-        local obs_ctx="${high_obs:0:1500}"
+        local obs_ctx="$high_obs"
         prompt="${prompt}
 
 ---
 
-## High-Importance Observations from Previous Sessions
+## Relevant High-Importance Observations from Previous Sessions
 ${obs_ctx}"
-        log DEBUG "Injected ${#obs_ctx} chars of high-importance observations"
+        log DEBUG "Injected ${#obs_ctx} chars of relevant high-importance observations"
     fi
 
     local requested_debate_gates

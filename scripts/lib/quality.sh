@@ -150,7 +150,7 @@ SKIP_SMOKE_TEST="${OCTOPUS_SKIP_SMOKE_TEST:-false}"
 # - semi-autonomous: Auto with quality gates (default)
 # - supervised: Human approval required after each phase
 # - loop-until-approved: Retry failed tasks until quality gate passes
-AUTONOMY_MODE="${CLAUDE_OCTOPUS_AUTONOMY:-semi-autonomous}"
+AUTONOMY_MODE="${AUTONOMY_MODE:-${CLAUDE_OCTOPUS_AUTONOMY:-${OCTOPUS_AUTONOMY:-semi-autonomous}}}"
 QUALITY_THRESHOLD="${CLAUDE_OCTOPUS_QUALITY_THRESHOLD:-75}"
 MAX_QUALITY_RETRIES="${CLAUDE_OCTOPUS_MAX_RETRIES:-3}"
 LOOP_UNTIL_APPROVED=false

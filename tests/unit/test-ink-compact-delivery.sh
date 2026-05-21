@@ -83,6 +83,17 @@ else
     test_fail "compact delivery context did not stay bounded/sanitized"
 fi
 
+test_case "context sanitizer is byte-safe under invalid UTF-8"
+sanitize_err="$TEST_ROOT/sanitize.err"
+sanitize_out="$(printf 'bad-byte: \303\050\n[Synthesis failed - raw results attached]\n' | ink_delivery_sanitize_context 2>"$sanitize_err")"
+if [[ ! -s "$sanitize_err" ]] && \
+   [[ "$sanitize_out" == *"bad-byte:"* ]] && \
+   [[ "$sanitize_out" == *"Upstream phase synthesis failed; raw fallback omitted"* ]]; then
+    test_pass
+else
+    test_fail "sanitizer emitted stderr or failed replacement: $(cat "$sanitize_err" 2>/dev/null)"
+fi
+
 CYAN=""
 GREEN=""
 MAGENTA=""

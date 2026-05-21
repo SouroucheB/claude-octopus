@@ -231,6 +231,28 @@ octo_file_has_codex_recoverable_stderr() {
     [[ ${#useful_stderr} -ge ${OCTOPUS_CODEX_RECOVERABLE_STDERR_MIN_CHARS:-120} ]]
 }
 
+octo_file_has_gemini_trust_failure() {
+    local file
+    for file in "$@"; do
+        [[ -f "$file" ]] || continue
+        if grep -qiE 'Gemini CLI is not running in a trusted directory|trusted directory.*--skip-trust|GEMINI_CLI_TRUST_WORKSPACE' "$file" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+octo_file_has_gemini_quota_failure() {
+    local file
+    for file in "$@"; do
+        [[ -f "$file" ]] || continue
+        if grep -qiE 'QUOTA_EXHAUSTED|TerminalQuotaError|exhausted your capacity|RetryableQuotaError|code:[[:space:]]*429' "$file" 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 classify_agent_output() {
     local output_file="$1"
     local exit_code="${2:-0}"
@@ -244,6 +266,16 @@ classify_agent_output() {
 
     if [[ "$exit_code" -eq 124 || "$exit_code" -eq 143 ]]; then
         echo "timeout:Timed out before completion"
+        return 0
+    fi
+
+    if [[ "$agent" == gemini* ]] && octo_file_has_gemini_trust_failure "$output_file" "$stderr_file"; then
+        echo "failed:GEMINI_TRUST_REQUIRED"
+        return 0
+    fi
+
+    if [[ "$agent" == gemini* ]] && octo_file_has_gemini_quota_failure "$output_file" "$stderr_file"; then
+        echo "failed:GEMINI_QUOTA_EXHAUSTED"
         return 0
     fi
 

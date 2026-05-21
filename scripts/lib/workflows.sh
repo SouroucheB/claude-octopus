@@ -754,7 +754,18 @@ Output a single, clear problem definition document with:
 
     local consensus
     consensus=$(run_agent_sync "gemini" "$consensus_prompt" 180 "synthesizer" "grasp") || {
-        consensus="[Auto-consensus failed - manual review required]\n\nProblem: $def1\n\nSuccess Criteria: $def2\n\nConstraints: $def3"
+        consensus="Automated consensus synthesis unavailable.
+
+This is a degraded consensus assembled from the available definition perspectives. It is not a manual-review failure by itself, but provider status should be inspected before treating the result as full multi-provider consensus.
+
+## Problem
+$def1
+
+## Success Criteria
+$def2
+
+## Constraints
+$def3"
     }
 
     cat > "$consensus_file" << EOF

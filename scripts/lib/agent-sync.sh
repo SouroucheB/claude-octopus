@@ -345,7 +345,12 @@ ${provider_ctx}"
         fi
         local _sync_status="failed"
         local _sync_reason="Exit code $exit_code"
-        if [[ $exit_code -eq 124 || $exit_code -eq 143 ]]; then
+        if type classify_agent_output >/dev/null 2>&1; then
+            local _classification
+            _classification=$(classify_agent_output "$temp_out" "$exit_code" "$agent_type" "$temp_err")
+            _sync_status="${_classification%%:*}"
+            _sync_reason="${_classification#*:}"
+        elif [[ $exit_code -eq 124 || $exit_code -eq 143 ]]; then
             _sync_status="timeout"
             _sync_reason="Timed out before completion"
         fi

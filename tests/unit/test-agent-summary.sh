@@ -42,6 +42,18 @@ else
     test_fail "expected provider status table, got: ${summary:-<empty>}"
 fi
 
+test_case "status readers ignore stale running records after terminal status"
+printf 'codex terminal output\n' > "$WORKSPACE_DIR/results/codex-terminal.md"
+write_agent_status "codex" "ok" 100 40 "" 1000 "$WORKSPACE_DIR/results/codex-terminal.md" "researcher"
+write_agent_status "codex" "running" 100 0 "stale dispatch record" 0 "$WORKSPACE_DIR/results/codex-running.md" "researcher"
+summary="$(render_agent_summary)"
+files="$(agent_status_output_files)"
+if [[ "$summary" == *"codex"* && "$summary" == *" ok"* && "$summary" != *"stale dispatch record"* && "$files" == *"codex-terminal.md"* ]]; then
+    test_pass
+else
+    test_fail "expected terminal codex status/output to win over stale running record; summary=${summary:-<empty>} files=${files:-<empty>}"
+fi
+
 test_case "classify_agent_output detects Codex closed stdin tool error"
 codex_empty_output="$WORKSPACE_DIR/results/codex-empty.out"
 codex_stderr="$WORKSPACE_DIR/results/codex-stderr.err"

@@ -379,7 +379,7 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
 probe_discover() {
     local _ts; _ts=$(date +%s)
     local prompt="$1"
-    local task_group="$_ts"
+    local task_group="${OCTOPUS_TASK_GROUP:-$_ts}"
     export OCTOPUS_COMMAND="${OCTOPUS_COMMAND:-discover}"
     export OCTOPUS_COMMAND_ARGS="${OCTOPUS_COMMAND_ARGS:-$prompt}"
 
@@ -684,7 +684,7 @@ grasp_define() {
     local prompt="$1"
     local probe_results="${2:-}"
     local task_group
-    task_group=$(date +%s)
+    task_group="${OCTOPUS_TASK_GROUP:-$(date +%s)}"
 
     echo ""
     octopus_phase_banner "DEFINE (Phase 2/4)" "Consensus Building" "$MAGENTA"
@@ -898,7 +898,7 @@ tangle_develop() {
     local prompt="$1"
     local grasp_file="${2:-}"
     local task_group
-    task_group=$(date +%s)
+    task_group="${OCTOPUS_TASK_GROUP:-$(date +%s)}"
 
     echo ""
     octopus_phase_banner "DEVELOP (Phase 3/4)" "Implementation" "$MAGENTA"
@@ -1227,13 +1227,27 @@ build_ink_delivery_context() {
     local -a files=()
     local seen="|"
     local candidate
+    local current_group="${OCTOPUS_TASK_GROUP:-}"
+
+    local tangle_candidate="" grasp_candidate="" probe_candidate=""
+    if [[ -n "$current_group" ]]; then
+        [[ -f "$RESULTS_DIR/tangle-validation-${current_group}.md" ]] && tangle_candidate="$RESULTS_DIR/tangle-validation-${current_group}.md"
+        [[ -f "$RESULTS_DIR/grasp-consensus-${current_group}.md" ]] && grasp_candidate="$RESULTS_DIR/grasp-consensus-${current_group}.md"
+        [[ -f "$RESULTS_DIR/probe-synthesis-${current_group}.md" ]] && probe_candidate="$RESULTS_DIR/probe-synthesis-${current_group}.md"
+    fi
+    [[ -z "$tangle_candidate" ]] && tangle_candidate=$(ls -t "$RESULTS_DIR"/tangle-validation-*.md 2>/dev/null | head -1)
+    [[ -z "$grasp_candidate" ]] && grasp_candidate=$(ls -t "$RESULTS_DIR"/grasp-consensus-*.md 2>/dev/null | head -1)
+    [[ -z "$probe_candidate" ]] && probe_candidate=$(ls -t "$RESULTS_DIR"/probe-synthesis-*.md 2>/dev/null | head -1)
 
     for candidate in \
         "$tangle_results" \
-        "$(ls -t "$RESULTS_DIR"/tangle-validation-*.md 2>/dev/null | head -1)" \
-        "$(ls -t "$RESULTS_DIR"/grasp-consensus-*.md 2>/dev/null | head -1)" \
-        "$(ls -t "$RESULTS_DIR"/probe-synthesis-*.md 2>/dev/null | head -1)"; do
+        "$tangle_candidate" \
+        "$grasp_candidate" \
+        "$probe_candidate"; do
         [[ -n "$candidate" && -f "$candidate" ]] || continue
+        if [[ -n "$current_group" && "$candidate" != *"-${current_group}.md" ]]; then
+            continue
+        fi
         if [[ "$seen" != *"|$candidate|"* ]]; then
             files+=("$candidate")
             seen="${seen}${candidate}|"
@@ -1243,6 +1257,9 @@ build_ink_delivery_context() {
     for candidate in "$RESULTS_DIR"/*.md; do
         [[ -f "$candidate" ]] || continue
         [[ "$candidate" == *aggregate* || "$candidate" == *delivery* ]] && continue
+        if [[ -n "$current_group" && "$candidate" != *"-${current_group}.md" ]]; then
+            continue
+        fi
         [[ "$seen" == *"|$candidate|"* ]] && continue
         files+=("$candidate")
         seen="${seen}${candidate}|"
@@ -1314,7 +1331,7 @@ ink_deliver() {
     local prompt="$1"
     local tangle_results="${2:-}"
     local task_group
-    task_group=$(date +%s)
+    task_group="${OCTOPUS_TASK_GROUP:-$(date +%s)}"
 
     echo ""
     octopus_phase_banner "DELIVER (Phase 4/4)" "Final Quality Gates" "$MAGENTA"
@@ -1400,6 +1417,21 @@ $all_results" 120 "code-reviewer" "ink") || {
         "high" \
         "4x10 cross-model review scores" \
         "" 2>/dev/null || true
+
+    local min_review_score="${OCTOPUS_INK_MIN_SCORE:-7}"
+    [[ "$min_review_score" =~ ^[0-9]+$ ]] || min_review_score=7
+    if [[ "$rev_sec" -lt "$min_review_score" || "$rev_rel" -lt "$min_review_score" || "$rev_perf" -lt "$min_review_score" || "$rev_acc" -lt "$min_review_score" ]]; then
+        log ERROR "Deliver quality gate FAILED: every dimension must be >= ${min_review_score}/10 (sec=$rev_sec rel=$rev_rel perf=$rev_perf acc=$rev_acc)"
+        write_structured_decision \
+            "quality-gate" \
+            "ink_deliver/min-score-gate" \
+            "Deliver quality gate FAILED: sec=${rev_sec} rel=${rev_rel} perf=${rev_perf} acc=${rev_acc} min=${min_review_score}" \
+            "ink-delivery" \
+            "high" \
+            "Minimum review score gate requires each dimension to meet or exceed ${min_review_score}/10" \
+            "" 2>/dev/null || true
+        return 1
+    fi
 
     # v8.19.0: Strict 4x10 gate (when enabled)
     if [[ "$OCTOPUS_REVIEW_4X10" == "true" ]]; then
@@ -1778,6 +1810,7 @@ embrace_full_workflow() {
 
     # v8.18.0: Reset lockouts for new workflow
     reset_provider_lockouts
+    type reset_provider_quota_state >/dev/null 2>&1 && reset_provider_quota_state
 
     # v8.19.0: Inject high-importance observations into workflow context
     # NOTE: Observations are VARIABLE content — appended after task prompt so that
@@ -1843,6 +1876,11 @@ ${obs_ctx}"
         local latest
         latest=$(ls -t $pattern 2>/dev/null | head -1) || true
         [[ -n "$latest" && -f "$latest" ]] && printf '%s\n' "$latest"
+    }
+
+    _current_embrace_output() {
+        local file="$1"
+        [[ -n "$file" && -f "$file" ]] && printf '%s\n' "$file"
     }
 
     _cleanup_embrace_exports() {
@@ -2117,9 +2155,9 @@ ${obs_ctx}"
             _abort_embrace_phase "probe" "probe_discover returned non-zero"
             return 1
         fi
-        probe_synthesis=$(_latest_embrace_output "$RESULTS_DIR"/probe-synthesis-*.md)
+        probe_synthesis=$(_current_embrace_output "$RESULTS_DIR/probe-synthesis-${task_group}.md")
         if [[ -z "$probe_synthesis" ]]; then
-            _abort_embrace_phase "probe" "missing probe synthesis artifact (expected probe-synthesis-*.md)"
+            _abort_embrace_phase "probe" "missing current-run probe synthesis artifact (expected probe-synthesis-${task_group}.md)"
             return 1
         fi
 
@@ -2138,7 +2176,6 @@ ${obs_ctx}"
         sleep 1
     else
         probe_synthesis=$(get_phase_output "probe")
-        [[ -z "$probe_synthesis" ]] && probe_synthesis=$(_latest_embrace_output "$RESULTS_DIR"/probe-synthesis-*.md)
         if [[ -z "$probe_synthesis" || ! -f "$probe_synthesis" ]]; then
             _abort_embrace_phase "probe" "resume requested but probe synthesis artifact is missing"
             return 1
@@ -2157,9 +2194,9 @@ ${obs_ctx}"
             _abort_embrace_phase "grasp" "grasp_define returned non-zero" "$probe_synthesis"
             return 1
         fi
-        grasp_consensus=$(_latest_embrace_output "$RESULTS_DIR"/grasp-consensus-*.md)
+        grasp_consensus=$(_current_embrace_output "$RESULTS_DIR/grasp-consensus-${task_group}.md")
         if [[ -z "$grasp_consensus" ]]; then
-            _abort_embrace_phase "grasp" "missing grasp consensus artifact (expected grasp-consensus-*.md)" "$probe_synthesis"
+            _abort_embrace_phase "grasp" "missing current-run grasp consensus artifact (expected grasp-consensus-${task_group}.md)" "$probe_synthesis"
             return 1
         fi
 
@@ -2178,7 +2215,6 @@ ${obs_ctx}"
         sleep 1
     else
         grasp_consensus=$(get_phase_output "grasp")
-        [[ -z "$grasp_consensus" ]] && grasp_consensus=$(_latest_embrace_output "$RESULTS_DIR"/grasp-consensus-*.md)
         if [[ -z "$grasp_consensus" || ! -f "$grasp_consensus" ]]; then
             _abort_embrace_phase "grasp" "resume requested but grasp consensus artifact is missing" "$probe_synthesis"
             return 1
@@ -2214,13 +2250,13 @@ ${obs_ctx}"
         echo -e "${CYAN}[3/4] Starting TANGLE phase (Develop)...${NC}"
         echo ""
         if ! tangle_develop "$prompt" "$grasp_consensus"; then
-            tangle_validation=$(_latest_embrace_output "$RESULTS_DIR"/tangle-validation-*.md)
+            tangle_validation=$(_current_embrace_output "$RESULTS_DIR/tangle-validation-${task_group}.md")
             _abort_embrace_phase "tangle" "tangle_develop returned non-zero" "$tangle_validation"
             return 1
         fi
-        tangle_validation=$(_latest_embrace_output "$RESULTS_DIR"/tangle-validation-*.md)
+        tangle_validation=$(_current_embrace_output "$RESULTS_DIR/tangle-validation-${task_group}.md")
         if [[ -z "$tangle_validation" ]]; then
-            _abort_embrace_phase "tangle" "missing tangle validation artifact (expected tangle-validation-*.md)" "$grasp_consensus"
+            _abort_embrace_phase "tangle" "missing current-run tangle validation artifact (expected tangle-validation-${task_group}.md)" "$grasp_consensus"
             return 1
         fi
 
@@ -2244,7 +2280,6 @@ ${obs_ctx}"
         sleep 1
     else
         tangle_validation=$(get_phase_output "tangle")
-        [[ -z "$tangle_validation" ]] && tangle_validation=$(_latest_embrace_output "$RESULTS_DIR"/tangle-validation-*.md)
         if [[ -z "$tangle_validation" || ! -f "$tangle_validation" ]]; then
             _abort_embrace_phase "tangle" "resume requested but tangle validation artifact is missing" "$grasp_consensus"
             return 1
@@ -2287,9 +2322,9 @@ ${obs_ctx}"
     fi
 
     # v8.14.0: Capture phase context in persistent state
-    ink_output=$(_latest_embrace_output "$RESULTS_DIR"/delivery-*.md)
+    ink_output=$(_current_embrace_output "$RESULTS_DIR/delivery-${task_group}.md")
     if [[ -z "$ink_output" ]]; then
-        _abort_embrace_phase "ink" "missing delivery artifact (expected delivery-*.md)" "$tangle_validation"
+        _abort_embrace_phase "ink" "missing current-run delivery artifact (expected delivery-${task_group}.md)" "$tangle_validation"
         return 1
     fi
     update_context "deliver" "$(head -20 "$ink_output" 2>/dev/null | tr '\n' ' ')" 2>/dev/null || true
@@ -2340,7 +2375,7 @@ ${obs_ctx}"
     [[ -n "$define_gate_output" ]] && echo -e "  Gate:   $define_gate_output"
     [[ -n "$tangle_validation" ]] && echo -e "  Tangle: $tangle_validation"
     [[ -n "$develop_gate_output" ]] && echo -e "  Gate:   $develop_gate_output"
-    echo -e "  Ink:    $(ls -t "$RESULTS_DIR"/delivery-*.md 2>/dev/null | head -1)"
+    echo -e "  Ink:    $ink_output"
     echo ""
 
     # v7.25.0: Display session metrics

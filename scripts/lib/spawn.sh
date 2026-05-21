@@ -323,6 +323,12 @@ ${heuristic_ctx}"
 
     local log_file="${LOGS_DIR}/${agent_type}-${task_id}.log"
     local result_file="${RESULTS_DIR}/${agent_type}-${task_id}.md"
+    local provider_for_lock="$provider_prefix"
+    case "$agent_type" in
+        codex*) provider_for_lock="codex" ;;
+        gemini*) provider_for_lock="gemini" ;;
+        claude*) provider_for_lock="claude" ;;
+    esac
 
     # v8.52: Warn if spawning Claude agent on enterprise without subagent model fix (CC < v2.1.73)
     # Prior to v2.1.73, model: opus/sonnet/haiku in agent frontmatter was silently downgraded on Bedrock/Vertex/Foundry
@@ -337,6 +343,38 @@ ${heuristic_ctx}"
     # Multi-agentic workflows (/octo:research, /octo:parallel) can safely time out agents
     if [[ "$SUPPORTS_BG_PARTIAL_RESULTS" == "true" ]]; then
         log "DEBUG" "CC v2.1.76+: background agent partial results preserved on kill"
+    fi
+
+    if type is_provider_locked >/dev/null 2>&1 && is_provider_locked "$provider_for_lock"; then
+        local locked_reason="Provider locked for this run"
+        if type is_provider_quota_exhausted >/dev/null 2>&1 && is_provider_quota_exhausted "$provider_for_lock"; then
+            locked_reason="Provider quota exhausted earlier in this run"
+        fi
+        log "WARN" "Skipping $agent_type agent (task: $task_id): $locked_reason"
+        (
+            mkdir -p "$RESULTS_DIR"
+            echo "# Agent: $agent_type" > "$result_file"
+            echo "# Task ID: $task_id" >> "$result_file"
+            echo "# Role: ${role:-none}" >> "$result_file"
+            echo "# Phase: ${phase:-none}" >> "$result_file"
+            echo "# Started: $(date)" >> "$result_file"
+            echo "" >> "$result_file"
+            echo "## Output" >> "$result_file"
+            echo '```' >> "$result_file"
+            echo "(dispatch skipped: $locked_reason)" >> "$result_file"
+            echo '```' >> "$result_file"
+            echo "" >> "$result_file"
+            echo "## Status: FAILED ($locked_reason)" >> "$result_file"
+            echo "# Completed: $(date)" >> "$result_file"
+            type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" 0 "$locked_reason" 0 "$result_file" "${role:-none}" || true
+            local _done_dir="${WORKSPACE_DIR:-${HOME}/.claude-octopus}/.octo/agents"
+            mkdir -p "$_done_dir" 2>/dev/null || true
+            echo "1" > "${_done_dir}/${task_id}.done" 2>/dev/null || true
+        ) &
+        local pid=$!
+        echo "$pid:$agent_type:$task_id" >> "$PID_FILE" 2>/dev/null || true
+        echo "$pid"
+        return 0
     fi
 
     log INFO "Spawning $agent_type agent (task: $task_id, role: ${role:-none})"
@@ -721,6 +759,9 @@ ${heuristic_ctx}"
             end_time_ms=$(( $(date +%s) * 1000 ))
             elapsed_ms=$((end_time_ms - start_time_ms))
             if [[ "$_octo_success_status" == "failed" ]]; then
+                if [[ "$agent_type" == gemini* && "$_octo_success_reason" == "GEMINI_QUOTA_EXHAUSTED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
+                    mark_provider_quota_exhausted "gemini"
+                fi
                 update_agent_status "$agent_type" "failed" "$elapsed_ms" 0.0
                 record_outcome "$agent_type" "$agent_type" "${task_type:-unknown}" "${phase:-unknown}" "fail" "$elapsed_ms" 2>/dev/null || true
                 type record_failure &>/dev/null && record_failure "$provider_prefix" "provider_rejection" 2>/dev/null || true
@@ -848,7 +889,16 @@ ${heuristic_ctx}"
             update_agent_status "$agent_type" "failed" "$elapsed_ms" 0.0
             local tokens_out
             tokens_out=$(octo_estimate_tokens_for_file "$temp_output" 2>/dev/null || echo 0)
-            type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" "$tokens_out" "Exit code $exit_code" "$elapsed_ms" "$result_file" "${role:-none}" || true
+            local failure_reason="Exit code $exit_code"
+            if type classify_agent_output >/dev/null 2>&1; then
+                local failure_classification
+                failure_classification=$(classify_agent_output "$temp_output" "$exit_code" "$agent_type" "$temp_errors" 2>/dev/null || echo "failed:Exit code $exit_code")
+                failure_reason="${failure_classification#*:}"
+            fi
+            if [[ "$agent_type" == gemini* && "$failure_reason" == "GEMINI_QUOTA_EXHAUSTED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
+                mark_provider_quota_exhausted "gemini"
+            fi
+            type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" "$tokens_out" "$failure_reason" "$elapsed_ms" "$result_file" "${role:-none}" || true
             # v8.20.0: Record failure for provider intelligence
             record_outcome "$agent_type" "$agent_type" "${task_type:-unknown}" "${phase:-unknown}" "fail" "$elapsed_ms" 2>/dev/null || true
             # v9.13: Record failure for circuit breaker (classify from error output if available)

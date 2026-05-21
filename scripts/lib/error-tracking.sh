@@ -327,7 +327,7 @@ write_agent_run_snapshot() {
         --arg command "${OCTOPUS_COMMAND:-${COMMAND:-unknown}}" \
         --arg args "${OCTOPUS_COMMAND_ARGS:-}" \
         'group_by(.agent)
-         | map(.[-1])
+         | map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])
          | {
              run_id: $run_id,
              command: $command,
@@ -415,7 +415,7 @@ agent_status_output_files() {
 
     jq -rs --arg filter "$filter" '
         group_by(.agent)
-        | map(.[-1])
+        | map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])
         | map(select(.status == "ok" or .status == "degraded" or .status == "timeout"))
         | map(.output_file // empty)
         | map(select(length > 0))
@@ -440,7 +440,7 @@ render_agent_summary() {
     local rows ok degraded failed timeout total
     rows=$(jq -rs '
         group_by(.agent)
-        | map(.[-1])
+        | map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])
         | .[]
         | [
             .agent,
@@ -452,10 +452,10 @@ render_agent_summary() {
         | @tsv
     ' "$jsonl" 2>/dev/null) || return 0
 
-    ok=$(jq -rs 'group_by(.agent)|map(.[-1])|map(select(.status=="ok"))|length' "$jsonl" 2>/dev/null || echo 0)
-    degraded=$(jq -rs 'group_by(.agent)|map(.[-1])|map(select(.status=="degraded"))|length' "$jsonl" 2>/dev/null || echo 0)
-    failed=$(jq -rs 'group_by(.agent)|map(.[-1])|map(select(.status=="failed"))|length' "$jsonl" 2>/dev/null || echo 0)
-    timeout=$(jq -rs 'group_by(.agent)|map(.[-1])|map(select(.status=="timeout"))|length' "$jsonl" 2>/dev/null || echo 0)
+    ok=$(jq -rs 'group_by(.agent)|map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])|map(select(.status=="ok"))|length' "$jsonl" 2>/dev/null || echo 0)
+    degraded=$(jq -rs 'group_by(.agent)|map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])|map(select(.status=="degraded"))|length' "$jsonl" 2>/dev/null || echo 0)
+    failed=$(jq -rs 'group_by(.agent)|map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])|map(select(.status=="failed"))|length' "$jsonl" 2>/dev/null || echo 0)
+    timeout=$(jq -rs 'group_by(.agent)|map((map(select(.status != "running")) | if length > 0 then .[-1] else null end) // .[-1])|map(select(.status=="timeout"))|length' "$jsonl" 2>/dev/null || echo 0)
     total=$((ok + degraded + failed + timeout))
 
     echo ""

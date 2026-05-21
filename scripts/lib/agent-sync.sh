@@ -189,6 +189,16 @@ ${provider_ctx}"
         cursor-agent*) _provider_for_health="cursor-agent" ;;
     esac
     if [[ -n "$_provider_for_health" ]]; then
+        if type is_provider_locked >/dev/null 2>&1 && is_provider_locked "$_provider_for_health"; then
+            local _locked_reason="Provider locked for this run"
+            if type is_provider_quota_exhausted >/dev/null 2>&1 && is_provider_quota_exhausted "$_provider_for_health"; then
+                _locked_reason="Provider quota exhausted earlier in this run"
+            fi
+            log WARN "Skipping agent dispatch for $agent_type ($_locked_reason)"
+            type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" 0 "$_locked_reason" 0 "" "$role" || true
+            echo "[Provider $_provider_for_health skipped: $_locked_reason]"
+            return 1
+        fi
         local _health_diag
         if ! _health_diag=$(check_provider_health "$_provider_for_health" 2>&1); then
             log WARN "Provider '$_provider_for_health' health check failed: $_health_diag"
@@ -354,6 +364,9 @@ ${provider_ctx}"
             _sync_status="timeout"
             _sync_reason="Timed out before completion"
         fi
+        if [[ "$agent_type" == gemini* && "$_sync_reason" == "GEMINI_QUOTA_EXHAUSTED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
+            mark_provider_quota_exhausted "gemini"
+        fi
         type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "$_sync_status" "$tokens_in" "$(octo_estimate_tokens_for_file "$temp_out" 2>/dev/null || echo 0)" "$_sync_reason" "$_elapsed_ms" "" "$role" || true
         rm -f "$temp_err" "$temp_out"
         return $exit_code
@@ -366,6 +379,9 @@ ${provider_ctx}"
         _sync_reason="${_classification#*:}"
         if [[ "$_sync_status" == "failed" ]]; then
             log ERROR "Agent $agent_type returned unusable output: $_sync_reason"
+            if [[ "$agent_type" == gemini* && "$_sync_reason" == "GEMINI_QUOTA_EXHAUSTED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
+                mark_provider_quota_exhausted "gemini"
+            fi
             type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" "$(octo_estimate_tokens_for_file "$temp_out" 2>/dev/null || echo 0)" "$_sync_reason" "$_elapsed_ms" "" "$role" || true
             rm -f "$temp_err" "$temp_out"
             return 1

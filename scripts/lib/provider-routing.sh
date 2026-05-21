@@ -399,9 +399,35 @@ lock_provider() {
     fi
 }
 
+provider_quota_lock_dir() {
+    printf '%s/.octo/provider-lockouts\n' "${WORKSPACE_DIR:-${HOME}/.claude-octopus}"
+}
+
+mark_provider_quota_exhausted() {
+    local provider="$1"
+    local dir
+    dir=$(provider_quota_lock_dir)
+    mkdir -p "$dir" 2>/dev/null || return 0
+    printf 'reason=quota_exhausted\nts=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$dir/${provider}.quota" 2>/dev/null || true
+    lock_provider "$provider"
+}
+
+is_provider_quota_exhausted() {
+    local provider="$1"
+    local dir
+    dir=$(provider_quota_lock_dir)
+    [[ -f "$dir/${provider}.quota" ]]
+}
+
+reset_provider_quota_state() {
+    local dir
+    dir=$(provider_quota_lock_dir)
+    rm -f "$dir"/*.quota 2>/dev/null || true
+}
+
 is_provider_locked() {
     local provider="$1"
-    [[ " $LOCKED_PROVIDERS " == *" $provider "* ]]
+    [[ " $LOCKED_PROVIDERS " == *" $provider "* ]] || is_provider_quota_exhausted "$provider"
 }
 
 get_alternate_provider() {

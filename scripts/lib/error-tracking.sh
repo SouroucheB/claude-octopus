@@ -246,7 +246,7 @@ octo_file_has_gemini_quota_failure() {
     local file
     for file in "$@"; do
         [[ -f "$file" ]] || continue
-        if grep -qiE 'QUOTA_EXHAUSTED|TerminalQuotaError|exhausted your capacity|RetryableQuotaError|code:[[:space:]]*429' "$file" 2>/dev/null; then
+        if grep -qiE 'QUOTA_EXHAUSTED|TerminalQuotaError|exhausted your capacity|RetryableQuotaError|code:[[:space:]]*429|(^|[^[:digit:]])429([^[:digit:]]|$)|too many requests|rate[ -]?limit(ed|ing)?|resource exhausted' "$file" 2>/dev/null; then
             return 0
         fi
     done

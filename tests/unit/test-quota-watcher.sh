@@ -28,6 +28,38 @@ else
     test_fail "quota pattern was not detected"
 fi
 
+test_case "quota_watcher_has_match detects Gemini 429 and rate-limit wording"
+: > "$err_file"
+: > "$out_file"
+quota_examples=(
+    "Error: code: 429 Too Many Requests"
+    "Gemini API rate limit exceeded, retrying"
+    "request was rate-limited by the upstream provider"
+    "Resource exhausted, please try again later"
+)
+detected_all=true
+for quota_example in "${quota_examples[@]}"; do
+    printf '%s\n' "$quota_example" > "$err_file"
+    if ! quota_watcher_has_match "$err_file" "$out_file"; then
+        detected_all=false
+        break
+    fi
+done
+if [[ "$detected_all" == "true" ]]; then
+    test_pass
+else
+    test_fail "real Gemini quota/rate-limit wording was not detected: $quota_example"
+fi
+
+test_case "quota_watcher_has_match ignores non-quota provider errors"
+printf '%s\n' "Gemini CLI is not running in a trusted directory" > "$err_file"
+: > "$out_file"
+if quota_watcher_has_match "$err_file" "$out_file"; then
+    test_fail "trusted-directory failure was incorrectly classified as quota"
+else
+    test_pass
+fi
+
 test_case "start_quota_watcher invokes callback and stops target"
 flag_file="$tmp_dir/callback.flag"
 test_quota_callback() {

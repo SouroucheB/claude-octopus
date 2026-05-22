@@ -2,14 +2,14 @@
 # Shared quota fast-fail watcher for provider CLIs that retry for a long time
 # after quota exhaustion instead of exiting promptly.
 
-OCTOPUS_QUOTA_PATTERN='QUOTA_EXHAUSTED|TerminalQuotaError|exhausted your capacity|RetryableQuotaError|Attempt [0-9]+ failed.*exhausted'
+OCTOPUS_QUOTA_PATTERN='QUOTA_EXHAUSTED|TerminalQuotaError|exhausted your capacity|RetryableQuotaError|Attempt [0-9]+ failed.*exhausted|code:[[:space:]]*429|(^|[^[:digit:]])429([^[:digit:]]|$)|too many requests|rate[ -]?limit(ed|ing)?|resource exhausted'
 
 quota_watcher_has_match() {
     local temp_err="$1"
     local temp_out="$2"
 
-    grep -qE "$OCTOPUS_QUOTA_PATTERN" "$temp_err" 2>/dev/null || \
-        grep -qE "$OCTOPUS_QUOTA_PATTERN" "$temp_out" 2>/dev/null
+    grep -qiE "$OCTOPUS_QUOTA_PATTERN" "$temp_err" 2>/dev/null || \
+        grep -qiE "$OCTOPUS_QUOTA_PATTERN" "$temp_out" 2>/dev/null
 }
 
 start_quota_watcher() {

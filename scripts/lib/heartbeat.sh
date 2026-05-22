@@ -155,12 +155,21 @@ run_with_timeout() {
         # otherwise redirects background-job stdin to /dev/null, which starves
         # shell-function providers (perplexity_execute, openrouter_execute)
         # that read their prompt from stdin. See issue #307.
-        local cmd_pid monitor_pid
+        local cmd_pid monitor_pid timed_out_file
+        timed_out_file=$(mktemp 2>/dev/null || mktemp -t 'octo-timeout')
 
         "$@" <&0 &
         cmd_pid=$!
 
-        ( sleep "$timeout_secs" && kill -TERM "$cmd_pid" 2>/dev/null ) &
+        (
+            sleep "$timeout_secs"
+            if kill -0 "$cmd_pid" 2>/dev/null; then
+                printf '1\n' > "$timed_out_file"
+                kill -TERM "$cmd_pid" 2>/dev/null || true
+                sleep "${OCTOPUS_TIMEOUT_KILL_GRACE:-2}"
+                kill -KILL "$cmd_pid" 2>/dev/null || true
+            fi
+        ) &
         monitor_pid=$!
 
         if wait "$cmd_pid" 2>/dev/null; then
@@ -172,6 +181,10 @@ run_with_timeout() {
         # Clean up monitor process
         kill "$monitor_pid" 2>/dev/null
         wait "$monitor_pid" 2>/dev/null
+        if [[ -s "$timed_out_file" ]]; then
+            exit_code=124
+        fi
+        rm -f "$timed_out_file" 2>/dev/null
     fi
 
     # Enhanced timeout error messaging (v7.16.0 Feature 3)

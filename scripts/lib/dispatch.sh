@@ -24,6 +24,17 @@ get_agent_command() {
     # Valid values: workspace-write (default), write, read-only
     local codex_sandbox="${OCTOPUS_CODEX_SANDBOX:-workspace-write}"
 
+    # Embrace only permits workspace mutation during Develop/Tangle. Prompt-only
+    # RBAC is advisory for external CLIs, so enforce Codex read-only sandboxing
+    # for every non-develop Embrace phase.
+    if [[ "${OCTOPUS_WORKFLOW_TYPE:-}" == "embrace" ]]; then
+        case "${phase:-}" in
+            probe|discover|grasp|define|ink|deliver|embrace-gate|debate|debate-*)
+                codex_sandbox="read-only"
+                ;;
+        esac
+    fi
+
     # Security: reject values not in allowlist
     case "$codex_sandbox" in
         workspace-write|write|read-only)

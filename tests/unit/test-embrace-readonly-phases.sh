@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WORKFLOWS="$PROJECT_ROOT/scripts/lib/workflows.sh"
+DISPATCH="$PROJECT_ROOT/scripts/lib/dispatch.sh"
 
 source "$SCRIPT_DIR/../helpers/test-framework.sh"
 test_suite "embrace read-only phases"
@@ -31,6 +32,26 @@ if sed -n '/gate_prompt=/,/Return a concise gate review/p' "$WORKFLOWS" | grep -
     test_pass
 else
     test_fail "embrace debate gate prompt does not carry a read-only guard"
+fi
+
+test_case "codex command uses read-only sandbox outside Embrace Develop"
+log() { :; }
+PLUGIN_DIR="$PROJECT_ROOT"
+OCTOPUS_PLATFORM="${OCTOPUS_PLATFORM:-Darwin}"
+# shellcheck source=/dev/null
+source "$DISPATCH"
+get_agent_model() { echo "gpt-test"; }
+
+probe_cmd=$(OCTOPUS_WORKFLOW_TYPE=embrace OCTOPUS_CODEX_SANDBOX=workspace-write get_agent_command codex probe researcher)
+gate_cmd=$(OCTOPUS_WORKFLOW_TYPE=embrace OCTOPUS_CODEX_SANDBOX=workspace-write get_agent_command codex embrace-gate code-reviewer)
+tangle_cmd=$(OCTOPUS_WORKFLOW_TYPE=embrace OCTOPUS_CODEX_SANDBOX=workspace-write get_agent_command codex tangle coder)
+
+if [[ "$probe_cmd" == *"--sandbox read-only"* ]] && \
+   [[ "$gate_cmd" == *"--sandbox read-only"* ]] && \
+   [[ "$tangle_cmd" == *"--sandbox workspace-write"* ]]; then
+    test_pass
+else
+    test_fail "expected read-only sandbox for probe/gate and workspace-write for tangle; probe='$probe_cmd' gate='$gate_cmd' tangle='$tangle_cmd'"
 fi
 
 test_summary

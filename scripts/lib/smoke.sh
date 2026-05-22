@@ -9,6 +9,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 
 PROVIDERS_CONFIG_FILE="${WORKSPACE_DIR:-$HOME/.claude-octopus}/.providers-config"
+VERBOSE="${VERBOSE:-false}"
 
 # Provider configuration variables (loaded from file)
 PROVIDER_CODEX_INSTALLED="false"
@@ -987,12 +988,26 @@ _display_smoke_test_error() {
     esac
 }
 
+if ! type start_quota_watcher >/dev/null 2>&1; then
+    _octopus_smoke_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "${_octopus_smoke_lib_dir}/quota-watcher.sh" 2>/dev/null || true
+fi
+
+_smoke_quota_kill_children() {
+    local smoke_pid="$1"
+    pkill -TERM -P "$smoke_pid" 2>/dev/null || true
+    kill -TERM "$smoke_pid" 2>/dev/null || true
+    sleep 1
+    pkill -KILL -P "$smoke_pid" 2>/dev/null || true
+    kill -KILL "$smoke_pid" 2>/dev/null || true
+}
+
 # Test a single provider by sending a trivial prompt
 _smoke_test_provider() {
     local provider="$1"
     local smoke_timeout="${2:-10}"
     local result_file="$3"
-    local agent_type model cmd stderr_file exit_code
+    local agent_type model cmd stderr_file stdout_file exit_code
 
     # Determine agent type and get model
     case "$provider" in
@@ -1004,6 +1019,7 @@ _smoke_test_provider() {
 
     model=$(get_agent_model "$agent_type" 2>/dev/null || echo "")
     stderr_file=$(secure_tempfile "smoke-stderr-${provider}")
+    stdout_file=$(secure_tempfile "smoke-stdout-${provider}")
 
     log DEBUG "Smoke test ${provider}: model=${model}"
 
@@ -1013,11 +1029,13 @@ _smoke_test_provider() {
 
     if [[ -z "$cmd_str" ]]; then
         echo "SKIP" > "$result_file"
+        rm -f "$stderr_file" "$stdout_file" 2>/dev/null
         return 0
     fi
 
     # Send trivial prompt with timeout
     local smoke_exit=0
+    local quota_watcher_pid=""
     if [[ "$provider" == "codex" ]]; then
         # Codex requires a git repo — use a temp one to avoid false negatives (#202)
         local smoke_dir
@@ -1027,41 +1045,54 @@ _smoke_test_provider() {
         # codex cmd_str ends with `-` (stdin prompt); arg form is rejected.
         echo "Reply with exactly: ok" | run_with_timeout "$smoke_timeout" \
             $cmd_str \
-            >/dev/null 2>"$stderr_file" || smoke_exit=$?
+            >"$stdout_file" 2>"$stderr_file" || smoke_exit=$?
         popd >/dev/null 2>&1
         rm -rf "$smoke_dir" 2>/dev/null
     elif [[ "$provider" == "gemini" ]]; then
         # Gemini: prompt via stdin with -p "" for headless trigger
-        echo "Reply with exactly: ok" | run_with_timeout "$smoke_timeout" \
-            $cmd_str -p "" \
-            >/dev/null 2>"$stderr_file" || smoke_exit=$?
+        (
+            echo "Reply with exactly: ok" | run_with_timeout "$smoke_timeout" \
+                $cmd_str -p "" \
+                >"$stdout_file" 2>"$stderr_file"
+        ) &
+        local smoke_pid=$!
+        if type start_quota_watcher >/dev/null 2>&1; then
+            quota_watcher_pid=$(start_quota_watcher \
+                "$smoke_pid" \
+                "$stderr_file" \
+                "$stdout_file" \
+                _smoke_quota_kill_children \
+                "[smoke:$provider] Quota/rate-limit detected - fast-failing smoke test")
+        fi
+        wait "$smoke_pid" 2>/dev/null || smoke_exit=$?
+        type stop_quota_watcher >/dev/null 2>&1 && stop_quota_watcher "$quota_watcher_pid"
     elif [[ "$provider" == "cursor-agent" ]]; then
         # Cursor Agent: prompt via stdin with -p "" for headless trigger
         echo "Reply with exactly: ok" | run_with_timeout "$smoke_timeout" \
             $cmd_str -p "" \
-            >/dev/null 2>"$stderr_file" || smoke_exit=$?
+            >"$stdout_file" 2>"$stderr_file" || smoke_exit=$?
     else
         run_with_timeout "$smoke_timeout" \
             $cmd_str -p "Reply with exactly: ok" \
-            >/dev/null 2>"$stderr_file" || smoke_exit=$?
+            >"$stdout_file" 2>"$stderr_file" || smoke_exit=$?
     fi
+    [[ "$provider" != "gemini" ]] && type stop_quota_watcher >/dev/null 2>&1 && stop_quota_watcher "$quota_watcher_pid"
 
     if [[ $smoke_exit -eq 0 ]]; then
         echo "PASS" > "$result_file"
         log DEBUG "Smoke test ${provider}: passed"
-    elif [[ $smoke_exit -eq 124 ]]; then
-        # 124 = timeout exit code from GNU timeout / run_with_timeout
-        echo "TIMEOUT:${model}" > "$result_file"
-        log DEBUG "Smoke test ${provider}: timed out"
     else
         local error_type
-        error_type=$(_classify_smoke_error "$(cat "$stderr_file" 2>/dev/null)")
+        error_type=$(_classify_smoke_error "$(cat "$stderr_file" "$stdout_file" 2>/dev/null)")
+        if [[ $smoke_exit -eq 124 && "$error_type" == "UNKNOWN" ]]; then
+            error_type="TIMEOUT"
+        fi
         echo "${error_type}:${model}" > "$result_file"
         log DEBUG "Smoke test ${provider}: failed (${error_type})"
         [[ "$VERBOSE" == "true" ]] && cat "$stderr_file" >&2
     fi
 
-    rm -f "$stderr_file" 2>/dev/null
+    rm -f "$stderr_file" "$stdout_file" 2>/dev/null
 }
 
 # Orchestrate parallel smoke tests for all available providers

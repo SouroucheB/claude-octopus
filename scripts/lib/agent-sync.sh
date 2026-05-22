@@ -19,6 +19,9 @@ fi
 if ! type is_claude_agent_type >/dev/null 2>&1; then
     source "${_octopus_agent_sync_lib_dir}/routing.sh" 2>/dev/null || true
 fi
+if ! type octopus_should_inject_historical_context >/dev/null 2>&1; then
+    octopus_should_inject_historical_context() { return 0; }
+fi
 
 fleet_dispatch_begin() {
     export OCTOPUS_FORCE_LEGACY_DISPATCH=true
@@ -128,33 +131,43 @@ ${enhanced_prompt}"
     fi
 
     # v8.18.0: Inject earned skills context (STABLE — changes rarely within a project)
-    local earned_skills_ctx
-    earned_skills_ctx=$(load_earned_skills 2>/dev/null)
-    if [[ -n "$earned_skills_ctx" ]]; then
-        if [[ ${#earned_skills_ctx} -gt 1500 ]]; then
-            earned_skills_ctx="${earned_skills_ctx:0:1500}..."
-        fi
-        enhanced_prompt="${enhanced_prompt}
+    # Embrace disables historical context by default to avoid unrelated prior
+    # canaries/provider learnings contaminating audit and gate prompts.
+    if octopus_should_inject_historical_context "${phase:-}"; then
+        local earned_skills_ctx
+        earned_skills_ctx=$(load_earned_skills 2>/dev/null)
+        if [[ -n "$earned_skills_ctx" ]]; then
+            if [[ ${#earned_skills_ctx} -gt 1500 ]]; then
+                earned_skills_ctx="${earned_skills_ctx:0:1500}..."
+            fi
+            enhanced_prompt="${enhanced_prompt}
 
 ---
 
 ## Earned Project Skills
 ${earned_skills_ctx}"
+        fi
+    else
+        log "DEBUG" "Historical earned skills context disabled for workflow=${OCTOPUS_WORKFLOW_TYPE:-none}, phase=${phase:-none}"
     fi
 
     # ── VARIABLE SUFFIX ───────────────────────────────────────────────────────
 
     # v8.18.0: Inject per-provider history context (VARIABLE — changes each run)
-    local provider_ctx
-    provider_ctx=$(build_provider_context "$agent_type")
-    if [[ -n "$provider_ctx" ]]; then
-        # v8.41.0: Wrap file-sourced provider history in anti-injection nonce
-        provider_ctx=$(sanitize_external_content "$provider_ctx" "provider-history")
-        enhanced_prompt="${enhanced_prompt}
+    if octopus_should_inject_historical_context "${phase:-}"; then
+        local provider_ctx
+        provider_ctx=$(build_provider_context "$agent_type")
+        if [[ -n "$provider_ctx" ]]; then
+            # v8.41.0: Wrap file-sourced provider history in anti-injection nonce
+            provider_ctx=$(sanitize_external_content "$provider_ctx" "provider-history")
+            enhanced_prompt="${enhanced_prompt}
 
 ---
 
 ${provider_ctx}"
+        fi
+    else
+        log "DEBUG" "Provider history context disabled for workflow=${OCTOPUS_WORKFLOW_TYPE:-none}, phase=${phase:-none}, agent=$agent_type"
     fi
 
     # v9.37.0: Enforce prompt budget after all sync-agent injections, including

@@ -94,6 +94,24 @@ EOF
         fi
         return 0
     fi
+    if [[ "$CASE_NAME" == "gate_proceed_with_risks" && "${5:-}" == "embrace-gate" ]]; then
+        if [[ "${4:-}" == "synthesizer" ]]; then
+            cat <<'EOF'
+## Gate Synthesis
+
+### Verdict consolide
+
+**`PROCEED_WITH_RISKS`** - Develop is authorized.
+
+### Non-blocking risks
+
+No hard blocker. Watch phases_completed if it becomes blocked later, but this is observational and must not stop this gate.
+EOF
+        else
+            printf '%s\n' "Verdict: PROCEED_WITH_RISKS"
+        fi
+        return 0
+    fi
     printf '%s\n' "gate response from ${1:-agent}"
 }
 save_session_checkpoint() {
@@ -199,6 +217,17 @@ if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
     test_pass
 else
     test_fail "embrace stopped on a self-referential gate artifact blocker"
+fi
+
+run_embrace_case "gate_proceed_with_risks" "define" || true
+
+test_case "proceed-with-risks gate verdict ignores non-blocking risk wording"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md >/dev/null 2>&1; then
+    test_pass
+else
+    test_fail "embrace stopped despite explicit PROCEED_WITH_RISKS verdict"
 fi
 
 run_embrace_case "missing_probe_output" || true

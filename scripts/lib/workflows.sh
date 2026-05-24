@@ -1750,13 +1750,67 @@ embrace_debate_gate_requested() {
     esac
 }
 
+embrace_debate_gate_extract_verdict() {
+    local text="$1"
+    local line upper stripped verdictish
+
+    while IFS= read -r line; do
+        upper=$(printf '%s' "$line" | tr '[:lower:]' '[:upper:]')
+        stripped=$(printf '%s' "$upper" | sed 's/^[[:space:]*`#>.:-]*//')
+        verdictish="false"
+
+        if [[ "$upper" == *"VERDICT"* || "$upper" == *"DECISION"* ]]; then
+            verdictish="true"
+        fi
+        case "$stripped" in
+            PROCEED*|REVISE*|STOP*|BLOCKED*) verdictish="true" ;;
+        esac
+
+        if [[ "$upper" == *"PROCEED_WITH_RISKS"* || "$upper" == *"PROCEED-WITH-RISKS"* || "$upper" == *"PROCEED WITH RISKS"* ]]; then
+            printf '%s\n' "proceed_with_risks"
+            return 0
+        fi
+
+        [[ "$verdictish" == "true" ]] || continue
+
+        if [[ "$upper" == *"DO NOT PROCEED"* || "$upper" == *"NE PAS PROCEDER"* || "$upper" == *"NE PAS PROCÉDER"* ]]; then
+            printf '%s\n' "stop"
+            return 0
+        fi
+        if [[ "$upper" == *"REVISE"* ]]; then
+            printf '%s\n' "revise"
+            return 0
+        fi
+        if [[ "$upper" == *"STOP"* || "$upper" == *"BLOCKED"* ]]; then
+            printf '%s\n' "stop"
+            return 0
+        fi
+        if [[ "$upper" == *"PROCEED"* ]]; then
+            printf '%s\n' "proceed"
+            return 0
+        fi
+    done <<< "$text"
+
+    return 1
+}
+
 embrace_debate_gate_has_blocking_verdict() {
     local text="$1"
+    local verdict
+
+    verdict=$(embrace_debate_gate_extract_verdict "$text" 2>/dev/null || true)
+    case "$verdict" in
+        proceed|proceed_with_risks)
+            return 1
+            ;;
+        revise|stop)
+            return 0
+            ;;
+    esac
 
     printf '%s\n' "$text" \
         | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED))([^A-Z_]|$)'
 }
-
 embrace_debate_gate_block_is_self_referential() {
     local text="$1"
     local lower

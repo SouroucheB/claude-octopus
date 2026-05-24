@@ -167,4 +167,52 @@ else
     test_fail "ink_deliver failed because an N/A dimension was treated as below threshold"
 fi
 
+reset_results
+cat > "$tangle_file" <<'EOF'
+# Tangle
+### Quality Gate: PASSED
+
+### Worktree Change Evidence
+Tangle produced worktree changes:
+- canary.txt
+EOF
+captured_scorecard=""
+score_cross_model_review() { echo "5:8:5:5"; }
+format_review_scorecard() { captured_scorecard="$1:$2:$3:$4"; }
+
+test_case "ink masks non-applicable file-only dimensions from changed paths"
+if ink_deliver "Modify canary.txt" "$tangle_file" >/dev/null 2>&1; then
+    if [[ "$captured_scorecard" == "NA:8:NA:NA" ]]; then
+        test_pass
+    else
+        test_fail "unexpected applicability-adjusted scorecard: $captured_scorecard"
+    fi
+else
+    test_fail "ink_deliver failed on non-applicable file-only dimensions"
+fi
+
+reset_results
+cat > "$tangle_file" <<'EOF'
+# Tangle
+### Quality Gate: PASSED
+
+### Worktree Change Evidence
+Tangle produced worktree changes:
+- src/components/Widget.tsx
+EOF
+captured_scorecard=""
+score_cross_model_review() { echo "8:8:8:5"; }
+format_review_scorecard() { captured_scorecard="$1:$2:$3:$4"; }
+
+test_case "ink keeps UI accessibility score applicable for UI changes"
+if ink_deliver "Update Widget UI" "$tangle_file" >/dev/null 2>&1; then
+    test_fail "ink_deliver passed despite low applicable UI accessibility score"
+else
+    if [[ "$captured_scorecard" == "8:8:8:5" ]]; then
+        test_pass
+    else
+        test_fail "unexpected UI applicability scorecard: $captured_scorecard"
+    fi
+fi
+
 test_summary

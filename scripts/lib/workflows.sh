@@ -1378,6 +1378,81 @@ ink_any_review_score_below_min() {
     return 1
 }
 
+ink_collect_changed_paths() {
+    local tangle_results="${1:-}"
+    [[ -n "$tangle_results" && -f "$tangle_results" ]] || return 0
+
+    awk '
+        /^### Worktree Change Evidence/ { in_section = 1; next }
+        /^### / && in_section { exit }
+        in_section && /^- / {
+            line = $0
+            sub(/^- /, "", line)
+            gsub(/`/, "", line)
+            print line
+        }
+    ' "$tangle_results" 2>/dev/null | sed '/^$/d' | sort -u
+}
+
+ink_path_is_ui_surface() {
+    local path="$1"
+    case "$path" in
+        *.tsx|*.jsx|*.vue|*.svelte|*.html|*.mdx|*.css|*.scss|*.sass|*.less|*.svg) return 0 ;;
+        components/*|src/components/*|ui/*|src/ui/*|public/*|assets/*) return 0 ;;
+    esac
+    return 1
+}
+
+ink_path_is_runtime_surface() {
+    local path="$1"
+    case "$path" in
+        *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.sh|*.bash|*.zsh|*.py|*.rb|*.php|*.go|*.rs|*.java|*.kt|*.sql|*.css|*.scss|*.sass|*.less|*.json|*.yaml|*.yml|*.toml|*.lock|Dockerfile|docker-compose.*|package.json|package-lock.json|pnpm-lock.yaml|yarn.lock|bun.lockb) return 0 ;;
+        scripts/*|src/*|app/*|pages/*|components/*|lib/*|api/*|server/*|routes/*|middleware/*|supabase/*|migrations/*|config/*|.github/*) return 0 ;;
+    esac
+    return 1
+}
+
+ink_infer_review_applicability() {
+    local tangle_results="${1:-}"
+    local sec="yes" rel="yes" perf="yes" acc="yes"
+    local paths path
+    local saw_runtime="false" saw_ui="false" saw_any="false"
+    paths="$(ink_collect_changed_paths "$tangle_results")"
+
+    while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        saw_any="true"
+        if ink_path_is_runtime_surface "$path"; then
+            saw_runtime="true"
+        fi
+        if ink_path_is_ui_surface "$path"; then
+            saw_ui="true"
+        fi
+    done <<< "$paths"
+
+    if [[ "$saw_any" == "true" ]]; then
+        [[ "$saw_runtime" == "true" ]] || { sec="no"; perf="no"; }
+        [[ "$saw_ui" == "true" ]] || acc="no"
+    fi
+
+    echo "${sec}:${rel}:${perf}:${acc}"
+}
+
+ink_apply_review_applicability() {
+    local scores="$1"
+    local applicability="$2"
+    local sec rel perf acc app_sec app_rel app_perf app_acc
+    IFS=':' read -r sec rel perf acc <<< "$scores"
+    IFS=':' read -r app_sec app_rel app_perf app_acc <<< "$applicability"
+
+    [[ "$app_sec" == "no" ]] && sec="NA"
+    [[ "$app_rel" == "no" ]] && rel="NA"
+    [[ "$app_perf" == "no" ]] && perf="NA"
+    [[ "$app_acc" == "no" ]] && acc="NA"
+
+    echo "${sec}:${rel}:${perf}:${acc}"
+}
+
 build_ink_fallback_delivery() {
     local prompt="$1"
     local sonnet_review="$2"
@@ -1460,6 +1535,8 @@ ink_deliver() {
     local result_count
     result_count=$(grep -c '^## Source:' <<< "$all_results" 2>/dev/null || true)
     result_count="${result_count:-0}"
+    local review_applicability
+    review_applicability=$(ink_infer_review_applicability "$tangle_results")
 
     # Sonnet 4.6 quality review before synthesis
     log INFO "Step 2a: Sonnet 4.6 quality review..."
@@ -1467,6 +1544,7 @@ ink_deliver() {
     sonnet_review=$(run_agent_sync "claude-sonnet" "Review these development results for quality, completeness, and correctness.
 Flag any issues, gaps, or improvements needed.
 This is a pre-delivery review: the final delivery-*.md document is generated after this review. Do not penalize the absence of the final delivery document, final Ink artifact, or context.deliver during this review.
+Applicability hint from changed files (Security:Reliability:Performance:Accessibility): ${review_applicability}
 If a dimension is not applicable to the task surface, write '<Dimension>: N/A' instead of a numeric score. For example, Accessibility is N/A for CLI-only or file-only changes with no user interface surface.
 For applicable dimensions, rate explicitly as 'Security: N/10', 'Reliability: N/10', 'Performance: N/10', 'Accessibility: N/10'.
 
@@ -1480,6 +1558,7 @@ $all_results" 120 "code-reviewer" "ink") || {
     # v8.19.0: Cross-model review scoring (4x10)
     local review_scores
     review_scores=$(score_cross_model_review "$sonnet_review")
+    review_scores=$(ink_apply_review_applicability "$review_scores" "$review_applicability")
     local rev_sec rev_rel rev_perf rev_acc
     IFS=':' read -r rev_sec rev_rel rev_perf rev_acc <<< "$review_scores"
 

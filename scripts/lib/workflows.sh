@@ -2248,6 +2248,7 @@ embrace_full_workflow() {
     local embrace_managed_run_id=false
     local probe_synthesis="" grasp_consensus="" tangle_validation="" ink_output=""
     local define_gate_output="" develop_gate_output="" embrace_report=""
+    local embrace_previous_int_trap="" embrace_previous_term_trap="" embrace_signal_abort_ran=false
 
     if [[ -z "${OCTOPUS_RUN_ID:-}" ]]; then
         export OCTOPUS_RUN_ID="embrace-${task_group}-$$"
@@ -2361,6 +2362,8 @@ ${obs_ctx}"
         unset OCTOPUS_TOTAL_PHASES
         unset OCTOPUS_COMPLETED_PHASES
         unset CLAUDE_CODE_DISABLE_CRON 2>/dev/null || true
+        if [[ -n "${embrace_previous_int_trap:-}" ]]; then eval "$embrace_previous_int_trap"; else trap - INT; fi
+        if [[ -n "${embrace_previous_term_trap:-}" ]]; then eval "$embrace_previous_term_trap"; else trap - TERM; fi
         if [[ "$embrace_managed_run_id" == "true" ]]; then
             if [[ -n "$previous_octopus_run_id" ]]; then
                 export OCTOPUS_RUN_ID="$previous_octopus_run_id"
@@ -2486,6 +2489,20 @@ ${obs_ctx}"
         return 1
     }
 
+    _embrace_signal_abort() {
+        local signal_name="$1"
+        local exit_code="${2:-130}"
+
+        trap - INT TERM
+        if [[ "$embrace_signal_abort_ran" == "true" ]]; then
+            exit "$exit_code"
+        fi
+        embrace_signal_abort_ran=true
+
+        _abort_embrace_phase "${OCTOPUS_WORKFLOW_PHASE:-interrupted}" "received ${signal_name}; run interrupted"
+        exit "$exit_code"
+    }
+
     _write_embrace_session_state "init" "starting"
     echo ""
 
@@ -2524,6 +2541,10 @@ ${obs_ctx}"
 
     # Track timing
     local start_time=$SECONDS
+    embrace_previous_int_trap=$(trap -p INT || true)
+    embrace_previous_term_trap=$(trap -p TERM || true)
+    trap '_embrace_signal_abort INT 130' INT
+    trap '_embrace_signal_abort TERM 143' TERM
 
     # ═══════════════════════════════════════════════════════════════════════════
     # v8.5: YAML RUNTIME DELEGATION

@@ -125,6 +125,7 @@ save_session_checkpoint() {
 
 probe_discover() {
     PHASE_CALLS+="probe "
+    [[ "$CASE_NAME" == "signal_interrupt" ]] && { /bin/sleep 5; return 0; }
     [[ "$CASE_NAME" == "missing_probe_output" ]] && return 0
     printf '%s\n' "# probe synthesis" > "$RESULTS_DIR/probe-synthesis-${OCTOPUS_TASK_GROUP:-test}.md"
 }
@@ -261,6 +262,33 @@ if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
     test_pass
 else
     test_fail "hanging gate provider was not bounded cleanly (status=$EMBRACE_STATUS elapsed=${GATE_HANG_ELAPSED}s file=${GATE_HANG_FILE:-missing})"
+fi
+
+CASE_NAME="signal_interrupt"
+OCTOPUS_EMBRACE_DEBATE_GATES="none"
+PHASE_CALLS=""
+CHECKPOINTS=""
+EMBRACE_STATUS=0
+rm -rf "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR"
+mkdir -p "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR" "$HOME"
+(
+    embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
+) &
+INTERRUPT_PID=$!
+/bin/sleep 1
+kill -TERM "$INTERRUPT_PID" 2>/dev/null || true
+wait "$INTERRUPT_PID" 2>/dev/null
+INTERRUPT_STATUS=$?
+INTERRUPT_REPORT=$(ls "$RESULTS_DIR"/embrace-report-*.md 2>/dev/null | head -1)
+
+test_case "interrupted embrace writes failed report"
+if [[ "$INTERRUPT_STATUS" -ne 0 ]] && \
+   [[ -n "$INTERRUPT_REPORT" ]] && \
+   grep -q 'Final Status: FAILED' "$INTERRUPT_REPORT" && \
+   grep -q 'received TERM' "$INTERRUPT_REPORT"; then
+    test_pass
+else
+    test_fail "interrupted run did not leave failed report (status=$INTERRUPT_STATUS report=${INTERRUPT_REPORT:-missing})"
 fi
 
 run_embrace_case "missing_probe_output" || true

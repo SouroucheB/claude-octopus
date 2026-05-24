@@ -164,12 +164,12 @@ update_agent_status() {
         return 1
     }
 
-    # Update totals if completed
-    if [[ "$status" == "completed" ]]; then
+    # Update totals when an agent reaches any terminal state.
+    if [[ "$status" == "completed" || "$status" == "failed" || "$status" == "timeout" ]]; then
         atomic_json_update "$PROGRESS_FILE" \
             --argjson elapsed "$elapsed_ms" \
             --argjson cost "$cost" \
-            '.completed_agents += 1 | .total_time_ms += $elapsed | .total_cost += $cost' || {
+            '.completed_agents = ([((.completed_agents // 0) + 1), (.total_agents // ((.completed_agents // 0) + 1))] | min) | .total_time_ms += $elapsed | .total_cost += $cost' || {
             log WARN "Failed to update progress totals"
         }
     fi

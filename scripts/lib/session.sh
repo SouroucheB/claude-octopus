@@ -69,7 +69,10 @@ display_progress_summary() {
     echo ""
 
     # Read agents and format status with timeout info (v7.16.0 Feature 3)
-    jq -r '.agents[] |
+    jq -r '.agents
+        | group_by(.name)
+        | map((map(select(.status != "running" and .status != "waiting")) | if length > 0 then .[-1] else null end) // .[-1])
+        | .[] |
         if .status == "completed" then
             "✅ \(.name): Completed (\(.elapsed_ms / 1000)s) - $\(.cost)"
         elif .status == "running" then
@@ -80,6 +83,8 @@ display_progress_summary() {
             end
         elif .status == "failed" then
             "❌ \(.name): Failed"
+        elif .status == "timeout" then
+            "⏱️  \(.name): Timed out"
         else
             "⏸️  \(.name): Waiting"
         end

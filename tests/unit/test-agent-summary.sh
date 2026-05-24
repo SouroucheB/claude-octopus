@@ -9,9 +9,23 @@ source "$SCRIPT_DIR/../helpers/test-framework.sh"
 test_suite "Agent summary ledger"
 
 source "$PROJECT_ROOT/scripts/lib/error-tracking.sh"
+source "$PROJECT_ROOT/scripts/lib/validation.sh"
+source "$PROJECT_ROOT/scripts/lib/agents.sh"
+source "$PROJECT_ROOT/scripts/lib/session.sh"
 
 export WORKSPACE_DIR="$TEST_TMP_DIR/agent-summary-workspace"
 export OCTOPUS_RUN_ID="test-run"
+PROGRESS_TRACKING_ENABLED=true
+PROGRESS_FILE="$WORKSPACE_DIR/progress.json"
+TIMEOUT=300
+MAGENTA=""
+CYAN=""
+GREEN=""
+RED=""
+YELLOW=""
+NC=""
+_DASH="------------------------------------------------------------"
+log() { :; }
 mkdir -p "$WORKSPACE_DIR/results"
 printf 'codex output\n' > "$WORKSPACE_DIR/results/codex.md"
 printf 'gemini output\n' > "$WORKSPACE_DIR/results/gemini.md"
@@ -52,6 +66,20 @@ if [[ "$summary" == *"codex"* && "$summary" == *" ok"* && "$summary" != *"stale 
     test_pass
 else
     test_fail "expected terminal codex status/output to win over stale running record; summary=${summary:-<empty>} files=${files:-<empty>}"
+fi
+
+test_case "progress summary treats failed and timed-out agents as terminal"
+init_progress_tracking "probe" 3
+update_agent_status "codex" "running" 0 0.0
+update_agent_status "codex" "timeout" 1000 0.0
+update_agent_status "gemini" "failed" 900 0.0
+update_agent_status "claude-sonnet" "completed" 700 0.0
+progress_summary="$(display_progress_summary)"
+completed_agents="$(jq -r '.completed_agents' "$PROGRESS_FILE")"
+if [[ "$completed_agents" == "3" ]] &&    [[ "$progress_summary" == *"Timed out"* ]] &&    [[ "$progress_summary" != *"Waiting"* ]] &&    [[ "$progress_summary" == *"3/3 providers completed"* ]]; then
+    test_pass
+else
+    test_fail "expected terminal failed/timeout progress accounting; completed=$completed_agents summary=${progress_summary:-<empty>}"
 fi
 
 test_case "classify_agent_output detects Codex closed stdin tool error"

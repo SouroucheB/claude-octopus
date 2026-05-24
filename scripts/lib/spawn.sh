@@ -395,6 +395,13 @@ ${heuristic_ctx}"
     log DEBUG "Command: $cmd"
     log DEBUG "Phase: ${phase:-none}, Role: ${role:-none}"
 
+    local agent_timeout="$TIMEOUT"
+    if type octopus_effective_agent_timeout >/dev/null 2>&1; then
+        agent_timeout=$(octopus_effective_agent_timeout "$agent_type" "$prompt" "${phase:-}" "$TIMEOUT") || agent_timeout="$TIMEOUT"
+    fi
+    [[ "$agent_timeout" =~ ^[0-9]+$ ]] || agent_timeout="$TIMEOUT"
+    log DEBUG "Agent timeout: ${agent_timeout}s (global TIMEOUT=${TIMEOUT}s, explicit=${OCTOPUS_TIMEOUT_EXPLICIT:-false})"
+
     # Record usage (get model from agent type, with phase/role context)
     local model
     model=$(get_agent_model "$agent_type" "${phase:-}" "${role:-}")
@@ -611,12 +618,12 @@ ${heuristic_ctx}"
                     "$temp_errors" \
                     "$temp_output" \
                     quota_watcher_kill_spawn_children \
-                    "[$agent_type] Quota exhaustion detected - fast-failing (saves ~${TIMEOUT}s wait)")
+                    "[$agent_type] Quota exhaustion detected - fast-failing (saves ~${agent_timeout}s wait)")
             fi
 
             # v9.2.2: All agents use stdin-based prompt delivery to avoid ARG_MAX limits (Issue #173)
             # Previously only gemini used stdin; codex/claude passed prompt as CLI arg which fails on large diffs
-            if printf '%s' "$enhanced_prompt" | run_with_timeout "$TIMEOUT" "${cmd_array[@]}" 2> "$temp_errors" | tee "$raw_output" > "$temp_output"; then
+            if printf '%s' "$enhanced_prompt" | run_with_timeout "$agent_timeout" "${cmd_array[@]}" 2> "$temp_errors" | tee "$raw_output" > "$temp_output"; then
                 exit_code=0
             else
                 exit_code=$?
@@ -828,11 +835,11 @@ ${heuristic_ctx}"
             echo "" >> "$result_file"
             echo "## Status: TIMEOUT - PARTIAL RESULTS (exit code: $exit_code)" >> "$result_file"
             echo "" >> "$result_file"
-            echo "⚠️  **Warning**: Agent timed out after ${TIMEOUT}s but partial output preserved above." >> "$result_file"
+            echo "⚠️  **Warning**: Agent timed out after ${agent_timeout}s but partial output preserved above." >> "$result_file"
             echo "" >> "$result_file"
             echo "**Recommendations**:" >> "$result_file"
             echo "- Partial results may still be valuable" >> "$result_file"
-            echo "- Consider increasing timeout: \`--timeout $((TIMEOUT * 2))\`" >> "$result_file"
+            echo "- Consider increasing timeout: \`--timeout $((agent_timeout * 2))\`" >> "$result_file"
             echo "- Simplify prompt to reduce complexity" >> "$result_file"
 
             # Append error details

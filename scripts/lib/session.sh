@@ -186,9 +186,23 @@ display_rich_progress() {
             local result_file="${RESULTS_DIR}/${agent_type}-${task_id}.md"
             local pid="${pids[$i]}"
 
+            if [[ ! -f "$result_file" ]]; then
+                local candidate
+                for candidate in "${RESULTS_DIR}"/*-"${task_id}.md"; do
+                    [[ -f "$candidate" ]] || continue
+                    result_file="$candidate"
+                    agent_type="$(basename "$candidate")"
+                    agent_type="${agent_type%-${task_id}.md}"
+                    break
+                done
+            fi
+
             # Check if agent is still running
             local running=true
-            if ! kill -0 "$pid" 2>/dev/null; then
+            if [[ -f "$result_file" ]] && grep -q "^## Status:" "$result_file" 2>/dev/null; then
+                running=false
+                ((completed++)) || true
+            elif ! kill -0 "$pid" 2>/dev/null; then
                 running=false
                 ((completed++)) || true
             else

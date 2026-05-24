@@ -12,6 +12,7 @@ test_suite "Agent Heartbeat & Dynamic Timeout"
 # Combined search target (functions decomposed to lib/ in v9.7.7+)
 ALL_SRC=$(mktemp)
 cat "$PROJECT_ROOT/scripts/orchestrate.sh" "$PROJECT_ROOT/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
+source "$PROJECT_ROOT/scripts/lib/heartbeat.sh"
 
 test_heartbeat_functions_exist() {
     test_case "Heartbeat functions exist"
@@ -143,6 +144,44 @@ test_dynamic_timeout_in_run_agent_sync() {
     fi
 }
 
+test_run_agent_sync_passes_provider_to_timeout() {
+    test_case "run_agent_sync passes provider to compute_dynamic_timeout"
+
+    if grep -A 20 "run_agent_sync()" "$ALL_SRC" | grep -q 'compute_dynamic_timeout "\$task_type_for_timeout" "\$prompt" "\$agent_type"'; then
+        test_pass
+    else
+        test_fail "run_agent_sync does not pass agent_type into dynamic timeout"
+    fi
+}
+
+test_spawn_agent_uses_effective_timeout() {
+    test_case "spawn_agent uses effective per-agent timeout"
+
+    if grep -q "octopus_effective_agent_timeout" "$ALL_SRC" && \
+       grep -q 'run_with_timeout "\$agent_timeout"' "$ALL_SRC"; then
+        test_pass
+    else
+        test_fail "spawn_agent still appears to use the global TIMEOUT directly"
+    fi
+}
+
+test_timeout_fallback_does_not_hold_pipeline_open() {
+    test_case "run_with_timeout fallback closes pipeline stdout promptly"
+
+    local output elapsed
+    read_stdin_for_timeout_test() { cat; }
+
+    SECONDS=0
+    output=$(printf 'ok' | run_with_timeout 3 read_stdin_for_timeout_test | cat)
+    elapsed=$SECONDS
+
+    if [[ "$output" == "ok" && "$elapsed" -lt 3 ]]; then
+        test_pass
+    else
+        test_fail "fallback timeout held pipeline open (elapsed=${elapsed}s, output=${output})"
+    fi
+}
+
 test_dry_run_with_heartbeat() {
     test_case "Dry-run works with heartbeat code"
 
@@ -169,6 +208,9 @@ test_timeout_env_override
 test_heartbeat_in_spawn_agent
 test_heartbeat_macos_linux_compat
 test_dynamic_timeout_in_run_agent_sync
+test_run_agent_sync_passes_provider_to_timeout
+test_spawn_agent_uses_effective_timeout
+test_timeout_fallback_does_not_hold_pipeline_open
 test_dry_run_with_heartbeat
 
 rm -f "$ALL_SRC"

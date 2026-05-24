@@ -91,7 +91,7 @@ run_agent_sync() {
     if [[ "$timeout_secs" -eq 120 ]]; then
         local task_type_for_timeout
         task_type_for_timeout=$(classify_task "$prompt" 2>/dev/null) || task_type_for_timeout="standard"
-        timeout_secs=$(compute_dynamic_timeout "$task_type_for_timeout" "$prompt")
+        timeout_secs=$(compute_dynamic_timeout "$task_type_for_timeout" "$prompt" "$agent_type")
     fi
 
     # Determine role if not provided

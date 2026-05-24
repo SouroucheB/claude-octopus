@@ -121,6 +121,47 @@ compute_dynamic_timeout() {
     esac
 }
 
+octopus_effective_agent_timeout() {
+    local agent_type="${1:-}"
+    local prompt="${2:-}"
+    local phase="${3:-}"
+    local default_timeout="${4:-${TIMEOUT:-120}}"
+
+    if [[ -n "${OCTOPUS_AGENT_TIMEOUT:-}" ]]; then
+        echo "$OCTOPUS_AGENT_TIMEOUT"
+        return
+    fi
+
+    if [[ -n "${OCTOPUS_SPAWN_AGENT_TIMEOUT:-}" ]]; then
+        echo "$OCTOPUS_SPAWN_AGENT_TIMEOUT"
+        return
+    fi
+
+    # A user-provided --timeout is an explicit per-task ceiling/contract. Keep
+    # it exact unless a more specific env override above is set.
+    if [[ "${OCTOPUS_TIMEOUT_EXPLICIT:-false}" == "true" ]]; then
+        echo "$default_timeout"
+        return
+    fi
+
+    local task_type="standard"
+    if type classify_task >/dev/null 2>&1; then
+        task_type=$(classify_task "$prompt" 2>/dev/null) || task_type="standard"
+    fi
+
+    local computed="$default_timeout"
+    if type compute_dynamic_timeout >/dev/null 2>&1; then
+        computed=$(compute_dynamic_timeout "$task_type" "$prompt" "$agent_type" 2>/dev/null) || computed="$default_timeout"
+    fi
+
+    [[ "$computed" =~ ^[0-9]+$ ]] || computed="$default_timeout"
+    if [[ "$default_timeout" =~ ^[0-9]+$ && "$computed" -gt "$default_timeout" ]]; then
+        echo "$default_timeout"
+    else
+        echo "$computed"
+    fi
+}
+
 cleanup_heartbeat() {
     local pid="$1"
     rm -f "${WORKSPACE_DIR}/.octo/agents/${pid}.heartbeat"
@@ -169,7 +210,7 @@ run_with_timeout() {
                 sleep "${OCTOPUS_TIMEOUT_KILL_GRACE:-2}"
                 kill -KILL "$cmd_pid" 2>/dev/null || true
             fi
-        ) &
+        ) >/dev/null 2>&1 < /dev/null &
         monitor_pid=$!
 
         if wait "$cmd_pid" 2>/dev/null; then

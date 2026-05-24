@@ -216,6 +216,7 @@ validate_tangle_results() {
             # Randomized bypass token prevents prompt injection from LLM-generated results
             local clean_token="GENUINELY_CLEAN_${RANDOM}${RANDOM}"
             local challenge_result=""
+            local challenge_exit=0
             challenge_result=$(run_agent_sync "claude-sonnet" "
 IMPORTANT: Do NOT read, explore, or modify any files. Do NOT run any shell commands. Output TEXT only.
 
@@ -234,9 +235,19 @@ Original task: ${original_prompt}
 
 Results to challenge:
 $(head -c 3000 <<< "$results")
-" 60 "code-reviewer" "quality-gate") || true
+" 60 "code-reviewer" "quality-gate") || challenge_exit=$?
 
-            if [[ -n "$challenge_result" ]] && ! echo "$challenge_result" | grep -Fc "$clean_token" >/dev/null 2>&1; then
+            if [[ "${challenge_exit:-0}" -ne 0 ]]; then
+                gate_status="CHALLENGED"
+                gate_color="${YELLOW}"
+                echo -e "  ${YELLOW}⚠ Anti-sycophancy check unavailable — review recommended${NC}"
+                log WARN "Anti-sycophancy check unavailable on ${success_rate}% pass rate (exit=${challenge_exit:-unknown})"
+                results+="
+---
+## Anti-Sycophancy Check Unavailable (v8.31.0)
+The challenge reviewer failed or timed out (exit=${challenge_exit:-unknown}). Treat the high pass rate as unconfirmed until manually reviewed.
+"
+            elif [[ -n "$challenge_result" ]] && ! echo "$challenge_result" | grep -Fc "$clean_token" >/dev/null 2>&1; then
                 gate_status="CHALLENGED"
                 gate_color="${YELLOW}"
                 echo -e "  ${YELLOW}⚠ Anti-sycophancy challenge raised concerns — review recommended${NC}"

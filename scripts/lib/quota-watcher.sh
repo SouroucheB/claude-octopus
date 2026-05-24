@@ -18,6 +18,7 @@ start_quota_watcher() {
     local temp_out="$3"
     local kill_callback="$4"
     local warning_message="${5:-Quota exhaustion detected - fast-failing}"
+    local detected_file="${6:-}"
 
     > "$temp_err"
     > "$temp_out"
@@ -27,6 +28,9 @@ start_quota_watcher() {
             sleep 2
             if quota_watcher_has_match "$temp_err" "$temp_out"; then
                 log "WARN" "$warning_message"
+                if [[ -n "$detected_file" ]]; then
+                    printf 'detected_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$detected_file" 2>/dev/null || true
+                fi
                 "$kill_callback" "$target_pid"
                 break
             fi

@@ -1007,7 +1007,7 @@ _smoke_test_provider() {
     local provider="$1"
     local smoke_timeout="${2:-10}"
     local result_file="$3"
-    local agent_type model cmd stderr_file stdout_file exit_code
+    local agent_type model cmd stderr_file stdout_file quota_detected_file exit_code
 
     # Determine agent type and get model
     case "$provider" in
@@ -1020,6 +1020,7 @@ _smoke_test_provider() {
     model=$(get_agent_model "$agent_type" 2>/dev/null || echo "")
     stderr_file=$(secure_tempfile "smoke-stderr-${provider}")
     stdout_file=$(secure_tempfile "smoke-stdout-${provider}")
+    quota_detected_file=$(secure_tempfile "smoke-quota-${provider}")
 
     log DEBUG "Smoke test ${provider}: model=${model}"
 
@@ -1029,7 +1030,7 @@ _smoke_test_provider() {
 
     if [[ -z "$cmd_str" ]]; then
         echo "SKIP" > "$result_file"
-        rm -f "$stderr_file" "$stdout_file" 2>/dev/null
+        rm -f "$stderr_file" "$stdout_file" "$quota_detected_file" 2>/dev/null
         return 0
     fi
 
@@ -1062,7 +1063,8 @@ _smoke_test_provider() {
                 "$stderr_file" \
                 "$stdout_file" \
                 _smoke_quota_kill_children \
-                "[smoke:$provider] Quota/rate-limit detected - fast-failing smoke test")
+                "[smoke:$provider] Quota/rate-limit detected - fast-failing smoke test" \
+                "$quota_detected_file")
         fi
         wait "$smoke_pid" 2>/dev/null || smoke_exit=$?
         type stop_quota_watcher >/dev/null 2>&1 && stop_quota_watcher "$quota_watcher_pid"
@@ -1083,16 +1085,23 @@ _smoke_test_provider() {
         log DEBUG "Smoke test ${provider}: passed"
     else
         local error_type
-        error_type=$(_classify_smoke_error "$(cat "$stderr_file" "$stdout_file" 2>/dev/null)")
+        if [[ -s "$quota_detected_file" ]]; then
+            error_type="RATE_LIMITED"
+        else
+            error_type=$(_classify_smoke_error "$(cat "$stderr_file" "$stdout_file" 2>/dev/null)")
+        fi
         if [[ $smoke_exit -eq 124 && "$error_type" == "UNKNOWN" ]]; then
             error_type="TIMEOUT"
+        fi
+        if [[ "$error_type" == "RATE_LIMITED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
+            mark_provider_quota_exhausted "$provider"
         fi
         echo "${error_type}:${model}" > "$result_file"
         log DEBUG "Smoke test ${provider}: failed (${error_type})"
         [[ "$VERBOSE" == "true" ]] && cat "$stderr_file" >&2
     fi
 
-    rm -f "$stderr_file" "$stdout_file" 2>/dev/null
+    rm -f "$stderr_file" "$stdout_file" "$quota_detected_file" 2>/dev/null
 }
 
 # Orchestrate parallel smoke tests for all available providers

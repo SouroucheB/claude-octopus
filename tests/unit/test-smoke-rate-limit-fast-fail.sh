@@ -21,6 +21,8 @@ test_suite "smoke rate-limit fast-fail"
 log() { :; }
 get_agent_model() { echo "gemini-test-model"; }
 get_agent_command() { echo "gemini"; }
+MARKED_QUOTA_PROVIDER=""
+mark_provider_quota_exhausted() { MARKED_QUOTA_PROVIDER="$1"; }
 
 test_case "gemini smoke test fast-fails on 429 before timeout"
 cat > "$MOCK_BIN_DIR/gemini" <<'EOF'
@@ -42,6 +44,13 @@ if [[ "$result" == RATE_LIMITED:* && "$elapsed" -le 6 ]]; then
     test_pass
 else
     test_fail "expected RATE_LIMITED within 6s, got result='$result' elapsed=${elapsed}s"
+fi
+
+test_case "gemini smoke rate-limit marks provider quota exhausted"
+if [[ "$MARKED_QUOTA_PROVIDER" == "gemini" ]]; then
+    test_pass
+else
+    test_fail "expected mark_provider_quota_exhausted gemini, got '$MARKED_QUOTA_PROVIDER'"
 fi
 
 test_summary

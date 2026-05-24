@@ -82,6 +82,18 @@ run_agent_sync() {
         fi
         return 0
     fi
+    if [[ "$CASE_NAME" == "gate_self_referential_revise" && "${5:-}" == "embrace-gate" ]]; then
+        if [[ "${4:-}" == "synthesizer" ]]; then
+            cat <<'EOF'
+Verdict: REVISE (blocking)
+
+The current-run embrace-gate-define-develop-*.md artifact is missing. The context also lacks current-run tangle-validation-*.md and delivery-*.md artifacts. However, this review itself is the gate input and those artifacts cannot be prerequisites for entering Develop.
+EOF
+        else
+            printf '%s\n' "Verdict: REVISE because the current gate artifact does not exist yet."
+        fi
+        return 0
+    fi
     printf '%s\n' "gate response from ${1:-agent}"
 }
 save_session_checkpoint() {
@@ -176,6 +188,17 @@ if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
     test_pass
 else
     test_fail "embrace continued after a requested debate gate returned REVISE"
+fi
+
+run_embrace_case "gate_self_referential_revise" "define" || true
+
+test_case "self-referential gate artifact revise does not stop before tangle"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md >/dev/null 2>&1; then
+    test_pass
+else
+    test_fail "embrace stopped on a self-referential gate artifact blocker"
 fi
 
 run_embrace_case "missing_probe_output" || true

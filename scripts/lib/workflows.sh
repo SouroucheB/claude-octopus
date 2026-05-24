@@ -1630,6 +1630,36 @@ embrace_debate_gate_has_blocking_verdict() {
         | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED))([^A-Z_]|$)'
 }
 
+embrace_debate_gate_block_is_self_referential() {
+    local text="$1"
+    local lower
+    lower=$(printf '%s\n' "$text" | tr '[:upper:]' '[:lower:]')
+
+    if [[ "$lower" != *"embrace-gate"* && "$lower" != *"gate artifact"* && "$lower" != *"artefact gate"* ]]; then
+        return 1
+    fi
+
+    if [[ "$lower" != *"this review itself is the gate input"* && \
+          "$lower" != *"cannot be prerequisites"* && \
+          "$lower" != *"ne peut pas être un prérequis"* && \
+          "$lower" != *"produit par ce gate"* && \
+          "$lower" != *"runner will materialize"* ]]; then
+        return 1
+    fi
+
+    if [[ "$lower" == *"security"* || \
+          "$lower" == *"data loss"* || \
+          "$lower" == *"destructive"* || \
+          "$lower" == *"wrong file"* || \
+          "$lower" == *"mauvais fichier"* || \
+          "$lower" == *"overlap"* || \
+          "$lower" == *"chevauche"* ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
 embrace_observation_keywords() {
     local prompt="$1"
 
@@ -1785,6 +1815,12 @@ Task: ${prompt}
 Gate style: ${style}
 Provider statuses: codex=${codex_status}, gemini=${gemini_status}, claude=${claude_status}
 
+Decision rules:
+- Do not block because the current-run embrace-gate artifact is absent; this runner writes that artifact after synthesis.
+- Do not block because Tangle, Deliver, or failed-report artifacts are absent before Develop; those artifacts belong to later phases.
+- Treat self-referential artifact concerns as traceability notes unless they reveal a separate implementation or safety blocker.
+- Block only when the next phase would be unsafe, destructive, under-scoped, or based on contradictory requirements.
+
 Codex:
 ${codex_view:-[no output]}
 
@@ -1840,9 +1876,28 @@ EOF
 
     EMBRACE_DEBATE_GATE_OUTPUT="$gate_file"
     if embrace_debate_gate_has_blocking_verdict "$synthesis"; then
-        log ERROR "Embrace debate gate '${gate_slug}' returned a blocking verdict"
-        echo -e "${RED:-}✗${NC:-} Debate gate blocked next phase: $gate_file"
-        return 2
+        if embrace_debate_gate_block_is_self_referential "$synthesis"; then
+            log WARN "Embrace debate gate '${gate_slug}' ignored a self-referential artifact blocker"
+            {
+                echo ""
+                echo "---"
+                echo ""
+                echo "## Runner Gate Interpretation"
+                echo ""
+                echo "The runner ignored a self-referential blocker about the current gate artifact or future phase artifacts. This gate artifact is produced by the runner after provider synthesis, and Tangle/Ink artifacts cannot exist before Develop/Deliver."
+            } >> "$gate_file"
+            synthesis="${synthesis}
+
+---
+
+## Runner Gate Interpretation
+
+The runner ignored a self-referential blocker about the current gate artifact or future phase artifacts. This gate artifact is produced by the runner after provider synthesis, and Tangle/Ink artifacts cannot exist before Develop/Deliver."
+        else
+            log ERROR "Embrace debate gate '${gate_slug}' returned a blocking verdict"
+            echo -e "${RED:-}✗${NC:-} Debate gate blocked next phase: $gate_file"
+            return 2
+        fi
     fi
 
     if declare -f save_session_checkpoint >/dev/null 2>&1; then

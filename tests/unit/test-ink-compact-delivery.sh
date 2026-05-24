@@ -101,6 +101,7 @@ NC=""
 DRY_RUN=false
 SUPPORTS_BATCH_COMMAND=false
 OCTOPUS_REVIEW_4X10=false
+LAST_INK_REVIEW_PROMPT_FILE="$TEST_ROOT/last-ink-review-prompt.txt"
 
 log() { :; }
 octopus_phase_banner() { :; }
@@ -112,8 +113,10 @@ write_structured_decision() { :; }
 octopus_complete() { :; }
 run_agent_sync() {
     local provider="$1"
+    local prompt="${2:-}"
     local phase="${5:-}"
     if [[ "$provider" == "claude-sonnet" && "$phase" == "ink" ]]; then
+        printf '%s' "$prompt" > "$LAST_INK_REVIEW_PROMPT_FILE"
         printf '%s\n' \
             "Security: 10/10" \
             "Reliability: 10/10" \
@@ -140,6 +143,28 @@ if ink_deliver "Implement the requested feature" "$tangle_file" >/dev/null 2>&1;
     fi
 else
     test_fail "ink_deliver returned non-zero in fallback scenario"
+fi
+
+test_case "ink review prompt does not penalize future delivery artifact"
+last_review_prompt="$(cat "$LAST_INK_REVIEW_PROMPT_FILE" 2>/dev/null || true)"
+if [[ "$last_review_prompt" == *"Do not penalize the absence of the final delivery document"* ]] && \
+   [[ "$last_review_prompt" == *"If a dimension is not applicable"* ]]; then
+    test_pass
+else
+    test_fail "ink review prompt does not explain pre-delivery/N-A scoring semantics"
+fi
+
+reset_results
+printf '%s
+' "# Tangle" "### Quality Gate: PASSED" > "$tangle_file"
+score_cross_model_review() { echo "8:7:7:NA"; }
+format_review_scorecard() { :; }
+
+test_case "ink min-score gate ignores non-applicable dimensions"
+if ink_deliver "Implement a CLI-only file change" "$tangle_file" >/dev/null 2>&1; then
+    test_pass
+else
+    test_fail "ink_deliver failed because an N/A dimension was treated as below threshold"
 fi
 
 test_summary

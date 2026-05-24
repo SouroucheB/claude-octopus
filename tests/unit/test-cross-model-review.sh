@@ -13,6 +13,10 @@ test_suite "Cross-Model Review Scoring (4x10)"
 ALL_SRC=$(mktemp)
 cat "$PROJECT_ROOT/scripts/orchestrate.sh" "$PROJECT_ROOT/scripts/lib/"*.sh > "$ALL_SRC" 2>/dev/null
 
+WORKSPACE_DIR="${WORKSPACE_DIR:-$PROJECT_ROOT}"
+# shellcheck source=/dev/null
+source "$PROJECT_ROOT/scripts/lib/quality.sh"
+
 test_score_function_exists() {
     test_case "score_cross_model_review function exists"
 
@@ -80,6 +84,24 @@ test_heuristic_scoring() {
     fi
 }
 
+
+test_na_score_extraction() {
+    test_case "Non-applicable review dimensions parse as NA"
+
+    local scores
+    scores=$(score_cross_model_review $'Security: 8/10
+Reliability: 7/10
+Performance: 9/10
+Accessibility: N/A
+No UI surface changed.')
+
+    if [[ "$scores" == "8:7:9:NA" ]]; then
+        test_pass
+    else
+        test_fail "expected 8:7:9:NA, got $scores"
+    fi
+}
+
 test_scorecard_format() {
     test_case "Scorecard has visual bar chart format"
 
@@ -112,7 +134,7 @@ test_cross_model_assignment() {
 test_4x10_gate_in_ink_deliver() {
     test_case "4x10 gate check in ink_deliver"
 
-    if grep -A 100 "ink_deliver()" "$ALL_SRC" | grep -q "OCTOPUS_REVIEW_4X10"; then
+    if grep -A 180 "ink_deliver()" "$ALL_SRC" | grep -q "OCTOPUS_REVIEW_4X10"; then
         test_pass
     else
         test_fail "4x10 gate not in ink_deliver"
@@ -152,6 +174,7 @@ test_cross_model_reviewer_function_exists
 test_review_4x10_env_var
 test_explicit_score_extraction
 test_heuristic_scoring
+test_na_score_extraction
 test_scorecard_format
 test_cross_model_assignment
 test_4x10_gate_in_ink_deliver

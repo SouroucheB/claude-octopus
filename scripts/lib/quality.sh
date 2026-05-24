@@ -850,10 +850,18 @@ score_cross_model_review() {
     local _re_rel='[Rr]eliability[: ]*([0-9]+)/10'
     local _re_perf='[Pp]erformance[: ]*([0-9]+)/10'
     local _re_acc='[Aa]ccessib[a-z]*[: ]*([0-9]+)/10'
+    local _re_sec_na='[Ss]ecurity[: ]*(N/A|NA|[Nn]ot[ -]applicable|[Nn]on[ -]applicable|[Nn]ot[ -]relevant)'
+    local _re_rel_na='[Rr]eliability[: ]*(N/A|NA|[Nn]ot[ -]applicable|[Nn]on[ -]applicable|[Nn]ot[ -]relevant)'
+    local _re_perf_na='[Pp]erformance[: ]*(N/A|NA|[Nn]ot[ -]applicable|[Nn]on[ -]applicable|[Nn]ot[ -]relevant)'
+    local _re_acc_na='[Aa]ccessib[a-z]*[: ]*(N/A|NA|[Nn]ot[ -]applicable|[Nn]on[ -]applicable|[Nn]ot[ -]relevant)'
     [[ "$review_output" =~ $_re_sec ]] && sec="${BASH_REMATCH[1]}"
     [[ "$review_output" =~ $_re_rel ]] && rel="${BASH_REMATCH[1]}"
     [[ "$review_output" =~ $_re_perf ]] && perf="${BASH_REMATCH[1]}"
     [[ "$review_output" =~ $_re_acc ]] && acc="${BASH_REMATCH[1]}"
+    [[ "$review_output" =~ $_re_sec_na ]] && sec="NA"
+    [[ "$review_output" =~ $_re_rel_na ]] && rel="NA"
+    [[ "$review_output" =~ $_re_perf_na ]] && perf="NA"
+    [[ "$review_output" =~ $_re_acc_na ]] && acc="NA"
 
     # Heuristic fallback for missing dimensions (zero forks via [[ glob ]])
     if [[ "$sec" == 5 ]]; then
@@ -888,9 +896,11 @@ score_cross_model_review() {
         fi
     fi
 
-    # Clamp all to 0-10
+    # Clamp numeric scores to 0-10. Explicit NA stays non-numeric and is
+    # handled by the Ink gate as non-applicable rather than a low score.
     for var in sec rel perf acc; do
         local val="${!var}"
+        [[ "$val" =~ ^[0-9]+$ ]] || continue
         [[ "$val" -lt 0 ]] 2>/dev/null && eval "$var=0"
         [[ "$val" -gt 10 ]] 2>/dev/null && eval "$var=10"
     done
@@ -906,6 +916,10 @@ format_review_scorecard() {
 
     _bar() {
         local val="$1"
+        if [[ ! "$val" =~ ^[0-9]+$ ]]; then
+            echo "not applicable"
+            return 0
+        fi
         local filled=$((val * 2))
         local empty=$((20 - filled))
         echo "${bar_full:0:$filled}${bar_empty:0:$empty} ${val}/10"

@@ -1359,6 +1359,25 @@ build_ink_delivery_context() {
     rm -f "$tmp_context"
 }
 
+ink_review_score_below_min() {
+    local score="$1"
+    local min_score="$2"
+    [[ "$score" =~ ^[0-9]+$ ]] || return 1
+    [[ "$score" -lt "$min_score" ]]
+}
+
+ink_any_review_score_below_min() {
+    local min_score="$1"
+    shift
+    local score
+    for score in "$@"; do
+        if ink_review_score_below_min "$score" "$min_score"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 build_ink_fallback_delivery() {
     local prompt="$1"
     local sonnet_review="$2"
@@ -1447,7 +1466,9 @@ ink_deliver() {
     local sonnet_review
     sonnet_review=$(run_agent_sync "claude-sonnet" "Review these development results for quality, completeness, and correctness.
 Flag any issues, gaps, or improvements needed.
-Rate each dimension explicitly as 'Security: N/10', 'Reliability: N/10', 'Performance: N/10', 'Accessibility: N/10'.
+This is a pre-delivery review: the final delivery-*.md document is generated after this review. Do not penalize the absence of the final delivery document, final Ink artifact, or context.deliver during this review.
+If a dimension is not applicable to the task surface, write '<Dimension>: N/A' instead of a numeric score. For example, Accessibility is N/A for CLI-only or file-only changes with no user interface surface.
+For applicable dimensions, rate explicitly as 'Security: N/10', 'Reliability: N/10', 'Performance: N/10', 'Accessibility: N/10'.
 
 Original task: $prompt
 
@@ -1478,30 +1499,30 @@ $all_results" 120 "code-reviewer" "ink") || {
 
     local min_review_score="${OCTOPUS_INK_MIN_SCORE:-7}"
     [[ "$min_review_score" =~ ^[0-9]+$ ]] || min_review_score=7
-    if [[ "$rev_sec" -lt "$min_review_score" || "$rev_rel" -lt "$min_review_score" || "$rev_perf" -lt "$min_review_score" || "$rev_acc" -lt "$min_review_score" ]]; then
-        log ERROR "Deliver quality gate FAILED: every dimension must be >= ${min_review_score}/10 (sec=$rev_sec rel=$rev_rel perf=$rev_perf acc=$rev_acc)"
+    if ink_any_review_score_below_min "$min_review_score" "$rev_sec" "$rev_rel" "$rev_perf" "$rev_acc"; then
+        log ERROR "Deliver quality gate FAILED: every applicable dimension must be >= ${min_review_score}/10 (sec=$rev_sec rel=$rev_rel perf=$rev_perf acc=$rev_acc; N/A excluded)"
         write_structured_decision \
             "quality-gate" \
             "ink_deliver/min-score-gate" \
             "Deliver quality gate FAILED: sec=${rev_sec} rel=${rev_rel} perf=${rev_perf} acc=${rev_acc} min=${min_review_score}" \
             "ink-delivery" \
             "high" \
-            "Minimum review score gate requires each dimension to meet or exceed ${min_review_score}/10" \
+            "Minimum review score gate requires each applicable dimension to meet or exceed ${min_review_score}/10; N/A dimensions are excluded" \
             "" 2>/dev/null || true
         return 1
     fi
 
     # v8.19.0: Strict 4x10 gate (when enabled)
     if [[ "$OCTOPUS_REVIEW_4X10" == "true" ]]; then
-        if [[ "$rev_sec" -lt 10 || "$rev_rel" -lt 10 || "$rev_perf" -lt 10 || "$rev_acc" -lt 10 ]]; then
-            log ERROR "4x10 gate FAILED: all dimensions must be 10/10 (sec=$rev_sec rel=$rev_rel perf=$rev_perf acc=$rev_acc)"
+        if ink_any_review_score_below_min 10 "$rev_sec" "$rev_rel" "$rev_perf" "$rev_acc"; then
+            log ERROR "4x10 gate FAILED: all applicable dimensions must be 10/10 (sec=$rev_sec rel=$rev_rel perf=$rev_perf acc=$rev_acc; N/A excluded)"
             write_structured_decision \
                 "quality-gate" \
                 "ink_deliver/4x10-gate" \
                 "4x10 gate FAILED: sec=${rev_sec} rel=${rev_rel} perf=${rev_perf} acc=${rev_acc}" \
                 "ink-delivery" \
                 "high" \
-                "Strict 4x10 gate requires all dimensions at 10/10" \
+                "Strict 4x10 gate requires all applicable dimensions at 10/10; N/A dimensions are excluded" \
                 "" 2>/dev/null || true
             return 1
         fi

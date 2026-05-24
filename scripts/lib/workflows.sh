@@ -413,18 +413,18 @@ probe_discover() {
     cache_key=$(get_cache_key "$prompt")
 
     if check_cache "$cache_key"; then
-        echo -e "${CYAN}♻️  Using cached results from previous run${NC}"
-        local cached_file="${CACHE_DIR}/${cache_key}.md"
         local synthesis_file="${RESULTS_DIR}/probe-synthesis-${task_group}.md"
 
-        # Copy cached result to current synthesis file
-        cp "$cached_file" "$synthesis_file"
+        if get_cached_result "$cache_key" > "$synthesis_file" && [[ -s "$synthesis_file" ]]; then
+            echo -e "${CYAN}♻️  Using cached results from previous run${NC}"
+            log "INFO" "Cache hit - skipping probe execution"
+            echo -e "${GREEN}✓${NC} Synthesis retrieved from cache: $synthesis_file"
+            echo ""
+            return 0
+        fi
 
-        log "INFO" "Cache hit - skipping probe execution"
-        echo -e "${GREEN}✓${NC} Synthesis retrieved from cache: $synthesis_file"
-        echo ""
-
-        return 0
+        rm -f "$synthesis_file"
+        log "WARN" "Cache metadata exists but cached Probe result could not be materialized; running Probe instead"
     fi
 
     # Clean up expired cache entries

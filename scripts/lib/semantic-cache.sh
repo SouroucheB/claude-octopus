@@ -23,11 +23,30 @@
 OCTOPUS_SEMANTIC_CACHE="${OCTOPUS_SEMANTIC_CACHE:-false}"
 OCTOPUS_CACHE_SIMILARITY_THRESHOLD="${OCTOPUS_CACHE_SIMILARITY_THRESHOLD:-0.7}"
 
+octopus_resolve_cache_dir() {
+    if [[ -n "${CACHE_DIR:-}" && "$CACHE_DIR" != "/.cache/probe-results" ]]; then
+        printf '%s\n' "$CACHE_DIR"
+        return 0
+    fi
+
+    local base="${WORKSPACE_DIR:-}"
+    if [[ -z "$base" || "$base" == "/" ]]; then
+        base="${HOME:-}"
+    fi
+    if [[ -z "$base" || "$base" == "/" ]]; then
+        base="$(pwd)"
+    fi
+
+    printf '%s/.cache/probe-results\n' "${base%/}"
+}
+
 check_cache_semantic() {
     local prompt="$1"
 
     [[ "$OCTOPUS_SEMANTIC_CACHE" != "true" ]] && return 1
-    [[ ! -d "${CACHE_DIR:-}" ]] && return 1
+    local cache_dir
+    cache_dir=$(octopus_resolve_cache_dir)
+    [[ ! -d "$cache_dir" ]] && return 1
 
     # Try exact match first
     local cache_key
@@ -40,7 +59,7 @@ check_cache_semantic() {
     # Scan bigram files for fuzzy matches
     local best_key=""
     local best_sim="0"
-    for bigram_file in "${CACHE_DIR}"/*.bigrams; do
+    for bigram_file in "${cache_dir}"/*.bigrams; do
         [[ ! -f "$bigram_file" ]] && continue
 
         local cached_prompt
@@ -77,7 +96,10 @@ save_to_cache_semantic() {
 
     # Save bigrams file for semantic matching
     if [[ "$OCTOPUS_SEMANTIC_CACHE" == "true" ]]; then
-        echo "$prompt" > "${CACHE_DIR}/${cache_key}.bigrams"
+        local cache_dir
+        cache_dir=$(octopus_resolve_cache_dir)
+        mkdir -p "$cache_dir"
+        echo "$prompt" > "${cache_dir}/${cache_key}.bigrams"
     fi
 }
 
@@ -126,8 +148,10 @@ get_cache_key() {
 # Check if cached result exists and is fresh
 check_cache() {
     local cache_key="$1"
-    local cache_file="${CACHE_DIR}/${cache_key}.md"
-    local cache_meta="${CACHE_DIR}/${cache_key}.meta"
+    local cache_dir
+    cache_dir=$(octopus_resolve_cache_dir)
+    local cache_file="${cache_dir}/${cache_key}.md"
+    local cache_meta="${cache_dir}/${cache_key}.meta"
 
     # Check if cache files exist
     [[ ! -f "$cache_file" ]] && return 1
@@ -151,7 +175,9 @@ check_cache() {
 # Get cached result
 get_cached_result() {
     local cache_key="$1"
-    local cache_file="${CACHE_DIR}/${cache_key}.md"
+    local cache_dir
+    cache_dir=$(octopus_resolve_cache_dir)
+    local cache_file="${cache_dir}/${cache_key}.md"
     cat "$cache_file"
 }
 
@@ -159,10 +185,12 @@ get_cached_result() {
 save_to_cache() {
     local cache_key="$1"
     local result_file="$2"
-    local cache_file="${CACHE_DIR}/${cache_key}.md"
-    local cache_meta="${CACHE_DIR}/${cache_key}.meta"
+    local cache_dir
+    cache_dir=$(octopus_resolve_cache_dir)
+    local cache_file="${cache_dir}/${cache_key}.md"
+    local cache_meta="${cache_dir}/${cache_key}.meta"
 
-    mkdir -p "$CACHE_DIR"
+    mkdir -p "$cache_dir"
 
     # Copy result to cache
     cp "$result_file" "$cache_file"
@@ -175,12 +203,14 @@ save_to_cache() {
 
 # Clean up expired cache entries
 cleanup_cache() {
-    [[ ! -d "$CACHE_DIR" ]] && return 0
+    local cache_dir
+    cache_dir=$(octopus_resolve_cache_dir)
+    [[ ! -d "$cache_dir" ]] && return 0
 
     local current_time=$(date +%s)
     local cleaned=0
 
-    for meta_file in "$CACHE_DIR"/*.meta; do
+    for meta_file in "$cache_dir"/*.meta; do
         [[ ! -f "$meta_file" ]] && continue
 
         local cache_time

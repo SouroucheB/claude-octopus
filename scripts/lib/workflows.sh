@@ -857,17 +857,17 @@ tangle_validate_parallel_write_scopes() {
     local coding_count=0
     local existing_scopes=()
     local existing_tasks=()
+    local current_subtask=""
+    local current_task_index=0
 
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        [[ ! "$line" =~ ^[0-9]+[\.\)] ]] && continue
+    _tangle_process_subtask_scope_block() {
+        local block_index="$1"
+        local subtask="$2"
 
-        local subtask
-        subtask=$(echo "$line" | sed 's/^[0-9]*[\.\)]\s*//')
-        ((task_index++)) || true
+        [[ -z "$subtask" ]] && return 0
 
         if [[ "$subtask" =~ \[REASONING\] ]]; then
-            continue
+            return 0
         fi
 
         ((coding_count++)) || true
@@ -876,7 +876,7 @@ tangle_validate_parallel_write_scopes() {
         local scopes
         scopes=$(tangle_extract_write_scopes "$subtask")
         if [[ -z "$scopes" ]]; then
-            echo "coding subtask ${task_index} has no explicit file or directory write scope"
+            echo "coding subtask ${block_index} has no explicit file or directory write scope"
             return 1
         fi
 
@@ -885,14 +885,33 @@ tangle_validate_parallel_write_scopes() {
             local i
             for i in "${!existing_scopes[@]}"; do
                 if tangle_scopes_overlap "$scope" "${existing_scopes[$i]}"; then
-                    echo "coding subtask ${task_index} write scope '${scope}' overlaps subtask ${existing_tasks[$i]} scope '${existing_scopes[$i]}'"
+                    echo "coding subtask ${block_index} write scope '${scope}' overlaps subtask ${existing_tasks[$i]} scope '${existing_scopes[$i]}'"
                     return 1
                 fi
             done
             existing_scopes+=("$scope")
-            existing_tasks+=("$task_index")
+            existing_tasks+=("$block_index")
         done <<< "$scopes"
+    }
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+
+        if [[ "$line" =~ ^[0-9]+[\.\)] ]]; then
+            if [[ "$current_task_index" -gt 0 ]]; then
+                _tangle_process_subtask_scope_block "$current_task_index" "$current_subtask" || return 1
+            fi
+            ((task_index++)) || true
+            current_task_index="$task_index"
+            current_subtask=$(echo "$line" | sed 's/^[0-9]*[\.\)]\s*//')
+        elif [[ "$current_task_index" -gt 0 ]]; then
+            current_subtask="${current_subtask}"$'\n'"${line}"
+        fi
     done <<< "$subtasks"
+
+    if [[ "$current_task_index" -gt 0 ]]; then
+        _tangle_process_subtask_scope_block "$current_task_index" "$current_subtask" || return 1
+    fi
 
     [[ $coding_count -eq 0 ]] && return 0
     return 0
@@ -1604,6 +1623,13 @@ embrace_debate_gate_requested() {
     esac
 }
 
+embrace_debate_gate_has_blocking_verdict() {
+    local text="$1"
+
+    printf '%s\n' "$text" \
+        | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED))([^A-Z_]|$)'
+}
+
 embrace_observation_keywords() {
     local prompt="$1"
 
@@ -1710,6 +1736,8 @@ Style: ${style}
 Task: ${prompt}
 Context artifact: ${context_file}
 
+Do not require this gate artifact to already exist for the current run. Your review is the gate input; the runner will materialize the current-run embrace-gate artifact after provider views are collected.
+
 ${focus}
 
 Context excerpt:
@@ -1810,6 +1838,13 @@ ${gemini_view:-No output.}
 ${claude_view:-No output.}
 EOF
 
+    EMBRACE_DEBATE_GATE_OUTPUT="$gate_file"
+    if embrace_debate_gate_has_blocking_verdict "$synthesis"; then
+        log ERROR "Embrace debate gate '${gate_slug}' returned a blocking verdict"
+        echo -e "${RED:-}✗${NC:-} Debate gate blocked next phase: $gate_file"
+        return 2
+    fi
+
     if declare -f save_session_checkpoint >/dev/null 2>&1; then
         save_session_checkpoint "debate-${gate_slug}" "completed" "$gate_file"
     fi
@@ -1824,7 +1859,6 @@ EOF
             "" 2>/dev/null || true
     fi
 
-    EMBRACE_DEBATE_GATE_OUTPUT="$gate_file"
     echo -e "${GREEN:-}✓${NC:-} Debate gate completed: $gate_file"
     return 0
 }
@@ -2290,6 +2324,7 @@ ${obs_ctx}"
         export OCTOPUS_WORKFLOW_PHASE="debate-define-develop"
         _write_embrace_session_state "debate-define-develop" "running"
         if ! embrace_debate_gate "define-develop" "$prompt" "$grasp_consensus"; then
+            define_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
             _abort_embrace_phase "debate-define-develop" "requested debate gate failed" "$grasp_consensus"
             return 1
         fi
@@ -2353,6 +2388,7 @@ ${obs_ctx}"
         export OCTOPUS_WORKFLOW_PHASE="debate-develop-deliver"
         _write_embrace_session_state "debate-develop-deliver" "running"
         if ! embrace_debate_gate "develop-deliver" "$prompt" "$tangle_validation"; then
+            develop_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
             _abort_embrace_phase "debate-develop-deliver" "requested debate gate failed" "$tangle_validation"
             return 1
         fi

@@ -74,6 +74,14 @@ run_agent_sync() {
     if [[ "$CASE_NAME" == "gate_agents_fail" && "${5:-}" == "embrace-gate" ]]; then
         return 2
     fi
+    if [[ "$CASE_NAME" == "gate_blocks_revise" && "${5:-}" == "embrace-gate" ]]; then
+        if [[ "${4:-}" == "synthesizer" ]]; then
+            printf '%s\n' "Verdict: REVISE — do not enter Develop until blockers are resolved."
+        else
+            printf '%s\n' "Verdict: REVISE"
+        fi
+        return 0
+    fi
     printf '%s\n' "gate response from ${1:-agent}"
 }
 save_session_checkpoint() {
@@ -83,12 +91,12 @@ save_session_checkpoint() {
 probe_discover() {
     PHASE_CALLS+="probe "
     [[ "$CASE_NAME" == "missing_probe_output" ]] && return 0
-    printf '%s\n' "# probe synthesis" > "$RESULTS_DIR/probe-synthesis-test.md"
+    printf '%s\n' "# probe synthesis" > "$RESULTS_DIR/probe-synthesis-${OCTOPUS_TASK_GROUP:-test}.md"
 }
 
 grasp_define() {
     PHASE_CALLS+="grasp "
-    printf '%s\n' "# grasp consensus" > "$RESULTS_DIR/grasp-consensus-test.md"
+    printf '%s\n' "# grasp consensus" > "$RESULTS_DIR/grasp-consensus-${OCTOPUS_TASK_GROUP:-test}.md"
 }
 
 tangle_develop() {
@@ -96,13 +104,13 @@ tangle_develop() {
     if [[ "$CASE_NAME" == "tangle_fails" ]]; then
         return 7
     fi
-    printf '%s\n' "### Quality Gate: PASSED" > "$RESULTS_DIR/tangle-validation-test.md"
+    printf '%s\n' "### Quality Gate: PASSED" > "$RESULTS_DIR/tangle-validation-${OCTOPUS_TASK_GROUP:-test}.md"
 }
 
 ink_deliver() {
     PHASE_CALLS+="ink "
     [[ "$CASE_NAME" == "missing_ink_output" ]] && return 0
-    printf '%s\n' "# delivery" > "$RESULTS_DIR/delivery-test.md"
+    printf '%s\n' "# delivery" > "$RESULTS_DIR/delivery-${OCTOPUS_TASK_GROUP:-test}.md"
 }
 
 run_embrace_case() {
@@ -157,6 +165,17 @@ if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
     test_pass
 else
     test_fail "embrace continued after requested debate gate failure"
+fi
+
+run_embrace_case "gate_blocks_revise" "define" || true
+
+test_case "requested debate gate blocking verdict stops before tangle"
+if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp " ]] && \
+   ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md >/dev/null 2>&1; then
+    test_pass
+else
+    test_fail "embrace continued after a requested debate gate returned REVISE"
 fi
 
 run_embrace_case "missing_probe_output" || true

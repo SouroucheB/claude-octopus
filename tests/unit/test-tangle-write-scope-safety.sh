@@ -89,6 +89,20 @@ else
     test_fail "root file Files: scope was treated as missing"
 fi
 
+test_case "multi-line Files clauses are recognized"
+multiline_file_subtasks="1. [CODING] Minimal canary mutation
+   Inputs: \`task.md\`, current \`canary.txt\`.
+   Files: \`canary.txt\` only.
+   Expected output: append the canary line.
+
+2. [REASONING] Validate read-only probe behavior
+   Inputs: git status."
+if tangle_validate_parallel_write_scopes "$multiline_file_subtasks"; then
+    test_pass
+else
+    test_fail "multi-line Files: scope was treated as missing"
+fi
+
 original_prompt="Update src/lib/templates/NA02_REQUEST_REPORT.ts and src/lib/legal/legalReferenceCatalog.ts without producing duplicate subject prefixes."
 
 tangle_develop "$original_prompt" >/dev/null

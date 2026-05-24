@@ -42,6 +42,15 @@ cat > "$WORKSPACE_DIR/.octo/decisions.md" <<'EOF'
 **Importance:** 8
 **Rationale:** Relevant file-level observation.
 ---
+
+### type: debate-synthesis | timestamp: 2026-05-01T00:00:02Z | source: embrace_debate_gate/define-develop
+**ID:** D-canary-project-wide
+**Summary:** task.md previous canary workflow updated canary.txt successfully.
+**Scope:** project-wide
+**Confidence:** high
+**Importance:** 8
+**Rationale:** Canary-only memory that must not leak into a real audit just because task.md matches.
+---
 EOF
 
 log() { :; }
@@ -70,6 +79,14 @@ if [[ -z "$context" ]]; then
     test_pass
 else
     test_fail "global observations leaked into keywordless task: $context"
+fi
+
+test_case "project-wide canary observations do not leak into non-canary audits"
+context="$(embrace_build_observation_context "read task.md for a real Octo audit" 7 1500)"
+if [[ "$context" != *"D-canary-project-wide"* ]]; then
+    test_pass
+else
+    test_fail "canary project-wide observation leaked into non-canary audit: $context"
 fi
 
 test_summary

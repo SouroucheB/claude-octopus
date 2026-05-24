@@ -1946,6 +1946,23 @@ embrace_observation_keywords() {
         | head -10
 }
 
+embrace_observation_is_relevant_to_prompt() {
+    local prompt="$1"
+    local observation="$2"
+    local prompt_lower observation_lower
+
+    prompt_lower=$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')
+    observation_lower=$(printf '%s' "$observation" | tr '[:upper:]' '[:lower:]')
+
+    # Project-wide canary learnings are noisy outside explicit canary work: they
+    # commonly match generic files such as task.md and pollute real audits.
+    if [[ "$observation_lower" == *"canary"* && "$prompt_lower" != *"canary"* ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
 embrace_build_observation_context() {
     local prompt="$1"
     local min_importance="${2:-7}"
@@ -1962,13 +1979,30 @@ embrace_build_observation_context() {
         return 0
     fi
 
-    local matches="" keyword observation
+    local matches="" keyword observations observation line
     while IFS= read -r keyword; do
         [[ -z "$keyword" ]] && continue
-        observation=$(search_observations "$keyword" "$min_importance" 2>/dev/null) || true
-        [[ -z "$observation" ]] && continue
-        if [[ "$matches" != *"$observation"* ]]; then
-            matches="${matches}${matches:+$'\n---\n'}${observation}"
+        observations=$(search_observations "$keyword" "$min_importance" 2>/dev/null) || true
+        [[ -z "$observations" ]] && continue
+
+        observation=""
+        while IFS= read -r line; do
+            if [[ "$line" == "---" ]]; then
+                if [[ -n "$observation" ]] && embrace_observation_is_relevant_to_prompt "$prompt" "$observation"; then
+                    if [[ "$matches" != *"$observation"* ]]; then
+                        matches="${matches}${matches:+$'\n---\n'}${observation}"
+                    fi
+                fi
+                observation=""
+                continue
+            fi
+            observation="${observation}${observation:+$'\n'}${line}"
+        done <<< "$observations"
+
+        if [[ -n "$observation" ]] && embrace_observation_is_relevant_to_prompt "$prompt" "$observation"; then
+            if [[ "$matches" != *"$observation"* ]]; then
+                matches="${matches}${matches:+$'\n---\n'}${observation}"
+            fi
         fi
         [[ ${#matches} -ge "$max_chars" ]] && break
     done < <(embrace_observation_keywords "$prompt")

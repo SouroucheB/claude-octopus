@@ -1841,6 +1841,95 @@ embrace_debate_gate_block_is_self_referential() {
     return 0
 }
 
+embrace_gate_provider_timeout() {
+    local timeout_secs="${OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT:-${OCTOPUS_EMBRACE_GATE_TIMEOUT:-90}}"
+
+    if ! [[ "$timeout_secs" =~ ^[0-9]+$ ]] || [[ "$timeout_secs" -lt 1 ]]; then
+        timeout_secs=90
+    fi
+
+    printf '%s\n' "$timeout_secs"
+}
+
+embrace_kill_process_tree() {
+    local pid="$1"
+    local signal="${2:-TERM}"
+    local child
+
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+
+    if command -v pgrep >/dev/null 2>&1; then
+        while IFS= read -r child; do
+            [[ -n "$child" ]] && embrace_kill_process_tree "$child" "$signal"
+        done < <(pgrep -P "$pid" 2>/dev/null || true)
+    elif command -v pkill >/dev/null 2>&1; then
+        pkill "-$signal" -P "$pid" 2>/dev/null || true
+    fi
+
+    kill "-$signal" "$pid" 2>/dev/null || true
+}
+
+embrace_run_gate_agent() {
+    local agent_type="$1"
+    local prompt="$2"
+    local timeout_secs="${3:-$(embrace_gate_provider_timeout)}"
+    local role="${4:-code-reviewer}"
+    local phase="${5:-embrace-gate}"
+    local safe_agent temp_base temp_out temp_err temp_timeout
+
+    safe_agent=$(printf '%s' "$agent_type" | tr -c 'A-Za-z0-9_.-' '_')
+    mkdir -p "${RESULTS_DIR:-${TMPDIR:-/tmp}}"
+    temp_base="${RESULTS_DIR:-${TMPDIR:-/tmp}}/.tmp-embrace-gate-${safe_agent}-$$-${RANDOM}"
+    temp_out="${temp_base}.out"
+    temp_err="${temp_base}.err"
+    temp_timeout="${temp_base}.timeout"
+    : > "$temp_out"
+    : > "$temp_err"
+
+    (
+        run_agent_sync "$agent_type" "$prompt" "$timeout_secs" "$role" "$phase"
+    ) >"$temp_out" 2>"$temp_err" &
+    local dispatch_pid=$!
+
+    (
+        /bin/sleep "$timeout_secs"
+        if kill -0 "$dispatch_pid" 2>/dev/null; then
+            printf 'timeout\n' > "$temp_timeout"
+            log WARN "Embrace debate gate provider $agent_type timed out after ${timeout_secs}s"
+            embrace_kill_process_tree "$dispatch_pid" TERM
+            /bin/sleep "${OCTOPUS_EMBRACE_GATE_KILL_GRACE:-1}"
+            if kill -0 "$dispatch_pid" 2>/dev/null; then
+                embrace_kill_process_tree "$dispatch_pid" KILL
+            fi
+        fi
+    ) >/dev/null 2>&1 < /dev/null &
+    local watchdog_pid=$!
+
+    local had_errexit=false
+    case "$-" in *e*) had_errexit=true; set +e ;; esac
+    wait "$dispatch_pid" 2>/dev/null
+    local exit_code=$?
+    if [[ "$had_errexit" == "true" ]]; then set -e; fi
+
+    kill "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+
+    if [[ -s "$temp_timeout" ]]; then
+        exit_code=124
+    fi
+
+    if [[ "$exit_code" -eq 124 || "$exit_code" -eq 143 ]]; then
+        type write_agent_status >/dev/null 2>&1 && \
+            write_agent_status "$agent_type" "timeout" 0 0 "Gate provider timed out after ${timeout_secs}s" "$((timeout_secs * 1000))" "" "$role" || true
+        rm -f "$temp_out" "$temp_err" "$temp_timeout" 2>/dev/null || true
+        return 124
+    fi
+
+    cat "$temp_out"
+    rm -f "$temp_out" "$temp_err" "$temp_timeout" 2>/dev/null || true
+    return "$exit_code"
+}
+
 embrace_observation_keywords() {
     local prompt="$1"
 
@@ -1963,25 +2052,35 @@ Return a concise gate review with:
 
     local codex_view="" gemini_view="" claude_view="" synthesis=""
     local codex_status="failed" gemini_status="failed" claude_status="failed"
-    local successful=0
+    local successful=0 gate_provider_timeout provider_rc
+    gate_provider_timeout=$(embrace_gate_provider_timeout)
 
-    if codex_view=$(run_agent_sync "codex" "$gate_prompt" 120 "code-reviewer" "embrace-gate" 2>/dev/null); then
+    if codex_view=$(embrace_run_gate_agent "codex" "$gate_prompt" "$gate_provider_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
         if [[ -n "$codex_view" ]]; then
             codex_status="ok"
             successful=$((successful + 1))
         fi
+    else
+        provider_rc=$?
+        [[ "$provider_rc" -eq 124 ]] && codex_status="timeout"
     fi
-    if gemini_view=$(run_agent_sync "gemini" "$gate_prompt" 120 "researcher" "embrace-gate" 2>/dev/null); then
+    if gemini_view=$(embrace_run_gate_agent "gemini" "$gate_prompt" "$gate_provider_timeout" "researcher" "embrace-gate" 2>/dev/null); then
         if [[ -n "$gemini_view" ]]; then
             gemini_status="ok"
             successful=$((successful + 1))
         fi
+    else
+        provider_rc=$?
+        [[ "$provider_rc" -eq 124 ]] && gemini_status="timeout"
     fi
-    if claude_view=$(run_agent_sync "claude-sonnet" "$gate_prompt" 120 "code-reviewer" "embrace-gate" 2>/dev/null); then
+    if claude_view=$(embrace_run_gate_agent "claude-sonnet" "$gate_prompt" "$gate_provider_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
         if [[ -n "$claude_view" ]]; then
             claude_status="ok"
             successful=$((successful + 1))
         fi
+    else
+        provider_rc=$?
+        [[ "$provider_rc" -eq 124 ]] && claude_status="timeout"
     fi
 
     if [[ "$successful" -eq 0 ]]; then
@@ -2017,9 +2116,14 @@ Return:
 3. Risks accepted if proceeding
 4. Provider participation summary"
 
-    synthesis=$(run_agent_sync "claude-sonnet" "$synthesis_prompt" 120 "synthesizer" "embrace-gate" 2>/dev/null) || true
+    provider_rc=0
+    synthesis=$(embrace_run_gate_agent "claude-sonnet" "$synthesis_prompt" "$gate_provider_timeout" "synthesizer" "embrace-gate" 2>/dev/null) || provider_rc=$?
     if [[ -z "$synthesis" ]]; then
-        synthesis="Synthesis unavailable. Review provider outputs below before proceeding."
+        if [[ "$provider_rc" -eq 124 ]]; then
+            synthesis="Synthesis unavailable: timed out after ${gate_provider_timeout}s. Review provider outputs below before proceeding."
+        else
+            synthesis="Synthesis unavailable. Review provider outputs below before proceeding."
+        fi
     fi
 
     local gate_file="${RESULTS_DIR}/embrace-gate-${gate_slug}-${task_group}.md"
@@ -2031,6 +2135,7 @@ Return:
 **Style:** ${style}
 **Context Artifact:** ${context_file}
 **Provider Statuses:** codex=${codex_status}, gemini=${gemini_status}, claude=${claude_status}
+**Gate Provider Timeout:** ${gate_provider_timeout}s
 
 ---
 

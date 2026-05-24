@@ -112,6 +112,11 @@ EOF
         fi
         return 0
     fi
+    if [[ "$CASE_NAME" == "gate_claude_hangs" && "${5:-}" == "embrace-gate" && "${1:-}" == "claude-sonnet" && "${4:-}" == "code-reviewer" ]]; then
+        /bin/sleep 5
+        printf '%s\n' "Verdict: PROCEED"
+        return 0
+    fi
     printf '%s\n' "gate response from ${1:-agent}"
 }
 save_session_checkpoint() {
@@ -151,6 +156,7 @@ run_embrace_case() {
     CHECKPOINTS=""
     EMBRACE_STATUS=0
     EMBRACE_DEBATE_GATE_OUTPUT=""
+    unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT
     rm -rf "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR"
     mkdir -p "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR" "$HOME"
 
@@ -228,6 +234,33 @@ if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
     test_pass
 else
     test_fail "embrace stopped despite explicit PROCEED_WITH_RISKS verdict"
+fi
+
+CASE_NAME="gate_claude_hangs"
+OCTOPUS_EMBRACE_DEBATE_GATES="define"
+OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT=1
+PHASE_CALLS=""
+CHECKPOINTS=""
+EMBRACE_STATUS=0
+rm -rf "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR"
+mkdir -p "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR" "$HOME"
+SECONDS=0
+embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
+EMBRACE_STATUS=$?
+GATE_HANG_ELAPSED=$SECONDS
+unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT
+
+GATE_HANG_FILE=$(ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md 2>/dev/null | head -1)
+
+test_case "hanging gate provider times out and degrades cleanly"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   [[ "$GATE_HANG_ELAPSED" -lt 4 ]] && \
+   [[ -n "$GATE_HANG_FILE" ]] && \
+   grep -q 'claude=timeout' "$GATE_HANG_FILE"; then
+    test_pass
+else
+    test_fail "hanging gate provider was not bounded cleanly (status=$EMBRACE_STATUS elapsed=${GATE_HANG_ELAPSED}s file=${GATE_HANG_FILE:-missing})"
 fi
 
 run_embrace_case "missing_probe_output" || true

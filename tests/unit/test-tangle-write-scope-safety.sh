@@ -103,6 +103,18 @@ else
     test_fail "multi-line Files: scope was treated as missing"
 fi
 
+test_case "reasoning subtasks avoid locked Gemini"
+is_provider_locked() { [[ "$1" == "gemini" ]]; }
+is_provider_quota_exhausted() { [[ "$1" == "gemini" ]]; }
+selection=$(tangle_select_subtask_agent "2. [REASONING] Validate orchestration artifacts")
+IFS='|' read -r selected_agent selected_role _selected_icon <<< "$selection"
+if [[ "$selected_agent" == "codex" && "$selected_role" == "researcher" ]]; then
+    test_pass
+else
+    test_fail "locked Gemini was still selected for a reasoning subtask: $selection"
+fi
+unset -f is_provider_locked is_provider_quota_exhausted
+
 original_prompt="Update src/lib/templates/NA02_REQUEST_REPORT.ts and src/lib/legal/legalReferenceCatalog.ts without producing duplicate subject prefixes."
 
 tangle_develop "$original_prompt" >/dev/null

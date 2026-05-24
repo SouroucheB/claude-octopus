@@ -917,6 +917,35 @@ tangle_validate_parallel_write_scopes() {
     return 0
 }
 
+tangle_provider_unavailable() {
+    local provider="$1"
+    if type is_provider_locked >/dev/null 2>&1 && is_provider_locked "$provider"; then
+        return 0
+    fi
+    if type is_provider_quota_exhausted >/dev/null 2>&1 && is_provider_quota_exhausted "$provider"; then
+        return 0
+    fi
+    return 1
+}
+
+tangle_select_subtask_agent() {
+    local subtask="$1"
+    local agent="codex"
+    local role="implementer"
+    local pane_icon="⚙️"
+
+    if [[ "$subtask" =~ \[REASONING\] ]]; then
+        agent="gemini"
+        role="researcher"
+        pane_icon="🧠"
+        if tangle_provider_unavailable "gemini"; then
+            agent="${OCTOPUS_TANGLE_REASONING_FALLBACK_AGENT:-codex}"
+        fi
+    fi
+
+    printf '%s|%s|%s\n' "$agent" "$role" "$pane_icon"
+}
+
 # Phase 3: TANGLE (Develop) - Enhanced map-reduce with validation
 # Tentacles work together in a coordinated tangle of activity
 tangle_develop() {
@@ -1090,14 +1119,12 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
 
         local subtask
         subtask=$(echo "$line" | sed 's/^[0-9]*[\.\)]\s*//')
-        local agent="codex"
-        local role="implementer"
-        local pane_icon="⚙️"
-        if [[ "$subtask" =~ \[REASONING\] ]]; then
-            agent="gemini"
-            role="researcher"
-            pane_icon="🧠"
-        fi
+        local selection
+        local agent
+        local role
+        local pane_icon
+        selection=$(tangle_select_subtask_agent "$subtask")
+        IFS='|' read -r agent role pane_icon <<< "$selection"
         subtask=$(echo "$subtask" | sed 's/\[CODING\]\s*//; s/\[REASONING\]\s*//')
         local task_id="tangle-${task_group}-${subtask_num}"
         local pane_title="$pane_icon Subtask $((subtask_num+1))"

@@ -115,6 +115,8 @@ validate_tangle_results() {
         local result_outputs=""
         local success_count=0
         local fail_count=0
+        local reasoning_success_count=0
+        local reasoning_fail_count=0
         FAILED_SUBTASKS=""  # Reset for this validation pass (string-based)
 
         for result in "$RESULTS_DIR"/*-tangle-${task_group}*.md; do
@@ -128,18 +130,42 @@ validate_tangle_results() {
                 run_file_validation "$agent_from_file" "$(cat "$result" 2>/dev/null)" 2>/dev/null || true
             fi
 
+            local result_role="implementer"
+            result_role=$(grep -m1 "^# Role:" "$result" 2>/dev/null | sed 's/^# Role:[[:space:]]*//' | tr -d '\015') || true
+            [[ -z "$result_role" ]] && result_role="implementer"
+
+            local counts_for_implementation="true"
+            case "$result_role" in
+                researcher|reasoner|analysis|code-reviewer|reviewer)
+                    counts_for_implementation="false"
+                    ;;
+            esac
+
+            local result_succeeded="false"
             if grep -q "Status: SUCCESS" "$result" 2>/dev/null; then
-                ((success_count++)) || true
-            else
-                ((fail_count++)) || true
-                # Extract agent and prompt for retry (if loop-until-approved enabled)
-                if [[ "$LOOP_UNTIL_APPROVED" == "true" ]]; then
-                    local agent prompt_line
-                    agent=$(grep "^# Agent:" "$result" 2>/dev/null | sed 's/# Agent: //')
-                    prompt_line=$(grep "^# Prompt:" "$result" 2>/dev/null | sed 's/# Prompt: //')
-                    if [[ -n "$agent" && -n "$prompt_line" ]]; then
-                        FAILED_SUBTASKS="${FAILED_SUBTASKS}${agent}:${prompt_line}"$'\n'
+                result_succeeded="true"
+            fi
+
+            if [[ "$counts_for_implementation" == "true" ]]; then
+                if [[ "$result_succeeded" == "true" ]]; then
+                    ((success_count++)) || true
+                else
+                    ((fail_count++)) || true
+                    # Extract agent and prompt for retry (if loop-until-approved enabled)
+                    if [[ "$LOOP_UNTIL_APPROVED" == "true" ]]; then
+                        local agent prompt_line
+                        agent=$(grep "^# Agent:" "$result" 2>/dev/null | sed 's/# Agent: //')
+                        prompt_line=$(grep "^# Prompt:" "$result" 2>/dev/null | sed 's/# Prompt: //')
+                        if [[ -n "$agent" && -n "$prompt_line" ]]; then
+                            FAILED_SUBTASKS="${FAILED_SUBTASKS}${agent}:${prompt_line}"$'\n'
+                        fi
                     fi
+                fi
+            else
+                if [[ "$result_succeeded" == "true" ]]; then
+                    ((reasoning_success_count++)) || true
+                else
+                    ((reasoning_fail_count++)) || true
                 fi
             fi
             results+="$(<"$result")\n\n---\n\n"
@@ -169,6 +195,7 @@ validate_tangle_results() {
         local tangle_threshold
         tangle_threshold=$(get_gate_threshold "tangle")
         local total=$((success_count + fail_count))
+        local reasoning_total=$((reasoning_success_count + reasoning_fail_count))
         local success_rate=0
         [[ $total -gt 0 ]] && success_rate=$((success_count * 100 / total))
 
@@ -201,10 +228,10 @@ validate_tangle_results() {
         write_structured_decision \
             "quality-gate" \
             "validate_tangle_results" \
-            "Quality gate ${gate_status}: ${success_rate}% success rate (threshold: ${tangle_threshold}%)" \
+            "Quality gate ${gate_status}: ${success_rate}% implementation success rate (threshold: ${tangle_threshold}%)" \
             "tangle-${task_group}" \
             "$(if [[ $success_rate -ge 90 ]]; then echo "high"; elif [[ $success_rate -ge $tangle_threshold ]]; then echo "medium"; else echo "low"; fi)" \
-            "Success: ${success_count}/${total}, failures: ${fail_count}, threshold: ${tangle_threshold}%" \
+            "Implementation success: ${success_count}/${total}, implementation failures: ${fail_count}, reasoning-only excluded: ${reasoning_total}, threshold: ${tangle_threshold}%" \
             "" 2>/dev/null || true
 
         # ═══════════════════════════════════════════════════════════════════════
@@ -277,8 +304,9 @@ $challenge_result
 
 ### Quality Gate: ${gate_status}
 - Success Rate: ${success_rate}% (threshold: ${tangle_threshold}%)
-- Successful: ${success_count}/${total} result files
-- Failed: ${fail_count}/${total} result files
+- Successful: ${success_count}/${total} implementation result files
+- Failed: ${fail_count}/${total} implementation result files
+- Reasoning-only: ${reasoning_success_count}/${reasoning_total} successful, ${reasoning_fail_count}/${reasoning_total} failed/skipped result files (excluded from implementation score)
 - Decision Branch: ${quality_branch}
 - Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
 
@@ -371,7 +399,7 @@ EOF
 
         echo ""
         echo -e "${gate_color}${_BOX_TOP}${NC}"
-        echo -e "${gate_color}║  Quality Gate: ${gate_status} (${success_rate}% of tangle results succeeded)${NC}"
+        echo -e "${gate_color}║  Quality Gate: ${gate_status} (${success_rate}% of implementation tangle results succeeded)${NC}"
         echo -e "${gate_color}${_BOX_BOT}${NC}"
 
         if [[ "$gate_status" == "FAILED" ]]; then

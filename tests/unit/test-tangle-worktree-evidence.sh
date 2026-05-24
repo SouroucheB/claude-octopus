@@ -37,9 +37,11 @@ source "$PROJECT_ROOT/scripts/lib/testing.sh"
 write_success_result() {
     local path="$1"
     local body="$2"
+    local role="${3:-implementer}"
     cat > "$path" <<EOF
 # Agent: codex
 # Task ID: tangle-evidence-0
+# Role: $role
 # Phase: tangle
 
 ## Output
@@ -52,9 +54,11 @@ EOF
 write_failed_result() {
     local path="$1"
     local body="$2"
+    local role="${3:-implementer}"
     cat > "$path" <<EOF
 # Agent: codex
 # Task ID: tangle-evidence-0
+# Role: $role
 # Phase: tangle
 
 ## Output
@@ -122,6 +126,38 @@ else
     test_fail "validation failed despite verified current worktree evidence"
 fi
 
+test_case "reasoning-only provider lockout failures do not fail implementation score"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/gemini-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    printf 'baseline\n' > canary.txt
+    git add canary.txt
+    git commit -q -m 'add canary baseline'
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-reasoning-lockout.txt"
+    printf 'baseline\nembrace-canary-after-e56\n' > canary.txt
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-reasoning-lockout-0.md" \
+        "Changed canary.txt by appending embrace-canary-after-e56." \
+        "implementer"
+    write_failed_result "$RESULTS_DIR/gemini-tangle-evidence-reasoning-lockout-1.md" \
+        "Provider quota exhausted earlier in this run." \
+        "researcher"
+    write_failed_result "$RESULTS_DIR/gemini-tangle-evidence-reasoning-lockout-2.md" \
+        "Provider quota exhausted earlier in this run." \
+        "researcher"
+    write_failed_result "$RESULTS_DIR/gemini-tangle-evidence-reasoning-lockout-3.md" \
+        "Provider quota exhausted earlier in this run." \
+        "researcher"
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-reasoning-lockout" "Modify canary.txt to append embrace-canary-after-e56" "$RESULTS_DIR/before-reasoning-lockout.txt" >/dev/null 2>&1
+    grep -q "### Quality Gate: PASSED" "$RESULTS_DIR/tangle-validation-evidence-reasoning-lockout.md" && \
+    grep -q "Successful: 1/1 implementation result files" "$RESULTS_DIR/tangle-validation-evidence-reasoning-lockout.md" && \
+    grep -q "Reasoning-only: 0/3 successful, 3/3 failed/skipped result files (excluded from implementation score)" "$RESULTS_DIR/tangle-validation-evidence-reasoning-lockout.md"
+); then
+    test_pass
+else
+    test_fail "reasoning-only quota failures were counted against implementation quality"
+fi
+
 test_case "octopus internal artifacts are not worktree evidence"
 if (
     cd "$REPO_DIR"
@@ -167,7 +203,7 @@ if (
     grep -q "### Quality Gate: FAILED" "$RESULTS_DIR/tangle-validation-evidence-abort.md" && \
     grep -q "Decision Branch: abort" "$RESULTS_DIR/tangle-validation-evidence-abort.md" && \
     grep -q "threshold: 70%" "$RESULTS_DIR/tangle-validation-evidence-abort.md" && \
-    grep -q "Failed: 1/1 result files" "$RESULTS_DIR/tangle-validation-evidence-abort.md"
+    grep -q "Failed: 1/1 implementation result files" "$RESULTS_DIR/tangle-validation-evidence-abort.md"
 ); then
     test_pass
 else

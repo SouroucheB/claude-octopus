@@ -177,12 +177,12 @@ Tangle produced worktree changes:
 - canary.txt
 EOF
 captured_scorecard=""
-score_cross_model_review() { echo "5:8:5:5"; }
+score_cross_model_review() { echo "5:5:5:5"; }
 format_review_scorecard() { captured_scorecard="$1:$2:$3:$4"; }
 
 test_case "ink masks non-applicable file-only dimensions from changed paths"
 if ink_deliver "Modify canary.txt" "$tangle_file" >/dev/null 2>&1; then
-    if [[ "$captured_scorecard" == "NA:8:NA:NA" ]]; then
+    if [[ "$captured_scorecard" == "NA:NA:NA:NA" ]]; then
         test_pass
     else
         test_fail "unexpected applicability-adjusted scorecard: $captured_scorecard"

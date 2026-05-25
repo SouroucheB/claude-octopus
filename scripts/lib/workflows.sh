@@ -1453,7 +1453,10 @@ ink_infer_review_applicability() {
     done <<< "$paths"
 
     if [[ "$saw_any" == "true" ]]; then
-        [[ "$saw_runtime" == "true" ]] || { sec="no"; perf="no"; }
+        # For documentation/text-only changes, the product/runtime reliability
+        # score is not a meaningful gate. Exactness is covered by Tangle
+        # evidence; Ink should not fail on a subjective runtime score.
+        [[ "$saw_runtime" == "true" ]] || { sec="no"; rel="no"; perf="no"; }
         [[ "$saw_ui" == "true" ]] || acc="no"
     fi
 

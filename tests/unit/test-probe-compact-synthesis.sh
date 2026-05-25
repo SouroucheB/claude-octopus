@@ -50,6 +50,8 @@ task_group="compact"
 success_a="$RESULTS_DIR/codex-probe-${task_group}-0.md"
 success_b="$RESULTS_DIR/claude-sonnet-probe-${task_group}-1.md"
 failed="$RESULTS_DIR/gemini-probe-${task_group}-2.md"
+failed_useful="$RESULTS_DIR/codex-probe-${task_group}-3.md"
+session_limit="$RESULTS_DIR/claude-sonnet-probe-${task_group}-4.md"
 
 {
     echo "# Agent: codex"
@@ -79,19 +81,45 @@ failed="$RESULTS_DIR/gemini-probe-${task_group}-2.md"
     echo "## Status: FAILED (exit code: 1)"
 } > "$failed"
 
+{
+    echo "# Agent: codex"
+    echo "# Phase: probe"
+    echo ""
+    echo "## Output"
+    echo "Final recommendation: READY_FOR_UPSTREAM_PR_PLANNING"
+    echo "Findings:"
+    make_payload "FAILED_USEFUL" 70
+    echo "    printf '%s\n' 'Prompt is too long|context limit|too many tokens'"
+    echo ""
+    echo "## Status: FAILED (Codex tool stdin closed (avoid write_stdin in non-interactive sessions))"
+} > "$failed_useful"
+
+{
+    echo "# Agent: claude-sonnet"
+    echo "# Phase: probe"
+    echo ""
+    echo "## Output"
+    echo "You've hit your session limit · resets 7:20pm (Europe/Paris)"
+    echo ""
+    echo "## Status: FAILED (exit code: 1)"
+} > "$session_limit"
+
 OCTOPUS_PROBE_SYNTHESIS_FILE_CHARS=900
-OCTOPUS_PROBE_SYNTHESIS_CONTEXT_CHARS=4200
+OCTOPUS_PROBE_SYNTHESIS_CONTEXT_CHARS=6000
 
 test_case "compact probe context is bounded and sanitizes failed synthesis markers"
 context="$(build_probe_synthesis_context "$task_group")"
 if [[ ${#context} -le 5200 ]] && \
    [[ "$context" == *"## Source: codex-probe-${task_group}-0.md"* ]] && \
    [[ "$context" == *"## Source: claude-sonnet-probe-${task_group}-1.md"* ]] && \
+   [[ "$context" == *"## Source: codex-probe-${task_group}-3.md"* ]] && \
+   [[ "$context" == *"Final recommendation: READY_FOR_UPSTREAM_PR_PLANNING"* ]] && \
    [[ "$context" == *"truncated by probe synthesis context"* ]] && \
    [[ "$context" == *"Prior auto-synthesis failed; raw fallback omitted"* ]] && \
    [[ "$context" != *"[Auto-synthesis failed - raw findings below]"* ]] && \
    [[ "$context" != *"RAW_TAIL_SHOULD_NOT_APPEAR"* ]] && \
-   [[ "$context" != *"gemini-probe-${task_group}-2.md"* ]]; then
+   [[ "$context" != *"gemini-probe-${task_group}-2.md"* ]] && \
+   [[ "$context" != *"claude-sonnet-probe-${task_group}-4.md"* ]]; then
     test_pass
 else
     test_fail "compact probe context did not stay bounded/sanitized"

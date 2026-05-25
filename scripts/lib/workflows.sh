@@ -717,15 +717,27 @@ grasp_define() {
     log INFO "Gathering problem definitions from multiple perspectives..."
 
     local define_readonly_guard="IMPORTANT: This is the read-only Define phase. Do NOT modify, create, delete, stage, or commit files. Do NOT run shell commands that write to the workspace. If inspection is needed, use read-only commands only and return text."
-    local def1 def2 def3
+    local def1 def2 def3 def1_fallback_note="" def2_fallback_note=""
     def1=$(run_agent_sync "codex" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define the core problem statement in 2-3 sentences. What is the essential challenge?" 120 "backend-architect" "grasp") || {
-        log WARN "Codex failed for problem definition, falling back to Claude"
-        echo -e " ${YELLOW}⚠${NC}  Codex unavailable for problem definition — falling back to Claude"
+        local codex_reason=""
+        if type agent_status_latest_reason >/dev/null 2>&1; then
+            codex_reason=$(agent_status_latest_reason "codex" "backend-architect" 2>/dev/null) || codex_reason=""
+        fi
+        codex_reason="${codex_reason:-provider failure}"
+        log WARN "Codex failed for problem definition: ${codex_reason}; falling back to Claude"
+        echo -e " ${YELLOW}⚠${NC}  Codex unavailable for problem definition (${codex_reason}) — falling back to Claude"
+        def1_fallback_note="- codex/backend-architect: ${codex_reason}; fallback claude-sonnet used for problem statement."
         def1=$(run_agent_sync "claude-sonnet" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define the core problem statement in 2-3 sentences. What is the essential challenge?" 120 "backend-architect" "grasp") || true
     }
     def2=$(run_agent_sync "gemini" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define success criteria. How will we know when this is solved correctly? List 3-5 measurable criteria." 120 "researcher" "grasp") || {
-        log WARN "Gemini failed for success criteria, falling back to Claude"
-        echo -e " ${YELLOW}⚠${NC}  Gemini unavailable for success criteria — falling back to Claude"
+        local gemini_reason=""
+        if type agent_status_latest_reason >/dev/null 2>&1; then
+            gemini_reason=$(agent_status_latest_reason "gemini" "researcher" 2>/dev/null) || gemini_reason=""
+        fi
+        gemini_reason="${gemini_reason:-provider failure}"
+        log WARN "Gemini failed for success criteria: ${gemini_reason}; falling back to Claude"
+        echo -e " ${YELLOW}⚠${NC}  Gemini unavailable for success criteria (${gemini_reason}) — falling back to Claude"
+        def2_fallback_note="- gemini/researcher: ${gemini_reason}; fallback claude-sonnet used for success criteria."
         def2=$(run_agent_sync "claude-sonnet" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define success criteria. How will we know when this is solved correctly? List 3-5 measurable criteria." 120 "researcher" "grasp") || true
     }
     def3=$(run_agent_sync "claude-sonnet" "${define_readonly_guard}\n\nBased on: $prompt\n${context}Define constraints and boundaries. What are we NOT solving? What are hard limits?" 120 "researcher" "grasp")
@@ -771,12 +783,22 @@ $def2
 $def3"
     }
 
+    local provider_fallbacks_section=""
+    if [[ -n "$def1_fallback_note" || -n "$def2_fallback_note" ]]; then
+        provider_fallbacks_section="## Provider Fallbacks
+
+${def1_fallback_note}
+${def2_fallback_note}
+
+"
+    fi
+
     cat > "$consensus_file" << EOF
 # GRASP Phase - Problem Definition Consensus
 ## Task: $prompt
 ## Generated: $(date)
 
-$consensus
+${provider_fallbacks_section}$consensus
 
 ---
 *Consensus built from multiple agent perspectives (task group: $task_group)*

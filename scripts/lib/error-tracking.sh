@@ -426,6 +426,22 @@ agent_status_output_files() {
     done
 }
 
+agent_status_latest_reason() {
+    local agent="${1:-}"
+    local role="${2:-}"
+    local dir jsonl
+    [[ -n "$agent" ]] || return 0
+    dir=$(octo_run_dir)
+    jsonl="$dir/agents.jsonl"
+    [[ -s "$jsonl" ]] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+
+    jq -rs --arg agent "$agent" --arg role "$role" '
+        map(select(.agent == $agent and ($role == "" or .role == $role)))
+        | if length > 0 then .[-1].reason // "" else "" end
+    ' "$jsonl" 2>/dev/null
+}
+
 render_agent_summary() {
     local dir jsonl
     dir=$(octo_run_dir)

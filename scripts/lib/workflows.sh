@@ -1842,10 +1842,20 @@ embrace_debate_gate_block_is_self_referential() {
 }
 
 embrace_gate_provider_timeout() {
-    local timeout_secs="${OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT:-${OCTOPUS_EMBRACE_GATE_TIMEOUT:-90}}"
+    local agent_type="${1:-}"
+    local prompt="${2:-}"
+    local timeout_secs=""
+
+    if [[ -n "${OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT:-}" ]]; then
+        timeout_secs="$OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT"
+    elif [[ -n "${OCTOPUS_EMBRACE_GATE_TIMEOUT:-}" ]]; then
+        timeout_secs="$OCTOPUS_EMBRACE_GATE_TIMEOUT"
+    elif type compute_dynamic_timeout >/dev/null 2>&1; then
+        timeout_secs=$(compute_dynamic_timeout "debate" "$prompt" "$agent_type" 2>/dev/null) || timeout_secs=""
+    fi
 
     if ! [[ "$timeout_secs" =~ ^[0-9]+$ ]] || [[ "$timeout_secs" -lt 1 ]]; then
-        timeout_secs=90
+        timeout_secs=180
     fi
 
     printf '%s\n' "$timeout_secs"
@@ -1872,7 +1882,7 @@ embrace_kill_process_tree() {
 embrace_run_gate_agent() {
     local agent_type="$1"
     local prompt="$2"
-    local timeout_secs="${3:-$(embrace_gate_provider_timeout)}"
+    local timeout_secs="${3:-$(embrace_gate_provider_timeout "$agent_type" "$prompt")}"
     local role="${4:-code-reviewer}"
     local phase="${5:-embrace-gate}"
     local safe_agent temp_base temp_out temp_err temp_timeout
@@ -2086,10 +2096,12 @@ Return a concise gate review with:
 
     local codex_view="" gemini_view="" claude_view="" synthesis=""
     local codex_status="failed" gemini_status="failed" claude_status="failed"
-    local successful=0 gate_provider_timeout provider_rc
-    gate_provider_timeout=$(embrace_gate_provider_timeout)
+    local successful=0 codex_timeout gemini_timeout claude_timeout synthesis_timeout provider_rc
+    codex_timeout=$(embrace_gate_provider_timeout "codex" "$gate_prompt")
+    gemini_timeout=$(embrace_gate_provider_timeout "gemini" "$gate_prompt")
+    claude_timeout=$(embrace_gate_provider_timeout "claude-sonnet" "$gate_prompt")
 
-    if codex_view=$(embrace_run_gate_agent "codex" "$gate_prompt" "$gate_provider_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
+    if codex_view=$(embrace_run_gate_agent "codex" "$gate_prompt" "$codex_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
         if [[ -n "$codex_view" ]]; then
             codex_status="ok"
             successful=$((successful + 1))
@@ -2098,7 +2110,7 @@ Return a concise gate review with:
         provider_rc=$?
         [[ "$provider_rc" -eq 124 ]] && codex_status="timeout"
     fi
-    if gemini_view=$(embrace_run_gate_agent "gemini" "$gate_prompt" "$gate_provider_timeout" "researcher" "embrace-gate" 2>/dev/null); then
+    if gemini_view=$(embrace_run_gate_agent "gemini" "$gate_prompt" "$gemini_timeout" "researcher" "embrace-gate" 2>/dev/null); then
         if [[ -n "$gemini_view" ]]; then
             gemini_status="ok"
             successful=$((successful + 1))
@@ -2107,7 +2119,7 @@ Return a concise gate review with:
         provider_rc=$?
         [[ "$provider_rc" -eq 124 ]] && gemini_status="timeout"
     fi
-    if claude_view=$(embrace_run_gate_agent "claude-sonnet" "$gate_prompt" "$gate_provider_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
+    if claude_view=$(embrace_run_gate_agent "claude-sonnet" "$gate_prompt" "$claude_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
         if [[ -n "$claude_view" ]]; then
             claude_status="ok"
             successful=$((successful + 1))
@@ -2151,10 +2163,11 @@ Return:
 4. Provider participation summary"
 
     provider_rc=0
-    synthesis=$(embrace_run_gate_agent "claude-sonnet" "$synthesis_prompt" "$gate_provider_timeout" "synthesizer" "embrace-gate" 2>/dev/null) || provider_rc=$?
+    synthesis_timeout=$(embrace_gate_provider_timeout "claude-sonnet" "$synthesis_prompt")
+    synthesis=$(embrace_run_gate_agent "claude-sonnet" "$synthesis_prompt" "$synthesis_timeout" "synthesizer" "embrace-gate" 2>/dev/null) || provider_rc=$?
     if [[ -z "$synthesis" ]]; then
         if [[ "$provider_rc" -eq 124 ]]; then
-            synthesis="Synthesis unavailable: timed out after ${gate_provider_timeout}s. Review provider outputs below before proceeding."
+            synthesis="Synthesis unavailable: timed out after ${synthesis_timeout}s. Review provider outputs below before proceeding."
         else
             synthesis="Synthesis unavailable. Review provider outputs below before proceeding."
         fi
@@ -2169,7 +2182,7 @@ Return:
 **Style:** ${style}
 **Context Artifact:** ${context_file}
 **Provider Statuses:** codex=${codex_status}, gemini=${gemini_status}, claude=${claude_status}
-**Gate Provider Timeout:** ${gate_provider_timeout}s
+**Gate Provider Timeouts:** codex=${codex_timeout}s, gemini=${gemini_timeout}s, claude=${claude_timeout}s, synthesis=${synthesis_timeout}s
 
 ---
 

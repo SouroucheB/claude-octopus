@@ -178,6 +178,15 @@ else
     test_fail "expected preflight_check true, got ${PREFLIGHT_ARGS//$'\n'/,}"
 fi
 
+unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT OCTOPUS_EMBRACE_GATE_TIMEOUT OCTOPUS_AGENT_TIMEOUT
+test_case "debate gate provider timeout defaults to debate budget"
+gate_default_timeout=$(embrace_gate_provider_timeout "claude-sonnet" "Audit a real Embrace run")
+if [[ "$gate_default_timeout" =~ ^[0-9]+$ ]] && [[ "$gate_default_timeout" -ge 180 ]]; then
+    test_pass
+else
+    test_fail "expected debate gate timeout >=180s, got ${gate_default_timeout:-empty}"
+fi
+
 test_case "no debate gates by default"
 if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
    [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \

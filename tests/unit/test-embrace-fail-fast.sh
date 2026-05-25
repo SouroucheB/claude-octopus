@@ -62,7 +62,8 @@ reset_provider_lockouts() { :; }
 search_observations() { :; }
 init_session() { :; }
 display_workflow_cost_estimate() { return 0; }
-preflight_check() { return 0; }
+PREFLIGHT_ARGS=""
+preflight_check() { PREFLIGHT_ARGS+="${1:-false}"$'\n'; return 0; }
 display_phase_metrics() { :; }
 update_context() { :; }
 handle_autonomy_checkpoint() { :; }
@@ -155,6 +156,7 @@ run_embrace_case() {
     OCTOPUS_EMBRACE_DEBATE_GATES="${2:-none}"
     PHASE_CALLS=""
     CHECKPOINTS=""
+    PREFLIGHT_ARGS=""
     EMBRACE_STATUS=0
     EMBRACE_DEBATE_GATE_OUTPUT=""
     unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT
@@ -168,6 +170,13 @@ run_embrace_case() {
 }
 
 run_embrace_case "all_ok" "none" || true
+
+test_case "embrace forces fresh preflight and smoke checks"
+if [[ "$PREFLIGHT_ARGS" == $'true\n' ]]; then
+    test_pass
+else
+    test_fail "expected preflight_check true, got ${PREFLIGHT_ARGS//$'\n'/,}"
+fi
 
 test_case "no debate gates by default"
 if [[ "$EMBRACE_STATUS" -eq 0 ]] && \

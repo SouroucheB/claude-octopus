@@ -2531,7 +2531,9 @@ ${obs_ctx}"
     export OCTOPUS_SKIP_PHASE_COST_PROMPT="true"
 
     # Pre-flight validation
-    if ! preflight_check; then
+    # Embrace is long-running and provider quota can change between commands, so
+    # force a fresh smoke check instead of trusting the global preflight cache.
+    if ! preflight_check "true"; then
         log ERROR "Pre-flight check failed. Aborting workflow."
         return 1
     fi

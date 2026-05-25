@@ -575,6 +575,67 @@ test_pricing_gemini_flash
 test_gemini_config_exists
 
 # 14. Model fallback wrapper (v9.22.0)
+
+test_gemini_exec_wrapper_reaps_tail_on_term() {
+    test_case "fallback: wrapper reaps stderr tail watcher on TERM"
+    local helper="$PROJECT_ROOT/scripts/helpers/gemini-exec.sh"
+    local stub_dir tail_pid_file wrapper_pid tail_pid
+    stub_dir=$(mktemp -d -t "octo-gemini-tail.XXXXXX")
+    tail_pid_file="$stub_dir/tail.pid"
+    cat >"$stub_dir/gemini" <<'STUB'
+#!/usr/bin/env bash
+sleep 20
+STUB
+    cat >"$stub_dir/tail" <<'STUB'
+#!/usr/bin/env bash
+printf '%s
+' "$$" > "$TAIL_PID_FILE"
+trap '' HUP
+trap 'exit 0' TERM INT
+while true; do sleep 1; done
+STUB
+    chmod +x "$stub_dir/gemini" "$stub_dir/tail"
+
+    PATH="$stub_dir:$PATH" TAIL_PID_FILE="$tail_pid_file" \
+        bash "$helper" gemini-3.0-pro-preview </dev/null >/dev/null 2>&1 &
+    wrapper_pid=$!
+
+    for _ in 1 2 3 4 5; do
+        [[ -s "$tail_pid_file" ]] && break
+        sleep 1
+    done
+    tail_pid=$(cat "$tail_pid_file" 2>/dev/null || true)
+    SECONDS=0
+    kill -TERM "$wrapper_pid" 2>/dev/null || true
+    for _ in 1 2 3 4; do
+        if ! kill -0 "$wrapper_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+    local elapsed=$SECONDS
+    local wrapper_still_alive=0
+    if kill -0 "$wrapper_pid" 2>/dev/null; then
+        wrapper_still_alive=1
+        kill -KILL "$wrapper_pid" 2>/dev/null || true
+    fi
+    wait "$wrapper_pid" 2>/dev/null || true
+    sleep 1
+
+    if [[ $wrapper_still_alive -eq 1 ]]; then
+        [[ -n "$tail_pid" ]] && kill "$tail_pid" 2>/dev/null || true
+        rm -rf "$stub_dir"
+        test_fail "wrapper did not exit promptly on TERM (elapsed ${elapsed}s)"
+    elif [[ -n "$tail_pid" ]] && ! kill -0 "$tail_pid" 2>/dev/null; then
+        rm -rf "$stub_dir"
+        test_pass
+    else
+        [[ -n "$tail_pid" ]] && kill "$tail_pid" 2>/dev/null || true
+        rm -rf "$stub_dir"
+        test_fail "stderr tail watcher survived wrapper TERM (tail_pid=${tail_pid:-missing})"
+    fi
+}
+
 test_gemini_exec_wrapper_exists() {
     test_case "fallback: helpers/gemini-exec.sh exists and is executable"
     local wrapper="$PROJECT_ROOT/scripts/helpers/gemini-exec.sh"
@@ -747,5 +808,6 @@ test_gemini_wrapper_is_model_error_in_sync
 test_gemini_exec_wrapper_retries_on_404
 test_gemini_exec_wrapper_no_retry_on_429
 test_gemini_exec_wrapper_blocks_disallowed_primary
+test_gemini_exec_wrapper_reaps_tail_on_term
 
 test_summary

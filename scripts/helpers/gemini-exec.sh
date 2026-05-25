@@ -36,7 +36,51 @@ done
 # Gemini CLI consumes stdin once; cache the prompt so retries can replay it.
 prompt_file=""
 stdout_file=$(mktemp -t "octo-gemini-stdout.XXXXXX")
-trap 'rm -f "${prompt_file:-}" "${stdout_file:-}" "${err_file:-}"' EXIT INT TERM
+err_file=""
+_tail_pid=""
+_gemini_pid=""
+_cleanup_done=0
+
+_kill_tree() {
+    local pid="$1"
+    local signal="${2:-TERM}"
+    local child
+
+    [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+
+    if command -v pgrep >/dev/null 2>&1; then
+        while IFS= read -r child; do
+            [[ -n "$child" ]] && _kill_tree "$child" "$signal"
+        done < <(pgrep -P "$pid" 2>/dev/null || true)
+    fi
+
+    kill "-$signal" "$pid" 2>/dev/null || true
+}
+
+_cleanup() {
+    [[ "${_cleanup_done:-0}" -eq 1 ]] && return 0
+    _cleanup_done=1
+
+    if [[ -n "${_gemini_pid:-}" ]] && kill -0 "$_gemini_pid" 2>/dev/null; then
+        _kill_tree "$_gemini_pid" TERM
+        /bin/sleep "${OCTOPUS_GEMINI_EXEC_KILL_GRACE:-1}" 2>/dev/null || true
+        if kill -0 "$_gemini_pid" 2>/dev/null; then
+            _kill_tree "$_gemini_pid" KILL
+        fi
+        wait "$_gemini_pid" 2>/dev/null || true
+    fi
+
+    if [[ -n "${_tail_pid:-}" ]] && kill -0 "$_tail_pid" 2>/dev/null; then
+        kill "$_tail_pid" 2>/dev/null || true
+        wait "$_tail_pid" 2>/dev/null || true
+    fi
+
+    rm -f "${prompt_file:-}" "${stdout_file:-}" "${err_file:-}"
+}
+
+trap _cleanup EXIT
+trap '_cleanup; exit 130' INT
+trap '_cleanup; exit 143' TERM
 
 if [[ ! -t 0 ]]; then
     prompt_file=$(mktemp -t "octo-gemini-prompt.XXXXXX")
@@ -72,24 +116,30 @@ for model in "${model_list[@]}"; do
 
     set +e
     if [[ -n "$prompt_file" ]]; then
-        gemini -m "$model" "$@" <"$prompt_file" >"$stdout_file" 2>"$err_file"
+        gemini -m "$model" "$@" <"$prompt_file" >"$stdout_file" 2>"$err_file" &
     else
-        gemini -m "$model" "$@" >"$stdout_file" 2>"$err_file"
+        gemini -m "$model" "$@" >"$stdout_file" 2>"$err_file" &
     fi
+    _gemini_pid=$!
+    wait "$_gemini_pid"
     last_exit=$?
+    _gemini_pid=""
     set -e
 
     kill "$_tail_pid" 2>/dev/null; wait "$_tail_pid" 2>/dev/null || true
+    _tail_pid=""
 
     if [[ $last_exit -eq 0 ]]; then
         cat "$stdout_file"
         # stderr already streamed in real-time above — no reprint
         rm -f "$err_file"
+        err_file=""
         exit 0
     fi
 
     last_err=$(<"$err_file")
     rm -f "$err_file"
+    err_file=""
 
     if is_model_error "$last_err" && [[ $attempt -lt $total ]]; then
         if [[ "${OCTOPUS_GEMINI_FALLBACK_QUIET:-false}" != "true" ]]; then

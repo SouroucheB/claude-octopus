@@ -2133,7 +2133,12 @@ Return a concise gate review with:
         fi
     else
         provider_rc=$?
-        [[ "$provider_rc" -eq 124 ]] && codex_status="timeout"
+        if [[ -n "$codex_view" ]]; then
+            codex_status="degraded"
+            successful=$((successful + 1))
+        elif [[ "$provider_rc" -eq 124 ]]; then
+            codex_status="timeout"
+        fi
     fi
     if gemini_view=$(embrace_run_gate_agent "gemini" "$gate_prompt" "$gemini_timeout" "researcher" "embrace-gate" 2>/dev/null); then
         if [[ -n "$gemini_view" ]]; then
@@ -2142,7 +2147,12 @@ Return a concise gate review with:
         fi
     else
         provider_rc=$?
-        [[ "$provider_rc" -eq 124 ]] && gemini_status="timeout"
+        if [[ -n "$gemini_view" ]]; then
+            gemini_status="degraded"
+            successful=$((successful + 1))
+        elif [[ "$provider_rc" -eq 124 ]]; then
+            gemini_status="timeout"
+        fi
     fi
     if claude_view=$(embrace_run_gate_agent "claude-sonnet" "$gate_prompt" "$claude_timeout" "code-reviewer" "embrace-gate" 2>/dev/null); then
         if [[ -n "$claude_view" ]]; then
@@ -2151,7 +2161,12 @@ Return a concise gate review with:
         fi
     else
         provider_rc=$?
-        [[ "$provider_rc" -eq 124 ]] && claude_status="timeout"
+        if [[ -n "$claude_view" ]]; then
+            claude_status="degraded"
+            successful=$((successful + 1))
+        elif [[ "$provider_rc" -eq 124 ]]; then
+            claude_status="timeout"
+        fi
     fi
 
     if [[ "$successful" -eq 0 ]]; then

@@ -75,6 +75,13 @@ run_agent_sync() {
     if [[ "$CASE_NAME" == "gate_agents_fail" && "${5:-}" == "embrace-gate" ]]; then
         return 2
     fi
+    if [[ "$CASE_NAME" == "gate_codex_degraded_output" && "${5:-}" == "embrace-gate" ]]; then
+        if [[ "${1:-}" == "codex" && "${4:-}" == "code-reviewer" ]]; then
+            printf '%s\n' "Verdict: PROCEED_WITH_RISKS - Codex degraded but useful."
+            return 2
+        fi
+        return 2
+    fi
     if [[ "$CASE_NAME" == "gate_blocks_revise" && "${5:-}" == "embrace-gate" ]]; then
         if [[ "${4:-}" == "synthesizer" ]]; then
             printf '%s\n' "Verdict: REVISE — do not enter Develop until blockers are resolved."
@@ -220,6 +227,20 @@ if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
     test_pass
 else
     test_fail "embrace continued after requested debate gate failure"
+fi
+
+run_embrace_case "gate_codex_degraded_output" "define" || true
+GATE_DEGRADED_FILE=$(ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md 2>/dev/null | head -1)
+
+test_case "degraded gate provider output satisfies requested gate"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   [[ -n "$GATE_DEGRADED_FILE" ]] && \
+   grep -q 'codex=degraded' "$GATE_DEGRADED_FILE" && \
+   grep -q 'Codex degraded but useful' "$GATE_DEGRADED_FILE"; then
+    test_pass
+else
+    test_fail "embrace discarded degraded gate provider output (status=$EMBRACE_STATUS file=${GATE_DEGRADED_FILE:-missing})"
 fi
 
 run_embrace_case "gate_blocks_revise" "define" || true

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HARNESS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export HARNESS_ROOT
+
+PLUGIN_ROOT="${OCTO_PLUGIN_ROOT:-$HOME/.claude-octopus/plugin}"
+if [[ ! -f "$PLUGIN_ROOT/scripts/orchestrate.sh" ]]; then
+    echo "ERROR: OCTO_PLUGIN_ROOT does not point to an Octo plugin checkout: $PLUGIN_ROOT" >&2
+    exit 2
+fi
+export PLUGIN_ROOT
+
+RUN_ID="$(date +%Y%m%d-%H%M%S)"
+RESULT_ROOT="${OCTO_HARNESS_RESULTS:-$HARNESS_ROOT/runs/$RUN_ID}"
+mkdir -p "$RESULT_ROOT"
+export RESULT_ROOT
+
+requested="${1:-all}"
+total=0
+passed=0
+failed=0
+
+printf 'Local Embrace Harness\n'
+printf 'Plugin: %s\n' "$PLUGIN_ROOT"
+printf 'Run:    %s\n\n' "$RESULT_ROOT"
+
+for scenario in "$HARNESS_ROOT"/scenarios/*.sh; do
+    name="$(basename "$scenario" .sh)"
+    name="${name#???-}"
+    if [[ "$requested" != "all" && "$requested" != "$name" ]]; then
+        continue
+    fi
+
+    total=$((total + 1))
+    printf '▶ %s\n' "$name"
+    if SCENARIO_NAME="$name" bash "$scenario"; then
+        passed=$((passed + 1))
+        printf '  PASS\n\n'
+    else
+        failed=$((failed + 1))
+        printf '  FAIL\n\n'
+    fi
+done
+
+if [[ "$total" -eq 0 ]]; then
+    echo "ERROR: no scenario matched '$requested'" >&2
+    exit 2
+fi
+
+printf 'Summary: %s total, %s passed, %s failed\n' "$total" "$passed" "$failed"
+printf 'Artifacts: %s\n' "$RESULT_ROOT"
+
+[[ "$failed" -eq 0 ]]

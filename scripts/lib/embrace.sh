@@ -149,3 +149,37 @@ load_blind_spot_checklist() {
     [[ -z "$checklist" ]] && return
     echo "$checklist"
 }
+
+embrace_env_truthy() {
+    case "${1:-}" in
+        1|true|TRUE|yes|YES|on|ON) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+embrace_real_run_guard() {
+    if embrace_env_truthy "${OCTOPUS_CONFORMANCE_MODE:-}" || embrace_env_truthy "${OCTOPUS_ALLOW_REAL_EMBRACE:-}"; then
+        return 0
+    fi
+
+    if embrace_env_truthy "${OCTOPUS_EMBRACE_VALIDATION_ONLY:-}" || embrace_env_truthy "${OCTOPUS_EMBRACE_REQUIRE_ALLOW_REAL:-}"; then
+        if declare -f log >/dev/null 2>&1; then
+            log ERROR "Refusing real Embrace run without OCTOPUS_ALLOW_REAL_EMBRACE=1"
+        else
+            echo "ERROR: Refusing real Embrace run without OCTOPUS_ALLOW_REAL_EMBRACE=1" >&2
+        fi
+        cat >&2 <<'EOF'
+Embrace real-run guard is active.
+
+Use the local conformance harness for debugging:
+  ~/.claude-octopus/local/embrace-harness/run
+
+To run a real provider-backed Embrace anyway, explicitly set:
+  OCTOPUS_ALLOW_REAL_EMBRACE=1
+EOF
+        return 2
+    fi
+
+    return 0
+}
+

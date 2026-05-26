@@ -2123,6 +2123,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Early Embrace real-run guard. This runs before host/provider probing so
+# validation-only debug invocations cannot spend quota merely by starting up.
+if [[ "${1:-}" == "embrace" && $# -ge 2 ]]; then
+    embrace_real_run_guard "${*:2}"
+    _embrace_early_guard_rc=$?
+    if [[ "$_embrace_early_guard_rc" -ne 0 ]]; then
+        exit "$_embrace_early_guard_rc"
+    fi
+fi
+
 # Initialize CI mode from environment (v4.4)
 init_ci_mode
 
@@ -2297,6 +2307,11 @@ case "$COMMAND" in
             echo "Usage: $(basename "$0") embrace <prompt>"
             echo "Example: $(basename "$0") embrace \"implement user authentication\""
             exit 1
+        fi
+        embrace_real_run_guard "$*"
+        _embrace_guard_rc=$?
+        if [[ "$_embrace_guard_rc" -ne 0 ]]; then
+            exit "$_embrace_guard_rc"
         fi
         embrace_full_workflow "$*"
         ;;

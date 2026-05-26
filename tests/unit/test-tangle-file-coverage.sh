@@ -94,4 +94,40 @@ else
     test_fail "validation failed even though all explicit files were covered"
 fi
 
+rm -f "$RESULTS_DIR"/*.md
+write_success_result "$RESULTS_DIR/codex-tangle-coverage-audit-0.md" \
+    "Wrote OCTO_REAL_AUDIT_REPORT.md with the scoped audit recommendation."
+
+read_only_audit_prompt=$(cat <<'EOF'
+Real Octo Embrace audit. Read OCTO_REAL_AUDIT_TASK.md and produce a scoped audit report.
+
+Evidence to inspect:
+- scripts/lib/workflows.sh
+- scripts/lib/heuristics.sh
+- scripts/lib/error-tracking.sh
+- tests/unit/test-embrace-fail-fast.sh
+
+Write scope:
+- You may create or update only `OCTO_REAL_AUDIT_REPORT.md` in this worktree.
+- Do not modify plugin source files, tests, scripts, package files, docs, or git metadata.
+
+Report requirements:
+- Final recommendation: `READY_FOR_UPSTREAM_PR_PLANNING`, `NEEDS_LOCAL_FIX`, or `INCONCLUSIVE`.
+EOF
+)
+
+test_case "read-only audit evidence is not required as tangle file coverage"
+if validate_tangle_results "coverage-audit" "$read_only_audit_prompt" >/dev/null 2>&1; then
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-audit.md")"
+    if [[ "$report" == *"Quality Gate: PASSED"* ]] && \
+       [[ "$report" != *"Missing Explicit File Coverage"* ]] && \
+       [[ "$report" == *"All explicit file references from the task were covered"* ]]; then
+        test_pass
+    else
+        test_fail "audit coverage report still treated read-only evidence as missing coverage"
+    fi
+else
+    test_fail "validation failed because read-only evidence files were treated as write coverage"
+fi
+
 test_summary

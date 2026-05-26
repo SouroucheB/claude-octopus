@@ -5,14 +5,69 @@
 # Validate tangle results with quality gate
 # v3.0: Supports configurable threshold and loop-until-approved retry logic
 
-extract_explicit_file_refs() {
+extract_file_refs_from_text() {
     local text="$1"
 
     printf '%s\n' "$text" \
-        | grep -oE '(src|lib|app|test|tests|docs|pkg|cmd|internal|scripts|config|public|assets|components|pages|utils|hooks|services|models|controllers|routes|middleware|api)/[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,5}|\./[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,5}' 2>/dev/null \
+        | grep -oE '((src|lib|app|test|tests|docs|pkg|cmd|internal|scripts|config|public|assets|components|pages|utils|hooks|services|models|controllers|routes|middleware|api)/[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]{1,8}|\./[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]{1,8}|[a-zA-Z0-9_.-]+\.(md|markdown|txt|json|ya?ml|sh|bash|ts|tsx|js|jsx|mjs|cjs|css|scss|html|py|rb|go|rs|java|kt|swift|sql|toml))' 2>/dev/null \
         | sed 's#^\./##' \
         | head -100 \
         | sort -u || true
+}
+
+extract_tangle_write_scope_lines() {
+    local text="$1"
+
+    printf '%s\n' "$text" \
+        | awk '
+            {
+                line = tolower($0)
+                if (line ~ /(^|[[:space:]])files:[[:space:]]/) print
+                else if (line ~ /write scope/) print
+                else if (line ~ /may (create|update|edit|modify|write)/) print
+                else if (line ~ /(create|update|edit|modify|write)[^[:alnum:]]+only/) print
+                else if (line ~ /(only|exact|allowed|scope).*(create|update|edit|modify|write)/) print
+                else if (line ~ /(create|update|edit|modify|write).*(only|exact|allowed|scope)/) print
+            }
+        '
+}
+
+extract_tangle_readwrite_context() {
+    local text="$1"
+
+    printf '%s\n' "$text" \
+        | awk '
+            BEGIN { skip = 0 }
+            {
+                line = tolower($0)
+                if (line ~ /^(#+[[:space:]]*)?(evidence to inspect|inputs?|read-only inputs?|context artifact|required checks|report requirements)[[:space:]]*:/) {
+                    skip = 1
+                    next
+                }
+                if (line ~ /^(#+[[:space:]]*)?(write scope|files changed|files to modify|implementation scope)[[:space:]]*:/) {
+                    skip = 0
+                }
+                if (line ~ /^(#+[[:space:]]*)?[a-z0-9 _-]+[[:space:]]*:/ && line !~ /^(#+[[:space:]]*)?(write scope|files changed|files to modify|implementation scope)[[:space:]]*:/) {
+                    skip = 0
+                }
+                if (line ~ /do not (modify|edit|touch|change|write)/) next
+                if (line ~ /do not stage|do not commit|do not push/) next
+                if (skip == 0) print
+            }
+        '
+}
+
+extract_explicit_file_refs() {
+    local text="$1"
+    local scoped_refs
+
+    scoped_refs=$(extract_file_refs_from_text "$(extract_tangle_write_scope_lines "$text")")
+    if [[ -n "$scoped_refs" ]]; then
+        printf '%s\n' "$scoped_refs" | sort -u
+        return 0
+    fi
+
+    extract_file_refs_from_text "$(extract_tangle_readwrite_context "$text")"
 }
 
 extract_tangle_result_output() {

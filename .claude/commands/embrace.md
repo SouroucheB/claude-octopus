@@ -88,6 +88,10 @@ Normalize the answers before running the command:
 - `DEBATE_GATES=none` for "No — skip debates"
 - `DEBATE_GATES=auto` for "Only if disagreement detected"
 
+**Gate ledger invariant:** if `DEBATE_GATES=define`, a `embrace-gate-define-develop-*.md` artifact from the current run MUST exist before Phase 3 starts. If `DEBATE_GATES=both`, both `embrace-gate-define-develop-*.md` and `embrace-gate-develop-deliver-*.md` artifacts from the current run MUST exist before their next phases. Autonomy mode does not waive requested gates. If a requested gate fails or produces no artifact, STOP and report the failed gate instead of continuing.
+
+### Remote/Cloud Defaults
+
 If `CLAUDE_CODE_REMOTE=true` or `OCTOPUS_REMOTE_SESSION=true`, do not block on clarifying questions. Infer scope and focus from the prompt, use `AUTONOMY_MODE=autonomous`, and use `DEBATE_GATES=auto` unless the user's prompt says otherwise.
 
 ## Step 2: Display Provider Banner

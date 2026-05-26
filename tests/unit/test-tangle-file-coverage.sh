@@ -94,6 +94,16 @@ else
     test_fail "validation failed even though all explicit files were covered"
 fi
 
+test_case "explicit file coverage requires exact file tokens"
+missing=$(check_explicit_file_coverage \
+    "Update src/foo.ts." \
+    "Updated src/foo.tsx and src/foo.ts.bak.")
+if [[ "$missing" == *"src/foo.ts"* ]]; then
+    test_pass
+else
+    test_fail "partial filename matches were treated as exact coverage"
+fi
+
 rm -f "$RESULTS_DIR"/*.md
 write_success_result "$RESULTS_DIR/codex-tangle-coverage-audit-0.md" \
     "Wrote OCTO_REAL_AUDIT_REPORT.md with the scoped audit recommendation."

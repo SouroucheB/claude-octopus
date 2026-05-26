@@ -60,8 +60,8 @@ check_readme_version() {
 # Check if README body text matches actual command/skill/persona counts
 check_readme_counts() {
   local actual_commands actual_skills actual_personas
-  actual_commands=$(find .claude/commands -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
-  actual_skills=$(find .claude/skills -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
+  actual_commands=$(python3 -c 'import json; print(len(json.load(open(".claude-plugin/plugin.json")).get("commands", [])))')
+  actual_skills=$(python3 -c 'import json; print(len(json.load(open(".claude-plugin/plugin.json")).get("skills", [])))')
   actual_personas=$(find agents/personas -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
 
   if grep -q "${actual_commands} commands" README.md; then
@@ -109,7 +109,7 @@ check_readme_structure() {
   local required_sections=(
     "# Claude Octopus"
     "## Quickstart"
-    "## 8 Commands That Matter Most"
+    "## [0-9]+ Commands That Matter Most"
     "## How It Works"
     "## Documentation"
     "## Attribution"
@@ -120,7 +120,7 @@ check_readme_structure() {
   for section in "${required_sections[@]}"; do
     # Allow emoji prefixes in section headers (e.g., "# 🐙 Claude Octopus")
     local section_text="${section#\#* }"
-    if grep -q "^${section}" "$readme" || grep -qE "^#+ .*${section_text}" "$readme"; then
+    if grep -Eq "^${section}" "$readme" || grep -qE "^#+ .*${section_text}" "$readme"; then
       pass "README has section: $section"
     else
       fail "README missing section: $section"
@@ -211,17 +211,17 @@ check_workflow_skills() {
 
   # v7.9+: Double Diamond workflow phases
   local workflow_skills=(
-    ".claude/skills/flow-discover.md"
-    ".claude/skills/flow-define.md"
-    ".claude/skills/flow-develop.md"
-    ".claude/skills/flow-deliver.md"
+    "flow-discover"
+    "flow-define"
+    "flow-develop"
+    "flow-deliver"
   )
 
-  for skill in "${workflow_skills[@]}"; do
-    if [ -f "$skill" ]; then
-      pass "Workflow skill exists: $(basename "$skill")"
+  for skill_name in "${workflow_skills[@]}"; do
+    if [ -f ".claude/skills/${skill_name}/SKILL.md" ]; then
+      pass "Workflow skill exists: ${skill_name}"
     else
-      fail "Missing workflow skill: $(basename "$skill")"
+      fail "Missing workflow skill: ${skill_name}"
     fi
   done
 }
@@ -262,20 +262,19 @@ check_debate_skill() {
   info "\nValidating debate skill (v7.5+: skill-debate naming)..."
 
   # v7.5+: Primary skill is skill-debate.md, debate.md is a shortcut alias
-  local debate_skill=".claude/skills/skill-debate.md"
-  local debate_alias=".claude/skills/debate.md"
+  local debate_skill=".claude/skills/skill-debate/SKILL.md"
 
   # Check primary skill exists
   if [ ! -f "$debate_skill" ]; then
-    fail "skill-debate.md not found"
+    fail "skill-debate/SKILL.md not found"
     return 1
   fi
 
-  # Check if skill-debate.md has YAML frontmatter
+  # Check if SKILL.md has YAML frontmatter
   if head -n 1 "$debate_skill" | grep -q "^---$"; then
-    pass "skill-debate.md has YAML frontmatter"
+    pass "skill-debate/SKILL.md has YAML frontmatter"
   else
-    fail "skill-debate.md missing YAML frontmatter (required for Claude Code)"
+    fail "skill-debate/SKILL.md missing YAML frontmatter (required for Claude Code)"
   fi
 
   # Check if skill-debate is registered in plugin.json (directory format)
@@ -285,12 +284,7 @@ check_debate_skill() {
     fail "skill-debate NOT registered in plugin.json"
   fi
 
-  # Check that shortcut alias exists
-  if [ -f "$debate_alias" ]; then
-    pass "debate.md shortcut alias exists"
-  else
-    warn "debate.md shortcut alias not found (optional)"
-  fi
+  # Shortcut alias no longer needed in directory format
 }
 
 # Check marketplace.json version sync

@@ -1,7 +1,7 @@
 {
   "name": "octo",
-  "version": "9.38.0",
-  "description": "v9.38.0 \u2014 Agent summaries, prompt-size preflight, research fanout, and Codex-compatible portable skills. Run /octo:setup.",
+  "version": "9.41.0",
+  "description": "v9.41.0 \u2014 /octo:council promoted to first-class workflow: structured 3/5/7-persona deliberation across Claude, Codex, Gemini, OpenCode with goal modes, adversarial styles, benchmark-aware routing, quorum/veto gates, and gated implementation handoff. Run /octo:setup.",
   "author": {
     "name": "nyldn",
     "url": "https://github.com/nyldn"
@@ -39,6 +39,7 @@
     "./skills/skill-content-pipeline",
     "./skills/skill-context-detection",
     "./skills/skill-copilot-provider",
+    "./skills/skill-council",
     "./skills/skill-cost-projections",
     "./skills/skill-coverage-audit",
     "./skills/skill-debate",
@@ -110,7 +111,6 @@
     "./.claude/commands/parallel.md",
     "./.claude/commands/sentinel.md",
     "./.claude/commands/claw.md",
-    "./.claude/commands/doctor.md",
     "./.claude/commands/factory.md",
     "./.claude/commands/staged-review.md",
     "./.claude/commands/design-ui-ux.md",
@@ -122,6 +122,7 @@
     "./.claude/commands/guard.md",
     "./.claude/commands/unfreeze.md",
     "./.claude/commands/costs.md",
+    "./.claude/commands/council.md",
     "./.claude/commands/retro.md",
     "./.claude/commands/history.md",
     "./.claude/commands/discipline.md"

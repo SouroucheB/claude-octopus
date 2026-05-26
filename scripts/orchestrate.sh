@@ -166,6 +166,8 @@ source "${SCRIPT_DIR}/lib/validation.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/embrace.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/heuristics.sh" 2>/dev/null || true
 source "${SCRIPT_DIR}/lib/provider-routing.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/benchmark-routing.sh" 2>/dev/null || true
+source "${SCRIPT_DIR}/lib/council.sh" 2>/dev/null || true
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECURITY: Path validation for workspace directory
@@ -544,7 +546,7 @@ CODEX_SUBAGENT_PREAMBLE="IMPORTANT: You are running as a non-interactive subagen
 
 "
 
-AVAILABLE_AGENTS="codex codex-standard codex-max codex-mini codex-general codex-spark codex-reasoning codex-large-context gemini gemini-fast gemini-image codex-review claude claude-sonnet claude-opus claude-opus-fast openrouter openrouter-glm5 openrouter-kimi openrouter-deepseek perplexity perplexity-fast ollama copilot copilot-research qwen qwen-research cursor-agent"
+AVAILABLE_AGENTS="codex codex-standard codex-max codex-mini codex-general codex-spark codex-reasoning codex-large-context gemini gemini-fast gemini-image codex-review claude claude-sonnet claude-opus claude-opus-fast openrouter openrouter-glm5 openrouter-kimi openrouter-deepseek perplexity perplexity-fast ollama copilot copilot-research qwen qwen-research cursor-agent vibe vibe-research"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # USAGE TRACKING & COST REPORTING (v4.1)
@@ -758,7 +760,7 @@ SKILLEOF
 
     # Max 20 skills: archive lowest-confidence when exceeded
     local skill_count
-    skill_count=$(ls -1 "$skills_dir"/*.md 2>/dev/null | wc -l | tr -d ' ')
+    skill_count=$(find "$skills_dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
     if [[ "$skill_count" -gt 20 ]]; then
         # Find skill with lowest confidence (fewest occurrences)
         local lowest_file="" lowest_count=999
@@ -1521,7 +1523,7 @@ init_step_mode_selection() {
     echo -e "  ${DIM}Note: Both modes use Codex + Gemini - only personas differ${NC}"
     echo -e "  ${DIM}Switch anytime with /octo:dev or /octo:km${NC}"
     echo ""
-    read -p "  Choose mode [1-2] (default: 1): " mode_choice
+    read -r -p "  Choose mode [1-2] (default: 1): " mode_choice
 
     case "$mode_choice" in
         2)
@@ -1566,7 +1568,7 @@ init_step_intent() {
     echo ""
     echo -e "  ${GREEN}[0]${NC} General/All of above"
     echo ""
-    read -p "  Enter choices (e.g., '1,2,7' or '0' for all): " intent_choices
+    read -r -p "  Enter choices (e.g., '1,2,7' or '0' for all): " intent_choices
 
     # Parse choices
     intent_choices="${intent_choices:-0}"
@@ -1622,7 +1624,7 @@ init_step_resources() {
     echo ""
     echo -e "  ${GREEN}[5]${NC} Not sure / Skip        → Standard defaults"
     echo ""
-    read -p "  Select [1-5]: " tier_choice
+    read -r -p "  Select [1-5]: " tier_choice
 
     case "${tier_choice:-5}" in
         1) USER_RESOURCE_TIER="pro" ;;
@@ -2872,6 +2874,13 @@ case "$COMMAND" in
         ;;
     cost-archive)
         echo "cost-archive has been removed. Usage data is managed automatically."
+        ;;
+    council)
+        if ! declare -f council_run >/dev/null 2>&1; then
+            log ERROR "Council command unavailable: scripts/lib/council.sh failed to load"
+            exit 1
+        fi
+        council_run "$@"
         ;;
     # ═══════════════════════════════════════════════════════════════════════════
     # REVIEW & AUDIT COMMANDS (v4.4 - Human-in-the-loop)

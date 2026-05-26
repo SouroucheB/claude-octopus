@@ -14,14 +14,18 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 CHECK_ONLY=false
 [[ "${1:-}" == "--check" ]] && CHECK_ONLY=true
 
-# Count shipped plugin artifacts.
-# Source of truth is .claude/skills/*.md (excludes .tmpl templates)
-SKILL_COUNT=$(find "$ROOT_DIR/.claude/skills" -maxdepth 1 -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
-COMMAND_COUNT=$(find "$ROOT_DIR/.claude/commands" -maxdepth 1 -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
+# Count packaged plugin artifacts from the manifest users install.
+PLUGIN_JSON="$ROOT_DIR/.claude-plugin/plugin.json"
+SKILL_COUNT=$(python3 -c "import json; print(len(json.load(open('$PLUGIN_JSON')).get('skills', [])))")
+COMMAND_COUNT=$(python3 -c "import json; print(len(json.load(open('$PLUGIN_JSON')).get('commands', [])))")
 PERSONA_COUNT=$(find "$ROOT_DIR/agents/personas" -name "*.md" -type f 2>/dev/null | wc -l | tr -d ' ')
 
 # Get current version from plugin.json (source of truth)
-VERSION=$(grep '"version"' "$ROOT_DIR/.claude-plugin/plugin.json" | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')
+VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON')).get('version', ''))")
+if [[ -z "$VERSION" ]]; then
+    echo "ERROR: version missing in $PLUGIN_JSON" >&2
+    exit 1
+fi
 
 # Read current marketplace description
 CURRENT_DESC=$(python3 -c "

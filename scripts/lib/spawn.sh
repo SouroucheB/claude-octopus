@@ -601,6 +601,10 @@ ${heuristic_ctx}"
         if [[ "$agent_type" == gemini* ]] || [[ "$agent_type" == cursor-agent* ]] || [[ "$agent_type" == copilot* ]] || [[ "$agent_type" == qwen* ]]; then
             cmd_array+=(-p "")
         fi
+        # Belt-and-suspenders: bypass Gemini's interactive trust check in headless mode (#405)
+        if [[ "$agent_type" == gemini* ]]; then
+            cmd_array+=(--skip-trust)
+        fi
 
         local auth_attempt=0
         local exit_code=0
@@ -654,6 +658,14 @@ ${heuristic_ctx}"
             fi
             break
         done
+
+        if [[ $exit_code -ne 0 && -s "$temp_errors" ]]; then
+            local stderr_first_line=""
+            stderr_first_line=$(grep -m1 '[^[:space:]]' "$temp_errors" 2>/dev/null | head -c 240 || true)
+            if [[ -n "$stderr_first_line" ]]; then
+                log "ERROR" "[$agent_type] provider stderr: $stderr_first_line"
+            fi
+        fi
 
         # v8.16: Log auth retry metrics if retries occurred
         if [[ $auth_attempt -gt 0 ]]; then

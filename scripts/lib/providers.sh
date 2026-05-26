@@ -7,10 +7,11 @@
 # Source-safe: no main execution block.
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_providers_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! declare -f _is_cursor_agent_binary >/dev/null 2>&1; then
-    _providers_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     source "${_providers_lib_dir}/cursor-agent.sh" 2>/dev/null || true
 fi
+source "${_providers_lib_dir}/provider-allowlist.sh" 2>/dev/null || true
 
 # Version comparison utility
 version_compare() {
@@ -667,6 +668,11 @@ check_provider_health() {
     local provider="$1"
     local errors=0
 
+    if declare -f octo_provider_allowed >/dev/null 2>&1 && ! octo_provider_allowed "$provider"; then
+        echo "$provider: disabled by provider allowlist" >&2
+        return 1
+    fi
+
     case "$provider" in
         codex)
             if ! command -v codex &>/dev/null; then
@@ -785,6 +791,24 @@ check_provider_health() {
                 return 1
             fi
             ;;
+        vibe)
+            if ! command -v vibe &>/dev/null; then
+                echo "vibe CLI not found in PATH" >&2
+                return 1
+            fi
+            # Try resolving env var from profile/.env for non-interactive shells
+            # (mirrors codex/gemini — keeps shell-profile-only keys from being misreported)
+            if [[ -z "${MISTRAL_API_KEY:-}" ]]; then
+                resolve_provider_env "MISTRAL_API_KEY" 2>/dev/null
+            fi
+            # Check auth: env-file with MISTRAL_API_KEY, env var, or config.toml api_key
+            if [[ -z "${MISTRAL_API_KEY:-}" ]] && \
+               ! { [[ -f "${HOME}/.vibe/.env" ]] && grep -Eq '^[[:space:]]*MISTRAL_API_KEY=' "${HOME}/.vibe/.env" 2>/dev/null; } && \
+               ! { [[ -f "${HOME}/.vibe/config.toml" ]] && grep -Eq '^[[:space:]]*api_key[[:space:]]*=' "${HOME}/.vibe/config.toml" 2>/dev/null; }; then
+                echo "vibe: not authenticated (run: vibe --setup or set MISTRAL_API_KEY)" >&2
+                return 1
+            fi
+            ;;
     esac
     return 0
 }
@@ -795,7 +819,7 @@ check_all_providers() {
     local healthy=0 unhealthy=0
     local -a results=()
 
-    for provider in codex gemini claude perplexity openrouter ollama copilot qwen cursor-agent; do
+    for provider in codex gemini claude perplexity openrouter ollama copilot qwen cursor-agent vibe; do
         local diag
         if diag=$(check_provider_health "$provider" 2>&1); then
             results+=("  ✓ $provider")
@@ -916,7 +940,7 @@ detect_providers() {
     local result=""
 
     # Detect Codex CLI
-    if command -v codex &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed codex; } && command -v codex &>/dev/null; then
         local codex_auth="none"
         if [[ -f "$HOME/.codex/auth.json" ]]; then
             codex_auth="oauth"
@@ -927,7 +951,7 @@ detect_providers() {
     fi
 
     # Detect Gemini CLI
-    if command -v gemini &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed gemini; } && command -v gemini &>/dev/null; then
         local gemini_auth="none"
         if [[ -f "$HOME/.gemini/oauth_creds.json" ]]; then
             gemini_auth="oauth"
@@ -938,7 +962,7 @@ detect_providers() {
     fi
 
     # Detect Claude CLI (always available in Claude Code context)
-    if command -v claude &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed claude; } && command -v claude &>/dev/null; then
         local claude_auth="oauth"
         # v8.8: Use claude auth status for reliable auth verification
         if [[ "$SUPPORTS_AUTH_CLI" == "true" ]]; then
@@ -953,17 +977,17 @@ detect_providers() {
     fi
 
     # Detect OpenRouter (API key only)
-    if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed openrouter; } && [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
         result="${result}openrouter:api-key "
     fi
 
     # Detect Perplexity (API key only)
-    if [[ -n "${PERPLEXITY_API_KEY:-}" ]]; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed perplexity; } && [[ -n "${PERPLEXITY_API_KEY:-}" ]]; then
         result="${result}perplexity:api-key "
     fi
 
     # Detect Ollama (CLI + server)
-    if command -v ollama &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed ollama; } && command -v ollama &>/dev/null; then
         if curl -sf http://localhost:11434/api/tags &>/dev/null; then
             result="${result}ollama:running "
         else
@@ -972,7 +996,7 @@ detect_providers() {
     fi
 
     # Detect Copilot CLI (v9.9.0)
-    if command -v copilot &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed copilot; } && command -v copilot &>/dev/null; then
         local copilot_auth="none"
         if [[ -n "${COPILOT_GITHUB_TOKEN:-}" ]]; then
             copilot_auth="pat"
@@ -987,7 +1011,7 @@ detect_providers() {
     fi
 
     # Detect Qwen CLI (v9.10.0 — free tier)
-    if command -v qwen &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed qwen; } && command -v qwen &>/dev/null; then
         local qwen_auth="none"
         if [[ -f "${HOME}/.qwen/oauth_creds.json" ]]; then
             qwen_auth="oauth"
@@ -1000,7 +1024,7 @@ detect_providers() {
     fi
 
     # Detect Cursor Agent CLI (Grok via Cursor subscription)
-    if declare -f _is_cursor_agent_binary >/dev/null 2>&1 && _is_cursor_agent_binary; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed cursor-agent; } && declare -f _is_cursor_agent_binary >/dev/null 2>&1 && _is_cursor_agent_binary; then
         local cursor_auth="none"
         if [[ -n "${CURSOR_API_KEY:-}" ]]; then
             cursor_auth="env:CURSOR_API_KEY"
@@ -1010,8 +1034,21 @@ detect_providers() {
         result="${result}cursor-agent:${cursor_auth} "
     fi
 
+    # Detect Vibe CLI (Mistral Vibe interactive CLI)
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed vibe; } && command -v vibe &>/dev/null; then
+        local vibe_auth="none"
+        if [[ -f "${HOME}/.vibe/.env" ]] && grep -Eq '^[[:space:]]*MISTRAL_API_KEY=' "${HOME}/.vibe/.env" 2>/dev/null; then
+            vibe_auth="env-file"
+        elif [[ -n "${MISTRAL_API_KEY:-}" ]]; then
+            vibe_auth="api-key"
+        elif [[ -f "${HOME}/.vibe/config.toml" ]] && grep -Eq '^[[:space:]]*api_key[[:space:]]*=' "${HOME}/.vibe/config.toml" 2>/dev/null; then
+            vibe_auth="config"
+        fi
+        result="${result}vibe:${vibe_auth} "
+    fi
+
     # Detect OpenCode CLI (v9.11.0 — multi-provider router)
-    if command -v opencode &>/dev/null; then
+    if { ! declare -f octo_provider_allowed >/dev/null 2>&1 || octo_provider_allowed opencode; } && command -v opencode &>/dev/null; then
         local opencode_auth="none"
         if [[ -f "${HOME}/.local/share/opencode/auth.json" ]]; then
             # Verify auth is actually valid via auth list (with timeout to prevent hang)

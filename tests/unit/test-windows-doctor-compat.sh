@@ -21,13 +21,54 @@ else
 fi
 
 test_case "doctor commands use portable plugin-root discovery"
-doctor_source="$(< "$PROJECT_ROOT/.claude/commands/doctor.md")"
 doctor_generated="$(< "$PROJECT_ROOT/.cursor-plugin/commands/octo-doctor.md")"
-if assert_contains "$doctor_source" 'find "${HOME}/.claude/plugins"' "source command searches Claude plugin installs" &&
-   assert_contains "$doctor_source" 'cd "$OCTO_PLUGIN_ROOT" && bash scripts/orchestrate.sh doctor --verbose' "source command runs doctor from resolved root" &&
-   assert_contains "$doctor_generated" 'find "${HOME}/.claude/plugins"' "generated command searches Claude plugin installs" &&
+if assert_contains "$doctor_generated" 'find "${HOME}/.claude/plugins"' "generated command searches Claude plugin installs" &&
    assert_contains "$doctor_generated" 'cd "$OCTO_PLUGIN_ROOT" && bash scripts/orchestrate.sh doctor --verbose' "generated command runs doctor from resolved root"; then
     test_pass
+fi
+
+test_case "doctor accepts directory skill entries with SKILL.md"
+if (
+    tmp_plugin="$TEST_TMP_DIR/doctor-dir-skill"
+    mkdir -p "$tmp_plugin/.claude-plugin" "$tmp_plugin/skills/skill-example" "$tmp_plugin/scripts"
+    cat > "$tmp_plugin/.claude-plugin/plugin.json" << 'EOF'
+{
+  "name": "doctor-test-plugin",
+  "version": "0.0.0",
+  "skills": ["./skills/skill-example"],
+  "commands": []
+}
+EOF
+    cat > "$tmp_plugin/skills/skill-example/SKILL.md" << 'EOF'
+---
+name: skill-example
+description: Test skill.
+---
+EOF
+
+    SCRIPT_DIR="$tmp_plugin/scripts"
+    PLUGIN_DIR="$tmp_plugin"
+    source "$PROJECT_ROOT/scripts/lib/doctor.sh"
+    set +u
+    doctor_check_skills
+    set -u
+
+    found_pass="false"
+    found_missing="false"
+    for i in "${!DOCTOR_RESULTS_NAME[@]}"; do
+        if [[ "${DOCTOR_RESULTS_NAME[$i]}" == "skills-all" && "${DOCTOR_RESULTS_STATUS[$i]}" == "pass" ]]; then
+            found_pass="true"
+        fi
+        if [[ "${DOCTOR_RESULTS_NAME[$i]}" == skill-missing-* ]]; then
+            found_missing="true"
+        fi
+    done
+
+    [[ "$found_pass" == "true" && "$found_missing" == "false" ]]
+); then
+    test_pass
+else
+    test_fail "doctor reported a directory skill as missing"
 fi
 
 test_case "install-deps skips RTK hook warning on Windows Git Bash"

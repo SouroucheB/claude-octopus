@@ -84,13 +84,17 @@ check_explicit_file_coverage() {
     local original_prompt="$1"
     local output_corpus="$2"
     local missing=""
+    local output_refs=""
     local ref
+
+    output_refs="$(extract_file_refs_from_text "$output_corpus")"
 
     while IFS= read -r ref; do
         [[ -z "$ref" ]] && continue
-        if [[ "$output_corpus" != *"$ref"* ]]; then
-            missing+="${ref}"$'\n'
-        fi
+        case $'\n'"$output_refs"$'\n' in
+            *$'\n'"$ref"$'\n'*) ;;
+            *) missing+="${ref}"$'\n' ;;
+        esac
     done <<< "$(extract_explicit_file_refs "$original_prompt")"
 
     printf '%s' "$missing"

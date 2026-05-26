@@ -268,6 +268,11 @@ COMMAND_FILES=$(ls "$ROOT_DIR/.claude/commands/"*.md 2>/dev/null | xargs -n1 bas
 # Get commands registered in plugin.json
 REGISTERED_COMMANDS=$(grep -o '\.claude/commands/[^"]*\.md' "$ROOT_DIR/.claude-plugin/plugin.json" | sed 's|.*\.claude/commands/||' | sort)
 
+if echo "$REGISTERED_COMMANDS" | grep -q '^doctor\.md$' || [[ -f "$ROOT_DIR/.claude/commands/doctor.md" ]] || grep -R "^command:[[:space:]]*doctor$" "$ROOT_DIR/.claude/commands" >/dev/null 2>&1; then
+    echo -e "  ${RED}ERROR: Octopus must not register 'doctor' as a slash command; bare /doctor is reserved for Claude Code native diagnostics${NC}"
+    ((errors++)) || true
+fi
+
 # Find unregistered commands
 for cmd_file in $COMMAND_FILES; do
     if ! echo "$REGISTERED_COMMANDS" | grep -q "^${cmd_file}$"; then
@@ -325,7 +330,10 @@ if command -v jq >/dev/null 2>&1 && jq -e '.skills[]? | select(startswith("./ski
     SKILL_FILES=$(find "$ROOT_DIR/skills" -mindepth 2 -maxdepth 2 -name "SKILL.md" -type f 2>/dev/null | sed "s|^$ROOT_DIR/skills/||;s|/SKILL.md$||" | sort)
     REGISTERED_SKILLS=$(jq -r '.skills[]? | select(startswith("./skills/")) | sub("^\\./skills/"; "") | sub("/$"; "")' "$ROOT_DIR/.claude-plugin/plugin.json" | sort)
 else
-    SKILL_FILES=$(ls "$ROOT_DIR/.claude/skills/"*.md 2>/dev/null | xargs -n1 basename | sort)
+    SKILL_FILES=$({
+        find "$ROOT_DIR/.claude/skills" -maxdepth 1 -type f -name '*.md' -print 2>/dev/null | xargs -n1 basename 2>/dev/null
+        find "$ROOT_DIR/.claude/skills" -mindepth 2 -maxdepth 2 -type f -name 'SKILL.md' -print 2>/dev/null | sed "s|^$ROOT_DIR/.claude/skills/||;s|/SKILL.md$||"
+    } | sort)
     REGISTERED_SKILLS=$(grep -o '\.claude/skills/[^"]*\.md' "$ROOT_DIR/.claude-plugin/plugin.json" | sed 's|.*\.claude/skills/||' | sort)
 fi
 
@@ -361,7 +369,10 @@ invalid_skill_names=0
 if command -v jq >/dev/null 2>&1 && jq -e '.skills[]? | select(startswith("./skills/"))' "$ROOT_DIR/.claude-plugin/plugin.json" >/dev/null 2>&1; then
     SKILL_FRONTMATTER_FILES=("$ROOT_DIR"/skills/*/SKILL.md)
 else
-    SKILL_FRONTMATTER_FILES=("$ROOT_DIR"/.claude/skills/*.md)
+    mapfile -t SKILL_FRONTMATTER_FILES < <({
+        find "$ROOT_DIR/.claude/skills" -maxdepth 1 -type f -name '*.md' -print 2>/dev/null
+        find "$ROOT_DIR/.claude/skills" -mindepth 2 -maxdepth 2 -type f -name 'SKILL.md' -print 2>/dev/null
+    } | LC_ALL=C sort)
 fi
 
 for skill_file in "${SKILL_FRONTMATTER_FILES[@]}"; do

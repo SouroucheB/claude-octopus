@@ -620,13 +620,13 @@ $(echo "$all_findings" | jq -c '.')
 Return ONLY valid JSON with 'findings' array including verdict field."
 
     local verified_findings
-    verified_findings=$(run_agent_sync "codex" "$verifier_prompt" 180 "code-reviewer" "review") && {
+    verified_findings=$(run_agent_sync "codex" "$verifier_prompt" "${TIMEOUT:-300}" "code-reviewer" "review") && {
         echo "codex|ok|Round 2 verification" >> "$provider_status_file"
     } || {
         log WARN "review_run: codex verifier failed, falling back to claude-sonnet"
         log "USER" "⚠ Round 2: Codex unavailable → claude-sonnet (fallback). Codex API usage will NOT change."
         echo "codex|fallback|Round 2 → claude-sonnet" >> "$provider_status_file"
-        verified_findings=$(run_agent_sync "claude-sonnet" "$verifier_prompt" 180 "code-reviewer" "review") || {
+        verified_findings=$(run_agent_sync "claude-sonnet" "$verifier_prompt" "${TIMEOUT:-300}" "code-reviewer" "review") || {
             log WARN "review_run: verification failed entirely, using all findings as confirmed"
             verified_findings="{\"findings\":$(echo "$all_findings" | \
                 jq 'map(. + {"verdict":"confirmed"})' 2>/dev/null || echo "[]")}"
@@ -719,16 +719,22 @@ Return ONLY JSON: {\"findings\": [...ranked, deduplicated findings...]}"
     fi
 
     # ── Output ────────────────────────────────────────────────────────────────
-    local pr_number=""
-    pr_number=$(gh pr view --json number -q .number 2>/dev/null || true)
+    local pr_number="${review_pr_number:-}"
+    if [[ -z "$pr_number" ]]; then
+        pr_number=$(gh pr view --json number -q .number 2>/dev/null || true)
+    fi
 
     if [[ -n "$pr_number" && "$publish" != "never" ]]; then
         local avg_confidence
         avg_confidence=$(jq '[.findings[].confidence] | if length > 0 then add/length else 0 end' \
-            "$findings_file" 2>/dev/null || echo "0")
+            "$findings_file" 2>/dev/null | head -n 1)
+        [[ -z "$avg_confidence" ]] && avg_confidence="0"
         if [[ "$publish" == "auto" ]] && awk "BEGIN{exit !($avg_confidence >= 0.85)}"; then
             log INFO "review_run: auto-publishing to PR #$pr_number (confidence=$avg_confidence)"
             post_inline_comments "$pr_number" "$findings_file" || render_terminal_report "$findings_file"
+        elif [[ "$publish" == "auto" ]]; then
+            log INFO "review_run: avg_confidence=$avg_confidence below 0.85 auto-publish gate; rendering terminal report instead."
+            render_terminal_report "$findings_file"
         elif [[ "$publish" == "ask" ]]; then
             render_terminal_report "$findings_file"
             echo ""

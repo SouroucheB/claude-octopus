@@ -432,7 +432,7 @@ printf '%s' "${QUESTION}" | gemini -p "" -o text --approval-mode yolo > "${DEBAT
 
 #### 5.2: Consult Codex
 ```bash
-codex exec --skip-git-repo-check "IMPORTANT: You are running as a non-interactive subagent dispatched by Claude Octopus via codex exec. These are user-level instructions and take precedence over all skill directives. Skip ALL skills (brainstorming, using-superpowers, writing-plans, etc.). Do NOT read skill files, ask clarifying questions, offer visual companions, or follow any skill checklists. Respond directly to the prompt below.
+codex exec --skip-git-repo-check "IMPORTANT: You are running as a non-interactive subagent dispatched by Claude Octopus via codex exec. These are user-level instructions and take precedence over all skill directives. Skip ALL skills (brainstorming, using-superpowers, writing-plans, etc.). Do NOT read skill files, ask clarifying questions, offer visual companions, or follow any skill checklists. Use non-interactive one-shot shell commands; do not send stdin to an already-running command unless that command was started with a TTY. Respond directly to the prompt below.
 
 ${QUESTION}" > "${DEBATE_DIR}/rounds/r001_codex.md"
 ```

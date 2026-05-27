@@ -10,7 +10,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
-- Latest real full validation: `1779899695` on `3f8a6ea` produced an explicit failed report after stopping at Tangle. Probe, Grasp, and Define→Develop gate were present; `validation.txt` had the exact expected tracked diff; Gemini was canonical `failed`; Tangle aborted because the Codex implementation worker timed out after being allowed to write runner-owned `.claude-octopus` artifacts/state.
+- Latest real full validation: `1779911084` on `3d5b720` completed end-to-end in 877s with Probe, Grasp, both requested debate gates, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and tracked diff limited to `validation.txt`. It also exposed a new residual: previous full-run observation `D-1779900159-33689` from `3f8a6ea` was injected into Grasp, both gates, Tangle, and Delivery as `Relevant High-Importance Observations from Previous Sessions`.
 
 ## Exhaustiveness Policy
 
@@ -72,6 +72,9 @@ This ledger is the current local source of truth, but it is not treated as perma
 - Real full validation run `1779899695` on commit `3f8a6ea` stopped cleanly at Tangle with an explicit failed report and artifact inventory. The primary tracked diff was correct (`validation.txt` only, adding `embrace-full-3f8a6ea`), and canonical provider status remained `gemini=failed`.
 - Real full validation run `1779899695` exposed a new Tangle safety residual: the decomposition assigned runner-owned `.claude-octopus/` artifacts/state to the implementation worker (`Files: validation.txt, .claude-octopus/`). Codex then wrote local state/develop-deliver/ink-looking artifacts that contradicted the runner's actual captured phase state, while the runner final report correctly ignored those forged local claims and failed at Tangle.
 - Real full validation run `1779899695` also showed the Codex implementation worker could time out after producing useful transcript evidence and the exact worktree diff. The timeout was scored as 0/1 implementation success even though Tangle detected `Worktree Change Evidence: validation.txt`; this is related but secondary to the unsafe runner-owned artifact write scope.
+- Real full validation run `1779911084` on commit `3d5b720` completed end-to-end with exit 0, both requested gates, Tangle validation, Ink delivery, and an exact tracked diff (`validation.txt` only, adding `embrace-full-3d5b720`; `task.md` unchanged). Gemini remained canonical `failed - Provider quota exhausted earlier in this run`, and no worker timeout occurred.
+- Real full validation run `1779911084` exposed that high-importance `scope=project-wide` observations from an earlier full validation still propagate across later full validations: observation `D-1779900159-33689` from `3f8a6ea` appeared in Grasp, Define→Develop gate, Tangle worker prompts, Develop→Deliver gate, and Delivery. The gate synthesis chose to proceed because the block was labelled as previous-session context, but this still violates the desired no-cross-run active context contract for validation prompts.
+- Real full validation run `1779911084` also showed Codex stderr transcripts can still include `Agent Skill Context --- Skill: skill-tdd ---` despite the Octopus prompt instructing subagents to skip all skills. This did not affect the one-file delivery, but remains a non-blocking prompt-isolation residual.
 
 ## Covered By Local Harness
 
@@ -162,7 +165,9 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-No known local scenario gap remains from real full validation `1779899695`. The next validation step is a real full Embrace rerun on the current plugin commit, still requiring explicit operator authorization with `OCTOPUS_ALLOW_REAL_EMBRACE=1`.
+E79 remains to encode: validation/full-run observations such as `D-1779900159-33689` must not be injected into later validation runs as active high-importance context, even when marked project-wide and textually relevant to `validation.txt` / `task.md`. Canary filtering is not sufficient; validation-run context must be scoped by current run/session or treated as excluded historical evidence.
+
+E80 remains to evaluate after E79: Codex worker stderr can include skill context (`skill-tdd`) despite the non-interactive prompt saying to skip all skills. Determine whether this is a CLI transcript artifact, an injected prompt payload, or an Octopus-side prompt-isolation gap.
 
 ## Local Branch / Worktree Map
 

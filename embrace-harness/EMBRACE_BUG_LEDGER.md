@@ -6,7 +6,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 
 - Active plugin: `/Users/sourouche/.claude-octopus/install/embrace-stability-stack`
 - Local harness: `/Users/sourouche/.claude-octopus/local/embrace-harness`
-- Latest full harness pass: `runs/20260527-221312` — 38/38 passing
+- Latest full harness pass: `runs/20260527-223623` — 39/39 passing
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
@@ -159,6 +159,7 @@ This ledger is the current local source of truth, but it is not treated as perma
 | E77 | Tangle decomposition/write-scope handling must never delegate runner-owned Octopus state, gate, validation, delivery, report, or artifact paths to implementation workers | `370-runner-owned-scope-guard.sh`, `tests/unit/test-tangle-write-scope-safety.sh` | covered |
 | E78 | Implementation provider timeouts after useful transcript evidence and verified non-runner-owned worktree changes must warn and continue, while runner-owned artifact-only changes still fail | `380-tangle-timeout-evidence-warning.sh`, `tests/unit/test-tangle-worktree-evidence.sh` | covered |
 | E79 | Project-wide Embrace debate-gate telemetry from previous full validations must not be injected into later validation runs as active high-importance observation context | `280-observation-scope.sh`, `tests/unit/test-embrace-observation-scope.sh` | covered |
+| E80 | Codex stderr transcripts must not leak echoed prompt skill context such as `skill-tdd`, and Embrace subagents must not receive agent skill context by default | `390-codex-stderr-prompt-echo-sanitized.sh`, `tests/unit/test-agent-summary.sh`, `tests/unit/test-embrace-context-hygiene.sh` | covered |
 
 ## Dedicated Scenario Gaps
 
@@ -166,7 +167,7 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-E80 remains to evaluate: Codex worker stderr can include skill context (`skill-tdd`) despite the non-interactive prompt saying to skip all skills. Determine whether this is a CLI transcript artifact, an injected prompt payload, or an Octopus-side prompt-isolation gap.
+No known Embrace residual remains unencoded after E80. The next residual, if any, should come from fresh real-validation evidence rather than speculation.
 
 ## Local Branch / Worktree Map
 
@@ -187,6 +188,7 @@ E80 remains to evaluate: Codex worker stderr can include skill context (`skill-t
 
 ## Active Local Commits Of Interest
 
+- `0988399 fix(embrace): isolate codex skill context transcripts`
 - `f2eb5ca fix(embrace): filter runner gate observation telemetry`
 - `3d5b720 fix(tangle): warn on timeout with verified evidence`
 - `a10d172 fix(embrace): strip runner artifacts from tangle worker scope`

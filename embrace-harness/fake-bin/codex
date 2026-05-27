@@ -26,6 +26,27 @@ emit_long() {
     done
 }
 
+emit_codex_prompt_echo_stderr() {
+    cat >&2 <<'EOF'
+OpenAI Codex v0.134.0
+--------
+user
+IMPORTANT: non-interactive subagent.
+
+## Agent Skill Context
+
+--- Skill: skill-tdd ---
+
+# Test-Driven Development (TDD)
+codex
+codex stderr diagnostic after prompt echo
+EOF
+}
+
+if [[ "${OCTO_FAKE_CODEX_TRANSCRIPT_STDERR:-false}" == "true" ]]; then
+    emit_codex_prompt_echo_stderr
+fi
+
 if [[ "${OCTO_FAKE_GATE_NO_OUTPUT:-false}" == "true" && "$input" == *"DEBATE GATE"* ]]; then
     exit 0
 fi

@@ -6,7 +6,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 
 - Active plugin: `/Users/sourouche/.claude-octopus/install/embrace-stability-stack`
 - Local harness: `/Users/sourouche/.claude-octopus/local/embrace-harness`
-- Latest full harness pass: `runs/20260527-212631` — 38/38 passing
+- Latest full harness pass: `runs/20260527-221312` — 38/38 passing
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
@@ -158,6 +158,7 @@ This ledger is the current local source of truth, but it is not treated as perma
 | E76 | Consensus quality fallback wording must stay distinct from provider status, so partial Grasp consensus cannot be mistaken for Gemini `degraded` when canonical status is `gemini=failed` | `360-consensus-quality-status-boundary.sh`, `tests/unit/test-grasp-define-fallbacks.sh` | covered |
 | E77 | Tangle decomposition/write-scope handling must never delegate runner-owned Octopus state, gate, validation, delivery, report, or artifact paths to implementation workers | `370-runner-owned-scope-guard.sh`, `tests/unit/test-tangle-write-scope-safety.sh` | covered |
 | E78 | Implementation provider timeouts after useful transcript evidence and verified non-runner-owned worktree changes must warn and continue, while runner-owned artifact-only changes still fail | `380-tangle-timeout-evidence-warning.sh`, `tests/unit/test-tangle-worktree-evidence.sh` | covered |
+| E79 | Project-wide Embrace debate-gate telemetry from previous full validations must not be injected into later validation runs as active high-importance observation context | `280-observation-scope.sh`, `tests/unit/test-embrace-observation-scope.sh` | covered |
 
 ## Dedicated Scenario Gaps
 
@@ -165,9 +166,7 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-E79 remains to encode: validation/full-run observations such as `D-1779900159-33689` must not be injected into later validation runs as active high-importance context, even when marked project-wide and textually relevant to `validation.txt` / `task.md`. Canary filtering is not sufficient; validation-run context must be scoped by current run/session or treated as excluded historical evidence.
-
-E80 remains to evaluate after E79: Codex worker stderr can include skill context (`skill-tdd`) despite the non-interactive prompt saying to skip all skills. Determine whether this is a CLI transcript artifact, an injected prompt payload, or an Octopus-side prompt-isolation gap.
+E80 remains to evaluate: Codex worker stderr can include skill context (`skill-tdd`) despite the non-interactive prompt saying to skip all skills. Determine whether this is a CLI transcript artifact, an injected prompt payload, or an Octopus-side prompt-isolation gap.
 
 ## Local Branch / Worktree Map
 
@@ -188,6 +187,7 @@ E80 remains to evaluate after E79: Codex worker stderr can include skill context
 
 ## Active Local Commits Of Interest
 
+- `f2eb5ca fix(embrace): filter runner gate observation telemetry`
 - `3d5b720 fix(tangle): warn on timeout with verified evidence`
 - `a10d172 fix(embrace): strip runner artifacts from tangle worker scope`
 - `3f8a6ea fix(embrace): separate consensus quality from provider status`

@@ -823,9 +823,24 @@ EOF
     echo ""
 }
 
+tangle_sanitize_runner_owned_paths() {
+    local text="$1"
+
+    printf '%s\n' "$text" \
+        | sed -E \
+            -e 's#`?(\./)?\.claude-octopus(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
+            -e 's#`?(\./)?\.octo(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
+            -e 's#`?~/.claude-octopus(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
+            -e 's#`?/[^`[:space:],;)]*/\.claude-octopus(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
+            -e 's#`?(probe-synthesis|grasp-consensus|tangle-validation|embrace-gate|delivery|embrace-report)-[A-Za-z0-9_.@%+-]+\.md`?#[runner-owned artifact path removed]#g'
+}
+
 build_tangle_subtask_prompt() {
     local original_task="$1"
     local assigned_subtask="$2"
+
+    original_task=$(tangle_sanitize_runner_owned_paths "$original_task")
+    assigned_subtask=$(tangle_sanitize_runner_owned_paths "$assigned_subtask")
 
     cat <<EOF
 Original task context:
@@ -839,6 +854,7 @@ Execution instructions:
 - Complete the assigned subtask without dropping original constraints that apply to it.
 - For [CODING] work, edit the repository files directly in the current worktree. Do not only describe a plan or paste code snippets.
 - For [CODING] work, treat file paths/directories named in the assigned subtask as your exclusive write scope. Do not edit files owned by another subtask; report a blocker if the required change crosses scopes.
+- Runner-owned Octopus artifacts are not a worker write scope. Do not create, update, delete, or claim ownership of Octopus state, gate, validation, delivery, report, or artifact files; the runner owns them.
 - If the subtask creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
 - Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the subtask must report a blocker.
 - In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.

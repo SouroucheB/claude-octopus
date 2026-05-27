@@ -103,6 +103,20 @@ else
     test_fail "multi-line Files: scope was treated as missing"
 fi
 
+test_case "runner-owned artifact scopes are not delegated to worker prompts"
+runner_owned_prompt=$(build_tangle_subtask_prompt \
+    "Validate the full Embrace workflow while changing validation.txt only." \
+    "Apply the marker and update workflow artifacts. Files: \`validation.txt\`, \`.claude-octopus/\`, \`tangle-validation-123.md\`, \`delivery-123.md\`")
+if [[ "$runner_owned_prompt" == *"validation.txt"* ]] && \
+   [[ "$runner_owned_prompt" != *".claude-octopus"* ]] && \
+   [[ "$runner_owned_prompt" != *"tangle-validation-123.md"* ]] && \
+   [[ "$runner_owned_prompt" != *"delivery-123.md"* ]] && \
+   [[ "$runner_owned_prompt" == *"Runner-owned Octopus artifacts"* ]]; then
+    test_pass
+else
+    test_fail "worker prompt delegated runner-owned artifacts: $runner_owned_prompt"
+fi
+
 test_case "reasoning subtasks avoid locked Gemini"
 is_provider_locked() { [[ "$1" == "gemini" ]]; }
 is_provider_quota_exhausted() { [[ "$1" == "gemini" ]]; }

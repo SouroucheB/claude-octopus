@@ -6,7 +6,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 
 - Active plugin: `/Users/sourouche/.claude-octopus/install/embrace-stability-stack`
 - Local harness: `/Users/sourouche/.claude-octopus/local/embrace-harness`
-- Latest full harness pass: `runs/20260527-102716` — 35/35 passing
+- Latest full harness pass: `runs/20260527-111730` — 35/35 passing
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779828291` on `b119cf7` completed end-to-end in 534s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, and only `canary.txt` modified among tracked files.
@@ -145,6 +145,7 @@ This ledger is the current local source of truth, but it is not treated as perma
 | E65 | Requested debate gate must remain usable on real audit prompts by defaulting to a debate-scale provider timeout instead of the legacy 90s cap | `tests/unit/test-embrace-fail-fast.sh` | covered |
 | E73 | Project-wide canary observations from old validation runs must not be injected into later canary prompts even when generic files such as `canary.txt` or `task.md` match | `280-observation-scope.sh` | covered |
 | E74 | Gemini quota/lockout skips in requested Embrace gates must use canonical `failed` wording, not `degraded`, across gate and final report artifacts | `350-gemini-status-canonical.sh` | covered |
+| E75 | Codex compatibility guard must not mutate the active plugin checkout while generating/checking portable root skills | `250-codex-compat-guard.sh` | covered |
 
 ## Dedicated Scenario Gaps
 
@@ -152,7 +153,7 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-None currently known from the mined Embrace runs after E74. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
+None currently known from the mined Embrace runs after E75. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
 
 ## Local Branch / Worktree Map
 

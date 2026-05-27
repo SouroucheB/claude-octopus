@@ -51,6 +51,15 @@ cat > "$WORKSPACE_DIR/.octo/decisions.md" <<'EOF'
 **Importance:** 8
 **Rationale:** Canary-only memory that must not leak into a real audit just because task.md matches.
 ---
+
+### type: debate-synthesis | timestamp: 2026-05-27T16:42:39Z | source: embrace_debate_gate/define-develop
+**ID:** D-full-validation-project-wide
+**Summary:** Embrace debate gate completed: Validation full Embrace 3f8a6ea using task.md and validation.txt.
+**Scope:** project-wide
+**Confidence:** high
+**Importance:** 8
+**Rationale:** Old full-validation gate telemetry that must not leak into a later validation run just because generic validation files match.
+---
 EOF
 
 log() { :; }
@@ -95,6 +104,14 @@ if [[ "$context" == *"D-relevant"* && "$context" != *"D-canary-project-wide"* ]]
     test_pass
 else
     test_fail "old project-wide canary observation leaked into new canary run: ${context:-<empty>}"
+fi
+
+test_case "project-wide full-validation gate observations do not leak into later validation runs"
+context="$(embrace_build_observation_context "Validation full Embrace 3d5b720: read task.md and append embrace-full-3d5b720 to validation.txt only" 7 1500)"
+if [[ "$context" != *"D-full-validation-project-wide"* ]]; then
+    test_pass
+else
+    test_fail "old project-wide full-validation observation leaked into later validation run: $context"
 fi
 
 test_summary

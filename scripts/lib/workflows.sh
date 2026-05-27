@@ -2037,6 +2037,15 @@ embrace_observation_is_relevant_to_prompt() {
         return 1
     fi
 
+    # Embrace debate-gate decisions are runner telemetry, not task evidence.
+    # When persisted as project-wide observations, they match generic files such
+    # as task.md/validation.txt and leak old validation runs into new prompts.
+    if [[ "$observation_lower" == *"source: embrace_debate_gate/"* && \
+          "$observation_lower" == *"embrace debate gate completed:"* && \
+          "$observation_lower" == *"**scope:** project-wide"* ]]; then
+        return 1
+    fi
+
     if [[ "$observation_lower" == *"canary"* && "$prompt_lower" != *"canary"* ]]; then
         return 1
     fi

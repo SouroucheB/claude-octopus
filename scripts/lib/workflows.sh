@@ -3,6 +3,13 @@
 # Extracted from orchestrate.sh to reduce file size
 # Functions: probe_single_agent, probe_discover, grasp_define, tangle_develop, ink_deliver
 
+if ! type octo_sanitize_provider_stderr >/dev/null 2>&1; then
+    octo_sanitize_provider_stderr() {
+        local _agent="${1:-unknown}" _stderr_file="${2:-}"
+        [[ -n "$_stderr_file" && -f "$_stderr_file" ]] && cat "$_stderr_file"
+    }
+fi
+
 # v8.54.0: Single-agent probe for multi-agentic skill dispatch
 # Runs one probe perspective synchronously and writes result to RESULTS_DIR.
 # Called by Claude's Agent tool (one per perspective) instead of probe_discover().
@@ -265,7 +272,7 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
             echo "" >> "$result_file"
             echo "## Errors" >> "$result_file"
             echo '```' >> "$result_file"
-            cat "$temp_errors" >> "$result_file"
+            octo_sanitize_provider_stderr "$agent_type" "$temp_errors" >> "$result_file"
             echo '```' >> "$result_file"
             echo "" >> "$result_file"
             codex_stderr_transcript_appended=true
@@ -300,7 +307,7 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
                     echo "" >> "$result_file"
                     echo "## Errors" >> "$result_file"
                     echo '```' >> "$result_file"
-                    cat "$temp_errors" >> "$result_file"
+                    octo_sanitize_provider_stderr "$agent_type" "$temp_errors" >> "$result_file"
                     echo '```' >> "$result_file"
                 fi
                 update_agent_status "$agent_type" "failed" "$elapsed_ms" 0.0
@@ -364,7 +371,7 @@ IMPORTANT: If you find yourself searching or grepping more than 3 times in a row
             echo "" >> "$result_file"
             echo "## Errors" >> "$result_file"
             echo '```' >> "$result_file"
-            cat "$temp_errors" >> "$result_file"
+            octo_sanitize_provider_stderr "$agent_type" "$temp_errors" >> "$result_file"
             echo '```' >> "$result_file"
         fi
         log "WARN" "Agent $agent_type failed for task $task_id (exit=$exit_code)"

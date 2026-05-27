@@ -17,6 +17,15 @@ quota_watcher_kill_spawn_children() {
 if ! type octopus_should_inject_historical_context >/dev/null 2>&1; then
     octopus_should_inject_historical_context() { return 0; }
 fi
+if ! type octopus_should_inject_agent_skill_context >/dev/null 2>&1; then
+    octopus_should_inject_agent_skill_context() { return 0; }
+fi
+if ! type octo_sanitize_provider_stderr >/dev/null 2>&1; then
+    octo_sanitize_provider_stderr() {
+        local _agent="${1:-unknown}" _stderr_file="${2:-}"
+        [[ -n "$_stderr_file" && -f "$_stderr_file" ]] && cat "$_stderr_file"
+    }
+fi
 
 spawn_agent() {
     local _ts; _ts=$(date +%s)
@@ -139,7 +148,7 @@ ${enhanced_prompt}"
 
     # v8.2.0: Load agent skill context if available (STABLE — deterministic per agent type)
     # NOTE: enforce_context_budget() moved AFTER all injections (v8.10.0 Issue #25)
-    if [[ "$SUPPORTS_AGENT_TYPE_ROUTING" == "true" ]]; then
+    if [[ "$SUPPORTS_AGENT_TYPE_ROUTING" == "true" ]] && octopus_should_inject_agent_skill_context "${phase:-}"; then
         local curated_agent=""
         curated_agent=$(select_curated_agent "$prompt" "$phase") || true
         if [[ -n "$curated_agent" ]]; then
@@ -156,6 +165,8 @@ ${skill_context}"
                 log "DEBUG" "Injected skill context for agent: $curated_agent"
             fi
         fi
+    else
+        log "DEBUG" "Agent skill context disabled for workflow=${OCTOPUS_WORKFLOW_TYPE:-none}, phase=${phase:-none}"
     fi
 
     # v8.18.0: Inject earned skills context (STABLE — changes rarely within a project)
@@ -783,7 +794,7 @@ ${heuristic_ctx}"
                 echo "" >> "$result_file"
                 echo "## Warnings/Errors" >> "$result_file"
                 echo '```' >> "$result_file"
-                cat "$temp_errors" >> "$result_file"
+                octo_sanitize_provider_stderr "$agent_type" "$temp_errors" >> "$result_file"
                 echo '```' >> "$result_file"
             fi
 
@@ -859,7 +870,7 @@ ${heuristic_ctx}"
                 echo "" >> "$result_file"
                 echo "## Error Log" >> "$result_file"
                 echo '```' >> "$result_file"
-                cat "$temp_errors" >> "$result_file"
+                octo_sanitize_provider_stderr "$agent_type" "$temp_errors" >> "$result_file"
                 echo '```' >> "$result_file"
             fi
 
@@ -900,7 +911,7 @@ ${heuristic_ctx}"
                 echo "" >> "$result_file"
                 echo "## Error Log" >> "$result_file"
                 echo '```' >> "$result_file"
-                cat "$temp_errors" >> "$result_file"
+                octo_sanitize_provider_stderr "$agent_type" "$temp_errors" >> "$result_file"
                 echo '```' >> "$result_file"
             fi
 

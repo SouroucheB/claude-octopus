@@ -83,7 +83,7 @@ assert_contains "$(grep -A300 'probe_single_agent()' "$ALL_SRC" | head -310)" \
   "Errors transcript below" "probe_single_agent: announces recovered Codex stderr transcript"
 
 assert_contains "$(grep -A300 'probe_single_agent()' "$ALL_SRC" | head -310)" \
-  'cat "\$temp_errors" >> "\$result_file"' "probe_single_agent: appends recovered Codex stderr transcript"
+  'octo_sanitize_provider_stderr "\$agent_type" "\$temp_errors" >> "\$result_file"' "probe_single_agent: appends sanitized recovered Codex stderr transcript"
 
 # ── flow-discover.md references probe-single ─────────────────────────────────
 

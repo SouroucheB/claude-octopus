@@ -231,6 +231,40 @@ octo_file_has_codex_recoverable_stderr() {
     [[ ${#useful_stderr} -ge ${OCTOPUS_CODEX_RECOVERABLE_STDERR_MIN_CHARS:-120} ]]
 }
 
+octo_sanitize_codex_stderr_transcript() {
+    local stderr_file="${1:-}"
+    [[ -n "$stderr_file" && -f "$stderr_file" ]] || return 0
+
+    awk '
+        BEGIN { in_user_prompt = 0 }
+        /^user$/ {
+            if (!in_user_prompt) {
+                print "[codex user prompt omitted from stderr transcript]"
+                in_user_prompt = 1
+            }
+            next
+        }
+        in_user_prompt && /^(codex|assistant)$/ {
+            in_user_prompt = 0
+            print
+            next
+        }
+        in_user_prompt { next }
+        { print }
+    ' "$stderr_file"
+}
+
+octo_sanitize_provider_stderr() {
+    local agent="${1:-unknown}"
+    local stderr_file="${2:-}"
+    [[ -n "$stderr_file" && -f "$stderr_file" ]] || return 0
+
+    case "$agent" in
+        codex*) octo_sanitize_codex_stderr_transcript "$stderr_file" ;;
+        *) cat "$stderr_file" ;;
+    esac
+}
+
 octo_file_has_gemini_trust_failure() {
     local file
     for file in "$@"; do

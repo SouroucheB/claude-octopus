@@ -117,6 +117,38 @@ else
     test_fail "expected Codex stderr transcript to be degraded, got: ${classification:-<empty>}"
 fi
 
+test_case "Codex stderr sanitizer omits echoed prompt skill context"
+codex_prompt_echo="$WORKSPACE_DIR/results/codex-prompt-echo.err"
+cat > "$codex_prompt_echo" <<'EOF'
+OpenAI Codex v0.134.0
+--------
+user
+IMPORTANT: non-interactive subagent.
+
+## Agent Skill Context
+
+--- Skill: skill-tdd ---
+
+# Test-Driven Development (TDD)
+codex
+## Worktree Changes
+- validation.txt
+
+## Verification
+- git diff --check
+tokens used
+12345
+EOF
+if sanitized="$(octo_sanitize_provider_stderr "codex" "$codex_prompt_echo" 2>/dev/null)" && \
+   [[ "$sanitized" == *"codex user prompt omitted"* ]] && \
+   [[ "$sanitized" == *"## Worktree Changes"* ]] && \
+   [[ "$sanitized" != *"skill-tdd"* ]] && \
+   [[ "$sanitized" != *"Agent Skill Context"* ]]; then
+    test_pass
+else
+    test_fail "Codex stderr sanitizer did not remove echoed skill context: ${sanitized:-<empty>}"
+fi
+
 test_case "classify_agent_output keeps empty non-Codex output failed"
 classification="$(classify_agent_output "$codex_empty_output" 0 "gemini" "$codex_stderr_transcript")"
 if [[ "$classification" == "failed:Empty output" ]]; then

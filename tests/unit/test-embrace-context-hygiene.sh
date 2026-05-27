@@ -39,12 +39,36 @@ else
     test_fail "OCTOPUS_EMBRACE_HISTORY_CONTEXT=on did not re-enable historical context"
 fi
 
+test_case "Embrace disables agent skill context by default"
+if OCTOPUS_WORKFLOW_TYPE=embrace OCTOPUS_AGENT_SKILL_CONTEXT= OCTOPUS_EMBRACE_AGENT_SKILL_CONTEXT= \
+    bash -c "source '$AGENTS'; ! octopus_should_inject_agent_skill_context tangle"; then
+    test_pass
+else
+    test_fail "Embrace did not disable agent skill context by default"
+fi
+
+test_case "Embrace agent skill context can be explicitly re-enabled"
+if OCTOPUS_WORKFLOW_TYPE=embrace OCTOPUS_EMBRACE_AGENT_SKILL_CONTEXT=on \
+    bash -c "source '$AGENTS'; octopus_should_inject_agent_skill_context tangle"; then
+    test_pass
+else
+    test_fail "OCTOPUS_EMBRACE_AGENT_SKILL_CONTEXT=on did not re-enable agent skill context"
+fi
+
 test_case "Non-Embrace workflows keep historical context by default"
 if OCTOPUS_WORKFLOW_TYPE=research OCTOPUS_HISTORY_CONTEXT= OCTOPUS_EMBRACE_HISTORY_CONTEXT= \
     bash -c "source '$AGENTS'; octopus_should_inject_historical_context probe"; then
     test_pass
 else
     test_fail "historical context was disabled outside Embrace"
+fi
+
+test_case "Non-Embrace workflows keep agent skill context by default"
+if OCTOPUS_WORKFLOW_TYPE=research OCTOPUS_AGENT_SKILL_CONTEXT= OCTOPUS_EMBRACE_AGENT_SKILL_CONTEXT= \
+    bash -c "source '$AGENTS'; octopus_should_inject_agent_skill_context tangle"; then
+    test_pass
+else
+    test_fail "agent skill context was disabled outside Embrace"
 fi
 
 test_case "Global historical context override still wins"
@@ -55,6 +79,23 @@ if OCTOPUS_WORKFLOW_TYPE=research OCTOPUS_HISTORY_CONTEXT=off \
     test_pass
 else
     test_fail "OCTOPUS_HISTORY_CONTEXT override did not win"
+fi
+
+test_case "Global agent skill context override still wins"
+if OCTOPUS_WORKFLOW_TYPE=research OCTOPUS_AGENT_SKILL_CONTEXT=off \
+    bash -c "source '$AGENTS'; ! octopus_should_inject_agent_skill_context tangle" && \
+   OCTOPUS_WORKFLOW_TYPE=embrace OCTOPUS_AGENT_SKILL_CONTEXT=on \
+    bash -c "source '$AGENTS'; octopus_should_inject_agent_skill_context tangle"; then
+    test_pass
+else
+    test_fail "OCTOPUS_AGENT_SKILL_CONTEXT override did not win"
+fi
+
+test_case "spawn_agent gates agent skill context"
+if grep -B 20 -A 24 "## Agent Skill Context" "$SPAWN" | grep -q "octopus_should_inject_agent_skill_context"; then
+    test_pass
+else
+    test_fail "spawn_agent does not gate agent skill context injection"
 fi
 
 test_case "spawn_agent gates earned skills and provider history"

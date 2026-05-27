@@ -305,6 +305,25 @@ octopus_should_inject_historical_context() {
     return 0
 }
 
+octopus_should_inject_agent_skill_context() {
+    local phase="${1:-}"
+    local mode="${OCTOPUS_AGENT_SKILL_CONTEXT:-auto}"
+
+    case "$mode" in
+        on|true|yes) return 0 ;;
+        off|false|no) return 1 ;;
+    esac
+
+    if [[ "${OCTOPUS_WORKFLOW_TYPE:-}" == "embrace" ]]; then
+        case "${OCTOPUS_EMBRACE_AGENT_SKILL_CONTEXT:-off}" in
+            on|true|yes) return 0 ;;
+            *) return 1 ;;
+        esac
+    fi
+
+    return 0
+}
+
 # Get agent config value
 # Usage: get_agent_config "backend-architect" "cli"
 get_agent_config() {

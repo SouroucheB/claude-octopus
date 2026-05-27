@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+input="$(cat)"
+[[ -f "$HOME/.octo-fake-mode" ]] && source "$HOME/.octo-fake-mode"
+printf 'gemini %s\n' "$*" >> "$HOME/providers.log"
+
+emit_long() {
+    local title="$1"
+    echo "$title"
+    local i limit
+    limit=12
+    [[ "${OCTO_FAKE_LONG_OUTPUT:-false}" == "true" ]] && limit=400
+    for ((i = 1; i <= limit; i++)); do
+        echo "gemini detail ${i}: deterministic conformance evidence for Embrace orchestration contracts and artifact checks."
+    done
+}
+
+if [[ "${OCTO_FAKE_GATE_NO_OUTPUT:-false}" == "true" && "$input" == *"DEBATE GATE"* ]]; then
+    exit 0
+fi
+
+if [[ "${OCTO_FAKE_GEMINI_TRUST_FAIL:-false}" == "true" ]]; then
+    echo "Gemini CLI is not running in a trusted directory. To proceed, either use --skip-trust, set the GEMINI_CLI_TRUST_WORKSPACE=true environment variable, or trust this directory in interactive mode." >&2
+    exit 55
+fi
+
+if [[ "${OCTO_FAKE_GEMINI_QUOTA:-false}" == "true" ]]; then
+    echo "QUOTA_EXHAUSTED: fake Gemini quota exhausted" >&2
+    exit 1
+fi
+
+if [[ "${OCTO_FAKE_GEMINI_429:-false}" == "true" ]]; then
+    echo "Error: code: 429 Too Many Requests - Gemini API rate limit exceeded" >&2
+    exit 1
+fi
+
+if [[ "$input" == *"Decompose this task into subtasks"* ]]; then
+    if [[ "${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}" == "true" ]]; then
+        echo "1. [CODING] Apply deterministic marker and update workflow artifacts. Files: src/app/page.tsx, .claude-octopus/"
+    elif [[ "${OCTO_FAKE_TANGLE_FAIL:-false}" == "true" ]]; then
+        echo "1. [CODING] TANGLE_SUBTASK_FAIL. Files: src/app/page.tsx"
+    elif [[ "${OCTO_FAKE_CODEX_EMPTY_TANGLE:-false}" == "true" ]]; then
+        echo "1. [CODING] TANGLE_EMPTY_OUTPUT. Files: src/app/page.tsx"
+    else
+        echo "1. [CODING] Implement deterministic conformance marker. Files: src/app/page.tsx"
+    fi
+    exit 0
+fi
+
+if [[ "$input" == *"Rate each dimension explicitly"* ]]; then
+    echo "Security: 10/10"
+    echo "Reliability: 10/10"
+    echo "Performance: 10/10"
+    echo "Accessibility: 10/10"
+    exit 0
+fi
+
+emit_long "gemini deterministic response"

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+input="$(cat)"
+[[ -f "$HOME/.octo-fake-mode" ]] && source "$HOME/.octo-fake-mode"
+printf 'claude %s\n' "$*" >> "$HOME/providers.log"
+
+if [[ "${OCTO_FAKE_CLAUDE_FAIL:-false}" == "true" ]]; then
+    echo "claude simulated provider failure" >&2
+    exit 1
+fi
+
+if [[ "${OCTO_FAKE_GATE_NO_OUTPUT:-false}" == "true" && "$input" == *"DEBATE GATE"* ]]; then
+    exit 0
+fi
+
+if [[ "$input" == *"Rate each dimension explicitly"* || "$input" == *"For applicable dimensions, rate explicitly"* ]]; then
+    if [[ "${OCTO_FAKE_LOW_REVIEW_SCORE:-false}" == "true" ]]; then
+        echo "Security: 8/10"
+        echo "Reliability: 6/10"
+        echo "Performance: 9/10"
+        echo "Accessibility: 8/10"
+        exit 0
+    fi
+    echo "Security: 10/10"
+    echo "Reliability: 10/10"
+    echo "Performance: 10/10"
+    echo "Accessibility: 10/10"
+    exit 0
+fi
+
+echo "claude deterministic response"
+limit=12
+[[ "${OCTO_FAKE_LONG_OUTPUT:-false}" == "true" ]] && limit=400
+for ((i = 1; i <= limit; i++)); do
+    echo "claude detail ${i}: deterministic conformance evidence for Embrace orchestration contracts and artifact checks."
+done

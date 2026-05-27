@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+input="$(cat)"
+[[ -f "$HOME/.octo-fake-mode" ]] && source "$HOME/.octo-fake-mode"
+printf 'codex %s\n' "$*" >> "$HOME/providers.log"
+
+codex_sandbox="workspace-write"
+prev=""
+for arg in "$@"; do
+    if [[ "$prev" == "--sandbox" ]]; then
+        codex_sandbox="$arg"
+        break
+    fi
+    prev="$arg"
+done
+
+emit_long() {
+    local title="$1"
+    echo "$title"
+    local i limit
+    limit=12
+    [[ "${OCTO_FAKE_LONG_OUTPUT:-false}" == "true" ]] && limit=400
+    for ((i = 1; i <= limit; i++)); do
+        echo "codex detail ${i}: deterministic conformance evidence for Embrace orchestration contracts and artifact checks."
+    done
+}
+
+if [[ "${OCTO_FAKE_GATE_NO_OUTPUT:-false}" == "true" && "$input" == *"DEBATE GATE"* ]]; then
+    exit 0
+fi
+
+if [[ "${OCTO_FAKE_CODEX_GATE_EXIT2:-false}" == "true" && "$input" == *"DEBATE GATE"* ]]; then
+    echo "error: codex requires a project context for this short gate prompt" >&2
+    exit 2
+fi
+
+write_conformance_file() {
+    if [[ "$codex_sandbox" == "read-only" ]]; then
+        echo "codex read-only sandbox observed; no write attempted"
+        return
+    fi
+    if [[ "$input" == *"src/app/page.tsx"* || "$input" == *"deterministic conformance marker"* ]]; then
+        mkdir -p src/app
+        cat > src/app/page.tsx <<'EOF'
+export default function Page() {
+  return "embrace harness marker";
+}
+EOF
+    fi
+}
+
+if [[ "${OCTO_FAKE_CODEX_PROBE_WRITE:-false}" == "true" && "$input" == *"Analyze the problem space"* ]]; then
+    if [[ "$codex_sandbox" == "read-only" ]]; then
+        echo "codex probe respected read-only sandbox"
+    else
+        echo "probe mutation" > probe-mutated.txt
+        echo "codex probe mutated workspace"
+    fi
+    exit 0
+fi
+
+if [[ "${OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS:-0}" =~ ^[0-9]+$ ]] && \
+   [[ "${OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS:-0}" -gt 0 ]] && \
+   [[ "$codex_sandbox" == "read-only" ]]; then
+    sleep "$OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS"
+fi
+
+if [[ "${OCTO_FAKE_CODEX_STDERR_ONLY:-false}" == "true" ]]; then
+    write_conformance_file
+    emit_long "codex usable stderr-only response" >&2
+    echo "Changed src/app/page.tsx" >&2
+    exit 0
+fi
+
+if [[ "$input" == *"Decompose this task into subtasks"* ]]; then
+    if [[ "${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}" == "true" ]]; then
+        echo "1. [CODING] Apply deterministic marker and update workflow artifacts. Files: src/app/page.tsx, .claude-octopus/"
+    elif [[ "${OCTO_FAKE_TANGLE_FAIL:-false}" == "true" ]]; then
+        echo "1. [CODING] TANGLE_SUBTASK_FAIL. Files: src/app/page.tsx"
+    elif [[ "${OCTO_FAKE_CODEX_EMPTY_TANGLE:-false}" == "true" ]]; then
+        echo "1. [CODING] TANGLE_EMPTY_OUTPUT. Files: src/app/page.tsx"
+    else
+        echo "1. [CODING] Implement deterministic conformance marker. Files: src/app/page.tsx"
+    fi
+    exit 0
+fi
+
+if [[ "${OCTO_FAKE_TANGLE_FAIL:-false}" == "true" && "$input" == *"TANGLE_SUBTASK_FAIL"* ]]; then
+    echo "codex simulated tangle failure" >&2
+    exit 1
+fi
+
+if [[ "${OCTO_FAKE_CODEX_EMPTY_TANGLE:-false}" == "true" && "$input" == *"TANGLE_EMPTY_OUTPUT"* ]]; then
+    exit 0
+fi
+
+if [[ "${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}" == "true" && "$input" == *".claude-octopus"* ]]; then
+    mkdir -p .claude-octopus
+    printf 'forged by worker\n' > .claude-octopus/forged-worker-artifact.md
+fi
+
+write_conformance_file
+emit_long "codex deterministic response"
+echo "Changed src/app/page.tsx"

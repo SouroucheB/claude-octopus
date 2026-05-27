@@ -6,7 +6,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 
 - Active plugin: `/Users/sourouche/.claude-octopus/install/embrace-stability-stack`
 - Local harness: `/Users/sourouche/.claude-octopus/local/embrace-harness`
-- Latest full harness pass: `runs/20260527-162405` — 36/36 passing
+- Latest full harness pass: `runs/20260527-210504` — 37/37 passing
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
@@ -153,14 +153,13 @@ This ledger is the current local source of truth, but it is not treated as perma
 | E74 | Gemini quota/lockout skips in requested Embrace gates must use canonical `failed` wording, not `degraded`, across gate and final report artifacts | `350-gemini-status-canonical.sh` | covered |
 | E75 | Codex compatibility guard must not mutate the active plugin checkout while generating/checking portable root skills | `250-codex-compat-guard.sh` | covered |
 | E76 | Consensus quality fallback wording must stay distinct from provider status, so partial Grasp consensus cannot be mistaken for Gemini `degraded` when canonical status is `gemini=failed` | `360-consensus-quality-status-boundary.sh`, `tests/unit/test-grasp-define-fallbacks.sh` | covered |
+| E77 | Tangle decomposition/write-scope handling must never delegate runner-owned Octopus state, gate, validation, delivery, report, or artifact paths to implementation workers | `370-runner-owned-scope-guard.sh`, `tests/unit/test-tangle-write-scope-safety.sh` | covered |
 
 ## Dedicated Scenario Gaps
 
 Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E65, E66, and E67 are now covered locally.
 
 ## Still To Encode
-
-E77 remains to encode: Tangle decomposition/write-scope handling must never delegate runner-owned `.claude-octopus/` state, gate, validation, delivery, or artifact paths to implementation workers. Runner artifacts must remain runner-owned even when the task asks to validate the workflow, and implementation workers must be scoped to product/task files such as `validation.txt`.
 
 E78 remains to evaluate after E77: if a provider times out after producing verifiable worktree changes and useful transcript evidence, Tangle reporting should distinguish "timeout after useful evidence" from "no implementation evidence"; however this must not allow forged runner-owned artifacts to pass. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
 
@@ -183,6 +182,7 @@ E78 remains to evaluate after E77: if a provider times out after producing verif
 
 ## Active Local Commits Of Interest
 
+- `a10d172 fix(embrace): strip runner artifacts from tangle worker scope`
 - `3f8a6ea fix(embrace): separate consensus quality from provider status`
 - `8464b71 fix(embrace): guard real validation runs`
 - `4b46520 fix(tangle): ignore read-only evidence in file coverage`

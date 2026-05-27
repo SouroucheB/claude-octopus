@@ -10,6 +10,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
+- Latest real full validation: `1779899695` on `3f8a6ea` produced an explicit failed report after stopping at Tangle. Probe, Grasp, and Define→Develop gate were present; `validation.txt` had the exact expected tracked diff; Gemini was canonical `failed`; Tangle aborted because the Codex implementation worker timed out after being allowed to write runner-owned `.claude-octopus` artifacts/state.
 
 ## Exhaustiveness Policy
 
@@ -68,6 +69,9 @@ This ledger is the current local source of truth, but it is not treated as perma
 - Real canary run `1779828291` on merge commit `b119cf7` completed end-to-end with exit 0, all requested artifacts present, deterministic file-only Ink scores as `not applicable`, Gemini quota skip respected in Deliver, and tracked diff limited to `canary.txt`. Residual issues observed: prior canary high-importance observations still leaked into Probe/Grasp/Tangle context, and Gemini status wording appeared as both `failed` and `degraded` in different artifacts.
 - Real canary run `1779883055` on commit `eeedf6f` completed end-to-end with exit 0, all requested artifacts present, tracked diff limited to `canary.txt`, and final report / gate / agent ledger consistently showing Gemini as `failed` because provider quota was exhausted earlier in the run. The run validated the E73/E74 fixes on the primary contract.
 - Real canary run `1779883055` also exposed a non-blocking validation-language residual: Tangle reasoning artifacts still interpreted old Grasp fallback wording as a Gemini failed/degraded status mix, even though the canonical provider status fields were `gemini=failed`. Consensus quality must be distinguished from provider-status degradation in future checks.
+- Real full validation run `1779899695` on commit `3f8a6ea` stopped cleanly at Tangle with an explicit failed report and artifact inventory. The primary tracked diff was correct (`validation.txt` only, adding `embrace-full-3f8a6ea`), and canonical provider status remained `gemini=failed`.
+- Real full validation run `1779899695` exposed a new Tangle safety residual: the decomposition assigned runner-owned `.claude-octopus/` artifacts/state to the implementation worker (`Files: validation.txt, .claude-octopus/`). Codex then wrote local state/develop-deliver/ink-looking artifacts that contradicted the runner's actual captured phase state, while the runner final report correctly ignored those forged local claims and failed at Tangle.
+- Real full validation run `1779899695` also showed the Codex implementation worker could time out after producing useful transcript evidence and the exact worktree diff. The timeout was scored as 0/1 implementation success even though Tangle detected `Worktree Change Evidence: validation.txt`; this is related but secondary to the unsafe runner-owned artifact write scope.
 
 ## Covered By Local Harness
 
@@ -156,7 +160,9 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-None currently known from the mined Embrace runs after E76. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
+E77 remains to encode: Tangle decomposition/write-scope handling must never delegate runner-owned `.claude-octopus/` state, gate, validation, delivery, or artifact paths to implementation workers. Runner artifacts must remain runner-owned even when the task asks to validate the workflow, and implementation workers must be scoped to product/task files such as `validation.txt`.
+
+E78 remains to evaluate after E77: if a provider times out after producing verifiable worktree changes and useful transcript evidence, Tangle reporting should distinguish "timeout after useful evidence" from "no implementation evidence"; however this must not allow forged runner-owned artifacts to pass. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
 
 ## Local Branch / Worktree Map
 

@@ -76,6 +76,8 @@ fi
 if [[ "$input" == *"Decompose this task into subtasks"* ]]; then
     if [[ "${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}" == "true" ]]; then
         echo "1. [CODING] Apply deterministic marker and update workflow artifacts. Files: src/app/page.tsx, .claude-octopus/"
+    elif [[ "${OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE:-false}" == "true" ]]; then
+        echo "1. [CODING] TANGLE_TIMEOUT_AFTER_WRITE. Files: src/app/page.tsx"
     elif [[ "${OCTO_FAKE_TANGLE_FAIL:-false}" == "true" ]]; then
         echo "1. [CODING] TANGLE_SUBTASK_FAIL. Files: src/app/page.tsx"
     elif [[ "${OCTO_FAKE_CODEX_EMPTY_TANGLE:-false}" == "true" ]]; then
@@ -92,6 +94,13 @@ if [[ "${OCTO_FAKE_TANGLE_FAIL:-false}" == "true" && "$input" == *"TANGLE_SUBTAS
 fi
 
 if [[ "${OCTO_FAKE_CODEX_EMPTY_TANGLE:-false}" == "true" && "$input" == *"TANGLE_EMPTY_OUTPUT"* ]]; then
+    exit 0
+fi
+
+if [[ "${OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE:-false}" == "true" && "$input" == *"TANGLE_TIMEOUT_AFTER_WRITE"* ]]; then
+    write_conformance_file
+    echo "Changed src/app/page.tsx before timing out."
+    sleep 5
     exit 0
 fi
 

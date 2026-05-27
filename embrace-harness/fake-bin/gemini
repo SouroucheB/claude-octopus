@@ -38,6 +38,8 @@ fi
 if [[ "$input" == *"Decompose this task into subtasks"* ]]; then
     if [[ "${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}" == "true" ]]; then
         echo "1. [CODING] Apply deterministic marker and update workflow artifacts. Files: src/app/page.tsx, .claude-octopus/"
+    elif [[ "${OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE:-false}" == "true" ]]; then
+        echo "1. [CODING] TANGLE_TIMEOUT_AFTER_WRITE. Files: src/app/page.tsx"
     elif [[ "${OCTO_FAKE_TANGLE_FAIL:-false}" == "true" ]]; then
         echo "1. [CODING] TANGLE_SUBTASK_FAIL. Files: src/app/page.tsx"
     elif [[ "${OCTO_FAKE_CODEX_EMPTY_TANGLE:-false}" == "true" ]]; then

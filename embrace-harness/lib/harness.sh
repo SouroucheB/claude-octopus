@@ -20,6 +20,7 @@ run_embrace_case() {
     CASE_DIR="$RESULT_ROOT/$SCENARIO_NAME/$case_name"
     local fake_home="$CASE_DIR/home"
     local workspace="$fake_home/workspace"
+    local harness_prompt="${OCTO_HARNESS_TASK_PROMPT:-local conformance ${SCENARIO_NAME}}"
     CASE_OUT="$CASE_DIR/output.log"
 
     rm -rf "$CASE_DIR"
@@ -50,6 +51,7 @@ OCTO_FAKE_CLAUDE_FAIL="${OCTO_FAKE_CLAUDE_FAIL:-false}"
 OCTO_FAKE_LOW_REVIEW_SCORE="${OCTO_FAKE_LOW_REVIEW_SCORE:-false}"
 OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS="${OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS:-0}"
 OCTO_FAKE_RUNNER_OWNED_SCOPE="${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}"
+OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE="${OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE:-false}"
 EOF
 
     if [[ "${OCTO_FAKE_STALE_ARTIFACTS:-false}" == "true" ]]; then
@@ -105,10 +107,11 @@ EOF
         OCTO_FAKE_LOW_REVIEW_SCORE="${OCTO_FAKE_LOW_REVIEW_SCORE:-false}" \
         OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS="${OCTO_FAKE_CODEX_PROBE_SLEEP_SECONDS:-0}" \
         OCTO_FAKE_RUNNER_OWNED_SCOPE="${OCTO_FAKE_RUNNER_OWNED_SCOPE:-false}" \
+        OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE="${OCTO_FAKE_CODEX_TANGLE_TIMEOUT_AFTER_WRITE:-false}" \
         OCTOPUS_CONFORMANCE_SKIP_GATE_ARTIFACT="${OCTOPUS_CONFORMANCE_SKIP_GATE_ARTIFACT:-}" \
         "$@" \
         bash -c 'cd "$1" && shift && exec "$@"' _ "$workspace" \
-        bash "$PLUGIN_ROOT/scripts/orchestrate.sh" --timeout 30 embrace "local conformance ${SCENARIO_NAME}" \
+        bash "$PLUGIN_ROOT/scripts/orchestrate.sh" --timeout 30 embrace "$harness_prompt" \
         >"$CASE_OUT" 2>&1
     CASE_RC=$?
     set -e

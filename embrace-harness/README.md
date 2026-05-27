@@ -85,6 +85,7 @@ OCTOPUS_ALLOW_REAL_EMBRACE=1
 - `gemini-status-canonical`: Gemini quota/lockout skips in requested gates must use canonical `failed` wording.
 - `consensus-quality-status-boundary`: partial consensus quality must stay distinct from provider status wording.
 - `runner-owned-scope-guard`: Tangle worker prompts must strip runner-owned Octopus artifact/state paths while preserving product write scope.
+- `tangle-timeout-evidence-warning`: implementation timeouts with explicit file coverage and non-runner-owned worktree evidence must warn and continue.
 - `real-run-guard`: guarded validation/debug invocations must abort before provider bootstrap unless real Embrace is explicitly authorized.
 
 If a scenario fails, fix the runner or provider classification. Do not run a real

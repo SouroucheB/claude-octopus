@@ -6,7 +6,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 
 - Active plugin: `/Users/sourouche/.claude-octopus/install/embrace-stability-stack`
 - Local harness: `/Users/sourouche/.claude-octopus/local/embrace-harness`
-- Latest full harness pass: `runs/20260527-111730` — 35/35 passing
+- Latest full harness pass: `runs/20260527-162405` — 36/36 passing
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
 - Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
@@ -19,7 +19,7 @@ This ledger is the current local source of truth, but it is not treated as perma
 
 - CoproOS Embrace run `79fd57f7-4de2-4619-bb92-fb4a1e6d13d6` produced Probe/Grasp/Tangle/Deliver artifacts but no `embrace-gate-*.md` artifacts, even though gates were requested.
 - CoproOS report `.claude/embrace-report-20260520.md` said no probe synthesis was generated, but `probe-synthesis-1779231795.md` exists. Final reporting can contradict the artifact set.
-- Several `grasp-consensus-*.md` and `delivery-*.md` artifacts start with `[Auto-consensus failed - manual review required]` even when a single provider produced usable output. This is a degraded consensus, not necessarily a failed consensus.
+- Several `grasp-consensus-*.md` and `delivery-*.md` artifacts start with `[Auto-consensus failed - manual review required]` even when a single provider produced usable output. This is a partial-consensus condition, not necessarily a failed consensus.
 - Multiple Gemini artifacts fail with the trusted-directory/headless error: "Gemini CLI is not running in a trusted directory" and exit code 55.
 - Multiple Gemini artifacts fail with quota errors / 429 / `TerminalQuotaError`; these failures can recur across phases.
 - Historical Probe fallback artifacts still contain `[Auto-synthesis failed - raw findings below]`; some are thousands of lines, and one delivery artifact reached 175,916 lines.
@@ -67,7 +67,7 @@ This ledger is the current local source of truth, but it is not treated as perma
 - Historical process inspection during the `1779661218` investigation showed many orphaned `tail -f octo-gemini-stderr.*` processes from prior runs; provider stderr watchers may be leaking after failed or timed-out providers.
 - Real canary run `1779828291` on merge commit `b119cf7` completed end-to-end with exit 0, all requested artifacts present, deterministic file-only Ink scores as `not applicable`, Gemini quota skip respected in Deliver, and tracked diff limited to `canary.txt`. Residual issues observed: prior canary high-importance observations still leaked into Probe/Grasp/Tangle context, and Gemini status wording appeared as both `failed` and `degraded` in different artifacts.
 - Real canary run `1779883055` on commit `eeedf6f` completed end-to-end with exit 0, all requested artifacts present, tracked diff limited to `canary.txt`, and final report / gate / agent ledger consistently showing Gemini as `failed` because provider quota was exhausted earlier in the run. The run validated the E73/E74 fixes on the primary contract.
-- Real canary run `1779883055` also exposed a non-blocking validation-language residual: Tangle reasoning artifacts still interpreted Grasp's "degraded consensus" wording as a Gemini failed/degraded status mix, even though the canonical provider status fields were `gemini=failed`. Consensus-quality degradation must be distinguished from provider-status degradation in future checks.
+- Real canary run `1779883055` also exposed a non-blocking validation-language residual: Tangle reasoning artifacts still interpreted old Grasp fallback wording as a Gemini failed/degraded status mix, even though the canonical provider status fields were `gemini=failed`. Consensus quality must be distinguished from provider-status degradation in future checks.
 
 ## Covered By Local Harness
 
@@ -148,6 +148,7 @@ This ledger is the current local source of truth, but it is not treated as perma
 | E73 | Project-wide canary observations from old validation runs must not be injected into later canary prompts even when generic files such as `canary.txt` or `task.md` match | `280-observation-scope.sh` | covered |
 | E74 | Gemini quota/lockout skips in requested Embrace gates must use canonical `failed` wording, not `degraded`, across gate and final report artifacts | `350-gemini-status-canonical.sh` | covered |
 | E75 | Codex compatibility guard must not mutate the active plugin checkout while generating/checking portable root skills | `250-codex-compat-guard.sh` | covered |
+| E76 | Consensus quality fallback wording must stay distinct from provider status, so partial Grasp consensus cannot be mistaken for Gemini `degraded` when canonical status is `gemini=failed` | `360-consensus-quality-status-boundary.sh`, `tests/unit/test-grasp-define-fallbacks.sh` | covered |
 
 ## Dedicated Scenario Gaps
 
@@ -155,7 +156,7 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-E76 remains to encode: validation/reporting logic must distinguish degraded consensus quality from provider status wording, so Grasp text like "degraded consensus" does not get treated as Gemini `degraded` when canonical provider status is `gemini=failed`. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
+None currently known from the mined Embrace runs after E76. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
 
 ## Local Branch / Worktree Map
 
@@ -176,6 +177,7 @@ E76 remains to encode: validation/reporting logic must distinguish degraded cons
 
 ## Active Local Commits Of Interest
 
+- `3f8a6ea fix(embrace): separate consensus quality from provider status`
 - `8464b71 fix(embrace): guard real validation runs`
 - `4b46520 fix(tangle): ignore read-only evidence in file coverage`
 - `260975c fix(embrace): keep degraded gate output`

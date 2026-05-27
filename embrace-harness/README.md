@@ -66,7 +66,7 @@ OCTOPUS_ALLOW_REAL_EMBRACE=1
 - `codex-gate-exit2-fallback`: Codex gate exit 2 must be traced while other providers can satisfy the gate.
 - `smoke-enabled-completes`: provider smoke tests must complete non-interactively.
 - `gemini-trust-failure-classified`: Gemini trusted-directory failures must be classified as `GEMINI_TRUST_REQUIRED`.
-- `single-provider-consensus-label`: degraded consensus must not be mislabeled as manual-review failure.
+- `single-provider-consensus-label`: partial consensus must not be mislabeled as manual-review failure or provider degradation.
 - `compact-fallback-bounds`: fallback artifacts must stay compact and must not attach raw dumps.
 - `final-report-artifact-inventory`: successful Embrace reports must derive phase status from captured artifacts and provider ledger.
 - `failed-report-artifact-inventory`: failed Embrace reports must preserve failure reason, provider status, and partial artifacts without claiming delivery.
@@ -82,6 +82,8 @@ OCTOPUS_ALLOW_REAL_EMBRACE=1
 - `probe-synthesis-fallback`: Probe synthesis provider failure must produce compact fallback output.
 - `ink-synthesis-fallback`: Ink synthesis provider failure must produce compact fallback delivery.
 - `codex-compat-guard`: Codex command syntax and generated skill compatibility checks must stay green.
+- `gemini-status-canonical`: Gemini quota/lockout skips in requested gates must use canonical `failed` wording.
+- `consensus-quality-status-boundary`: partial consensus quality must stay distinct from provider status wording.
 - `real-run-guard`: guarded validation/debug invocations must abort before provider bootstrap unless real Embrace is explicitly authorized.
 
 If a scenario fails, fix the runner or provider classification. Do not run a real

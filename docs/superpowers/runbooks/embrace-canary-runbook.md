@@ -69,7 +69,7 @@ Contraintes:
 - Ne toucher a aucun autre fichier tracked.
 - Produire les artifacts Embrace attendus: Probe, Grasp, gate define-develop, Tangle validation, Ink delivery ou failed report explicite.
 - Verifier que les anciennes observations canary project-wide ne polluent pas le contexte.
-- Verifier que Gemini quota/lockout est reporte comme failed de facon coherente, pas failed/degraded mixte.
+- Verifier que Gemini quota/lockout est reporte comme failed de facon coherente dans les champs Provider Statuses / Provider Status Summary.
 EOF
 
 git add canary.txt task.md
@@ -187,6 +187,8 @@ Attendu:
 - quota/lockout Gemini reporte en `failed`;
 - pas de melange `failed` dans le report final et `degraded` dans le gate pour
   le meme skip quota/lockout.
+- ne pas interpreter `Consensus Quality: partial` comme un statut provider
+  `degraded`; c'est une qualite de consensus, pas l'etat de Gemini.
 
 ## 8. Capturer la conclusion
 
@@ -218,4 +220,3 @@ Le repo canary temporaire peut etre supprime apres archivage de la conclusion:
 ```bash
 rm -rf "$CANARY_DIR" "$RUN_SCRIPT" "$RUN_LOG"
 ```
-

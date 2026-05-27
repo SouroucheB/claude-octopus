@@ -37,6 +37,11 @@ run_agent_sync() {
     local role="${4:-}"
     local phase="${5:-}"
 
+    if [[ "${FAKE_GEMINI_SYNTH_FAIL:-false}" == "true" && "$agent_type" == "gemini" && "$role" == "synthesizer" && "$phase" == "grasp" ]]; then
+        write_agent_status "gemini" "failed" 100 0 "Provider quota exhausted earlier in this run" 25 "" "$role"
+        return 1
+    fi
+
     if [[ "$agent_type" == "codex" && "$role" == "backend-architect" && "$phase" == "grasp" ]]; then
         write_agent_status "codex" "failed" 100 0 "Codex tool stdin closed (avoid write_stdin in non-interactive sessions)" 25 "" "$role"
         return 1
@@ -58,5 +63,21 @@ if [[ "$grsp_status" -eq 0 ]] && \
 else
     test_fail "expected grasp consensus to preserve Codex fallback reason (status=$grsp_status file=${consensus_file:-missing})"
 fi
+
+test_case "grasp fallback does not call consensus quality a provider degraded status"
+rm -f "$RESULTS_DIR"/grasp-consensus-*.md
+FAKE_GEMINI_SYNTH_FAIL=true
+grsp_status=0
+grasp_define "Validate Gemini failed status after quota lockout" >/dev/null 2>&1 || grsp_status=$?
+consensus_file="$RESULTS_DIR/grasp-consensus-${OCTOPUS_TASK_GROUP}.md"
+if [[ "$grsp_status" -eq 0 ]] && \
+   [[ -f "$consensus_file" ]] && \
+   grep -q "Consensus Quality: partial" "$consensus_file" && \
+   ! grep -qi "degraded consensus" "$consensus_file"; then
+    test_pass
+else
+    test_fail "expected partial consensus wording that cannot be confused with provider degraded status (status=$grsp_status file=${consensus_file:-missing})"
+fi
+unset FAKE_GEMINI_SYNTH_FAIL
 
 test_summary

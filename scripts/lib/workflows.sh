@@ -782,7 +782,9 @@ Output a single, clear problem definition document with:
     consensus=$(run_agent_sync "gemini" "$consensus_prompt" 180 "synthesizer" "grasp") || {
         consensus="Automated consensus synthesis unavailable.
 
-This is a degraded consensus assembled from the available definition perspectives. It is not a manual-review failure by itself, but provider status should be inspected before treating the result as full multi-provider consensus.
+Consensus Quality: partial
+
+This consensus was assembled from the available definition perspectives after automated synthesis became unavailable. It is not a manual-review failure by itself. Provider status is tracked separately in provider status summaries and gate artifacts.
 
 ## Problem
 $def1

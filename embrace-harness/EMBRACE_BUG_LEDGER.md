@@ -16,6 +16,10 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 
 This ledger is the current local source of truth, but it is not treated as permanently exhaustive. Any newly observed Embrace failure must be added here before or during the fix. The rule is: no Embrace fix without either a ledger entry or an explicit decision that it is out of scope.
 
+## Backlog / Soon
+
+- [LATER] Add Embrace-internal context packing / prompt compression after the next real full run. Current upstream RTK integration optimizes Claude Code Bash/tool output via `rtk hook claude`, while Embrace provider prompts are mainly protected by generic `enforce_context_budget()` summarize/truncate behavior. Before implementing, use a real full Embrace run to identify the actual burn points, then add a structured packer that deduplicates and bounds observations, artifacts, stderr/logs, reports, and phase context with an audit trail of kept/omitted blocks.
+
 ## Recovered Evidence From Artifact Mining
 
 - CoproOS Embrace run `79fd57f7-4de2-4619-bb92-fb4a1e6d13d6` produced Probe/Grasp/Tangle/Deliver artifacts but no `embrace-gate-*.md` artifacts, even though gates were requested.

@@ -89,4 +89,12 @@ else
     test_fail "canary project-wide observation leaked into non-canary audit: $context"
 fi
 
+test_case "project-wide canary observations do not leak into new canary runs"
+context="$(embrace_build_observation_context "Canary run: update canary.txt exactly once" 7 1500)"
+if [[ "$context" == *"D-relevant"* && "$context" != *"D-canary-project-wide"* ]]; then
+    test_pass
+else
+    test_fail "old project-wide canary observation leaked into new canary run: ${context:-<empty>}"
+fi
+
 test_summary

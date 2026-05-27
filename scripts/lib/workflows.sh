@@ -1976,6 +1976,18 @@ embrace_run_gate_agent() {
     return "$exit_code"
 }
 
+embrace_gate_output_is_failure_notice() {
+    local output="$1"
+    local lower
+    lower=$(printf '%s' "$output" | tr '[:upper:]' '[:lower:]')
+
+    [[ "$lower" == *"provider quota exhausted earlier in this run"* || \
+       "$lower" == *"provider unavailable"* || \
+       "$lower" == *"provider locked for this run"* || \
+       "$lower" == *"gemini_quota_exhausted"* || \
+       "$lower" == *"gemini_trust_required"* ]]
+}
+
 embrace_observation_keywords() {
     local prompt="$1"
 
@@ -2000,8 +2012,13 @@ embrace_observation_is_relevant_to_prompt() {
     prompt_lower=$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')
     observation_lower=$(printf '%s' "$observation" | tr '[:upper:]' '[:lower:]')
 
-    # Project-wide canary learnings are noisy outside explicit canary work: they
-    # commonly match generic files such as task.md and pollute real audits.
+    # Project-wide canary learnings are noisy historical run diagnostics. They
+    # commonly match generic files such as task.md/canary.txt and pollute later
+    # canaries and unrelated audits; keep file-scoped observations instead.
+    if [[ "$observation_lower" == *"canary"* && "$observation_lower" == *"**scope:** project-wide"* ]]; then
+        return 1
+    fi
+
     if [[ "$observation_lower" == *"canary"* && "$prompt_lower" != *"canary"* ]]; then
         return 1
     fi
@@ -2145,8 +2162,12 @@ Return a concise gate review with:
     else
         provider_rc=$?
         if [[ -n "$codex_view" ]]; then
-            codex_status="degraded"
-            successful=$((successful + 1))
+            if embrace_gate_output_is_failure_notice "$codex_view"; then
+                codex_status="failed"
+            else
+                codex_status="degraded"
+                successful=$((successful + 1))
+            fi
         elif [[ "$provider_rc" -eq 124 ]]; then
             codex_status="timeout"
         fi
@@ -2159,8 +2180,12 @@ Return a concise gate review with:
     else
         provider_rc=$?
         if [[ -n "$gemini_view" ]]; then
-            gemini_status="degraded"
-            successful=$((successful + 1))
+            if embrace_gate_output_is_failure_notice "$gemini_view"; then
+                gemini_status="failed"
+            else
+                gemini_status="degraded"
+                successful=$((successful + 1))
+            fi
         elif [[ "$provider_rc" -eq 124 ]]; then
             gemini_status="timeout"
         fi
@@ -2173,8 +2198,12 @@ Return a concise gate review with:
     else
         provider_rc=$?
         if [[ -n "$claude_view" ]]; then
-            claude_status="degraded"
-            successful=$((successful + 1))
+            if embrace_gate_output_is_failure_notice "$claude_view"; then
+                claude_status="failed"
+            else
+                claude_status="degraded"
+                successful=$((successful + 1))
+            fi
         elif [[ "$provider_rc" -eq 124 ]]; then
             claude_status="timeout"
         fi

@@ -68,6 +68,23 @@ $body
 EOF
 }
 
+write_timeout_result() {
+    local path="$1"
+    local body="$2"
+    local role="${3:-implementer}"
+    cat > "$path" <<EOF
+# Agent: codex
+# Task ID: tangle-evidence-0
+# Role: $role
+# Phase: tangle
+
+## Output
+$body
+
+## Status: TIMEOUT - PARTIAL RESULTS (exit code: 124)
+EOF
+}
+
 git -C "$REPO_DIR" init -q
 git -C "$REPO_DIR" config user.email test@example.com
 git -C "$REPO_DIR" config user.name "Octopus Test"
@@ -156,6 +173,49 @@ if (
     test_pass
 else
     test_fail "reasoning-only quota failures were counted against implementation quality"
+fi
+
+test_case "timeout after useful worktree evidence is a warning, not implementation failure"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-evidence.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-evidence.md" \
+        "Changed src/app/page.tsx before timing out."
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-evidence" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-timeout-evidence.txt" >/dev/null 2>&1
+    grep -q "### Quality Gate: WARNING" "$RESULTS_DIR/tangle-validation-evidence-timeout-evidence.md" && \
+    grep -q "Evidence-backed timeouts: 1/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-evidence.md" && \
+    grep -q "src/app/page.tsx" "$RESULTS_DIR/tangle-validation-evidence-timeout-evidence.md"
+); then
+    test_pass
+else
+    test_fail "timeout with real worktree evidence was not distinguished from missing implementation evidence"
+fi
+
+test_case "timeout with only octopus internal artifacts still fails"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-internal.txt"
+    mkdir -p .claude-octopus
+    printf 'forged\n' > .claude-octopus/forged-worker-artifact.md
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-internal.md" \
+        "Changed src/app/page.tsx and .claude-octopus/forged-worker-artifact.md before timing out."
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-internal" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-timeout-internal.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "### Quality Gate: FAILED" "$RESULTS_DIR/tangle-validation-evidence-timeout-internal.md" && \
+    grep -q "Missing Worktree Changes" "$RESULTS_DIR/tangle-validation-evidence-timeout-internal.md"
+); then
+    test_pass
+else
+    test_fail "timeout with only runner-owned artifact changes was treated as implementation evidence"
 fi
 
 test_case "octopus internal artifacts are not worktree evidence"

@@ -174,6 +174,7 @@ validate_tangle_results() {
         local result_outputs=""
         local success_count=0
         local fail_count=0
+        local implementation_timeout_count=0
         local reasoning_success_count=0
         local reasoning_fail_count=0
         FAILED_SUBTASKS=""  # Reset for this validation pass (string-based)
@@ -204,12 +205,17 @@ validate_tangle_results() {
             if grep -q "Status: SUCCESS" "$result" 2>/dev/null; then
                 result_succeeded="true"
             fi
+            local result_timed_out="false"
+            if grep -q "Status: TIMEOUT" "$result" 2>/dev/null; then
+                result_timed_out="true"
+            fi
 
             if [[ "$counts_for_implementation" == "true" ]]; then
                 if [[ "$result_succeeded" == "true" ]]; then
                     ((success_count++)) || true
                 else
                     ((fail_count++)) || true
+                    [[ "$result_timed_out" == "true" ]] && ((implementation_timeout_count++)) || true
                     # Extract agent and prompt for retry (if loop-until-approved enabled)
                     if [[ "$LOOP_UNTIL_APPROVED" == "true" ]]; then
                         local agent prompt_line
@@ -250,6 +256,17 @@ validate_tangle_results() {
             fi
         fi
 
+        local evidence_backed_timeout_count=0
+        if [[ "$implementation_timeout_count" -gt 0 ]] && \
+           [[ "$requires_worktree_changes" == "true" ]] && \
+           [[ -n "$worktree_changes" ]] && \
+           [[ -z "$missing_explicit_files" ]]; then
+            evidence_backed_timeout_count="$implementation_timeout_count"
+            success_count=$((success_count + evidence_backed_timeout_count))
+            fail_count=$((fail_count - evidence_backed_timeout_count))
+            [[ "$fail_count" -lt 0 ]] && fail_count=0
+        fi
+
         # Quality gate check (using configurable per-phase threshold - v8.19.0)
         local tangle_threshold
         tangle_threshold=$(get_gate_threshold "tangle")
@@ -264,6 +281,10 @@ validate_tangle_results() {
             gate_status="FAILED"
             gate_color="${RED}"
         elif [[ $success_rate -lt 90 ]]; then
+            gate_status="WARNING"
+            gate_color="${YELLOW}"
+        fi
+        if [[ "$evidence_backed_timeout_count" -gt 0 && "$gate_status" == "PASSED" ]]; then
             gate_status="WARNING"
             gate_color="${YELLOW}"
         fi
@@ -365,6 +386,8 @@ $challenge_result
 - Success Rate: ${success_rate}% (threshold: ${tangle_threshold}%)
 - Successful: ${success_count}/${total} implementation result files
 - Failed: ${fail_count}/${total} implementation result files
+- Provider timeouts: ${implementation_timeout_count}/${total} implementation result files
+- Evidence-backed timeouts: ${evidence_backed_timeout_count}/${implementation_timeout_count} implementation timeout result files (counted only when explicit file coverage and non-runner-owned worktree evidence are present)
 - Reasoning-only: ${reasoning_success_count}/${reasoning_total} successful, ${reasoning_fail_count}/${reasoning_total} failed/skipped result files (excluded from implementation score)
 - Decision Branch: ${quality_branch}
 - Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}

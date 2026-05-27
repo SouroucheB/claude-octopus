@@ -9,7 +9,7 @@ Local-only tracking for Embrace stabilization. This file is not an upstream PR a
 - Latest full harness pass: `runs/20260527-111730` — 35/35 passing
 - Evidence mined from: CoproOS `.claude/embrace-report-20260520.md`, active plugin commit log, historical Octo worktrees, local harness artifacts, and existing `~/.claude-octopus/results/**` / `runs/**` artifacts.
 - Latest upstream merge validation: `b119cf7` (`Merge upstream/main into embrace-stability-stack`) with syntax checks, targeted Embrace/Tangle/Ink/Probe tests, Codex compat 98/98, and local harness 34/34.
-- Latest real canary validation: `1779828291` on `b119cf7` completed end-to-end in 534s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, and only `canary.txt` modified among tracked files.
+- Latest real canary validation: `1779883055` on `eeedf6f` completed end-to-end in 745s with Probe, Grasp, requested Define gate, Tangle validation, Ink delivery, canonical final Gemini `failed` status, and only `canary.txt` modified among tracked files.
 
 ## Exhaustiveness Policy
 
@@ -66,6 +66,8 @@ This ledger is the current local source of truth, but it is not treated as perma
 - Real Octo audit run `1779661218` produced degraded Define material that confused the workflow context, including statements that the runner had not been invoked even though the text was generated inside an Embrace run.
 - Historical process inspection during the `1779661218` investigation showed many orphaned `tail -f octo-gemini-stderr.*` processes from prior runs; provider stderr watchers may be leaking after failed or timed-out providers.
 - Real canary run `1779828291` on merge commit `b119cf7` completed end-to-end with exit 0, all requested artifacts present, deterministic file-only Ink scores as `not applicable`, Gemini quota skip respected in Deliver, and tracked diff limited to `canary.txt`. Residual issues observed: prior canary high-importance observations still leaked into Probe/Grasp/Tangle context, and Gemini status wording appeared as both `failed` and `degraded` in different artifacts.
+- Real canary run `1779883055` on commit `eeedf6f` completed end-to-end with exit 0, all requested artifacts present, tracked diff limited to `canary.txt`, and final report / gate / agent ledger consistently showing Gemini as `failed` because provider quota was exhausted earlier in the run. The run validated the E73/E74 fixes on the primary contract.
+- Real canary run `1779883055` also exposed a non-blocking validation-language residual: Tangle reasoning artifacts still interpreted Grasp's "degraded consensus" wording as a Gemini failed/degraded status mix, even though the canonical provider status fields were `gemini=failed`. Consensus-quality degradation must be distinguished from provider-status degradation in future checks.
 
 ## Covered By Local Harness
 
@@ -153,7 +155,7 @@ Remaining scenario gaps discovered by real non-canary Octo audit `1779689993`. E
 
 ## Still To Encode
 
-None currently known from the mined Embrace runs after E75. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
+E76 remains to encode: validation/reporting logic must distinguish degraded consensus quality from provider status wording, so Grasp text like "degraded consensus" does not get treated as Gemini `degraded` when canonical provider status is `gemini=failed`. Real Embrace validation remains frozen unless explicitly re-authorized with `OCTOPUS_ALLOW_REAL_EMBRACE=1`; use the harness for further fixes.
 
 ## Local Branch / Worktree Map
 

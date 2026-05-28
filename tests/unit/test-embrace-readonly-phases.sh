@@ -44,6 +44,14 @@ else
     test_fail "pre-Develop abort restore guard is missing"
 fi
 
+test_case "Define gate restores non-Develop mutations before provider evaluation"
+if sed -n '/embrace_debate_gate_requested "define-develop"/,/embrace_debate_gate "define-develop"/p' "$WORKFLOWS" | \
+   grep -q '_restore_pre_develop_worktree_snapshot "debate-define-develop preflight"'; then
+    test_pass
+else
+    test_fail "Define→Develop gate does not restore pre-Develop mutations before provider evaluation"
+fi
+
 test_case "codex command uses read-only sandbox outside Embrace Develop"
 log() { :; }
 PLUGIN_DIR="$PROJECT_ROOT"

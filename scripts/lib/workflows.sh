@@ -2554,7 +2554,7 @@ ${obs_ctx}"
         [[ -n "$pre_develop_snapshot_dir" && -d "$pre_develop_snapshot_dir" ]] || return 0
         git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
 
-        log WARN "Restoring non-Develop worktree mutations before stopping at ${phase}"
+        log WARN "Restoring non-Develop worktree mutations at ${phase}"
 
         git restore --staged --worktree -- . >/dev/null 2>&1 || \
             log WARN "Unable to restore tracked worktree changes for pre-Develop abort"
@@ -2962,6 +2962,7 @@ ${obs_ctx}"
     # Autonomy controls whether humans are asked between phases; it must not
     # silently waive a gate the user explicitly selected.
     if embrace_debate_gate_requested "define-develop"; then
+        _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"
         export OCTOPUS_WORKFLOW_PHASE="debate-define-develop"
         _write_embrace_session_state "debate-define-develop" "running"
         if ! embrace_debate_gate "define-develop" "$prompt" "$grasp_consensus"; then

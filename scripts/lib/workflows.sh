@@ -1030,6 +1030,14 @@ octopus_should_resolve_markdown_plan_ref() {
         return 0
     fi
 
+    local lower_file_ref
+    lower_file_ref=$(printf '%s' "$file_ref" | tr '[:upper:]' '[:lower:]')
+    case "$lower_file_ref" in
+        *backlog*.md)
+            return 1
+            ;;
+    esac
+
     local lower_prompt
     lower_prompt=$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')
 
@@ -2033,6 +2041,7 @@ embrace_run_gate_agent() {
     if [[ "$exit_code" -eq 124 || "$exit_code" -eq 143 ]]; then
         type write_agent_status >/dev/null 2>&1 && \
             write_agent_status "$agent_type" "timeout" 0 0 "Gate provider timed out after ${timeout_secs}s" "$((timeout_secs * 1000))" "" "$role" || true
+        [[ -s "$temp_out" ]] && cat "$temp_out"
         rm -f "$temp_out" "$temp_err" "$temp_timeout" 2>/dev/null || true
         return 124
     fi
@@ -2982,6 +2991,7 @@ ${obs_ctx}"
 
     # Phase 3: TANGLE (Develop)
     if [[ -z "$resume_from" || "$resume_from" == "null" || "$resume_from" == "probe" || "$resume_from" == "grasp" ]]; then
+        _restore_pre_develop_worktree_snapshot "tangle preflight"
         export OCTOPUS_WORKFLOW_PHASE="tangle"
         _write_embrace_session_state "tangle" "running"
         echo ""

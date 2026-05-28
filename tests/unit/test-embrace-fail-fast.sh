@@ -125,6 +125,15 @@ EOF
         printf '%s\n' "Verdict: PROCEED"
         return 0
     fi
+    if [[ "$CASE_NAME" == "gate_synthesis_partial_revise_timeout" && "${5:-}" == "embrace-gate" ]]; then
+        if [[ "${4:-}" == "synthesizer" ]]; then
+            printf '%s\n' "Gate verdict: REVISE — partial blocking synthesis before timeout."
+            /bin/sleep 5
+            return 0
+        fi
+        printf '%s\n' "Verdict: PROCEED"
+        return 0
+    fi
     printf '%s\n' "gate response from ${1:-agent}"
 }
 save_session_checkpoint() {
@@ -301,6 +310,33 @@ if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
     test_pass
 else
     test_fail "hanging gate provider was not bounded cleanly (status=$EMBRACE_STATUS elapsed=${GATE_HANG_ELAPSED}s file=${GATE_HANG_FILE:-missing})"
+fi
+
+CASE_NAME="gate_synthesis_partial_revise_timeout"
+OCTOPUS_EMBRACE_DEBATE_GATES="define"
+OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT=1
+PHASE_CALLS=""
+CHECKPOINTS=""
+EMBRACE_STATUS=0
+rm -rf "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR"
+mkdir -p "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR" "$HOME"
+SECONDS=0
+embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
+EMBRACE_STATUS=$?
+GATE_PARTIAL_TIMEOUT_ELAPSED=$SECONDS
+unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT
+
+GATE_PARTIAL_TIMEOUT_FILE=$(ls "$RESULTS_DIR"/embrace-gate-define-develop-*.md 2>/dev/null | head -1)
+
+test_case "timed-out gate synthesis preserves partial blocking verdict"
+if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp " ]] && \
+   [[ "$GATE_PARTIAL_TIMEOUT_ELAPSED" -lt 4 ]] && \
+   [[ -n "$GATE_PARTIAL_TIMEOUT_FILE" ]] && \
+   grep -q 'partial blocking synthesis before timeout' "$GATE_PARTIAL_TIMEOUT_FILE"; then
+    test_pass
+else
+    test_fail "timed-out gate synthesis lost partial blocking verdict (status=$EMBRACE_STATUS calls='$PHASE_CALLS' elapsed=${GATE_PARTIAL_TIMEOUT_ELAPSED}s file=${GATE_PARTIAL_TIMEOUT_FILE:-missing})"
 fi
 
 CASE_NAME="signal_interrupt"

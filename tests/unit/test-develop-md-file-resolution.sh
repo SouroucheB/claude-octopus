@@ -133,6 +133,16 @@ else
     test_pass
 fi
 
+test_case "backlog from/use Markdown variants are not injected as plans"
+run_tangle_case "Implement Gmail threading item from $backlog_file. Use $backlog_file as source of truth. Files: src/lib/email/sendEmail.server.ts"
+if [[ "$CAPTURED_DECOMPOSE_PROMPT" == *"This unrelated fixture mentions"* ]]; then
+    test_fail "from/use backlog mention injected the full Markdown file"
+elif [[ "$CAPTURED_VALIDATE_PROMPT" == *"This unrelated fixture mentions"* ]]; then
+    test_fail "validation prompt included backlog file content from from/use variant"
+else
+    test_pass
+fi
+
 test_case "wildcard-looking Markdown tokens are not glob-expanded"
 glob_dir="$RESULTS_DIR/glob-case"
 mkdir -p "$glob_dir"

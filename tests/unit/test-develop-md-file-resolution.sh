@@ -116,6 +116,23 @@ else
     test_fail "validate_tangle_results received raw prompt instead of resolved content"
 fi
 
+test_case "backlog source Markdown mention is not injected as a plan"
+backlog_file="$RESULTS_DIR/BACKLOG.md"
+cat > "$backlog_file" <<'EOF'
+# Backlog Fixture
+
+This unrelated fixture mentions AGENTS.md, AUDIT.md, src/lib/engine/applyPerception.ts,
+src/lib/engine/projectDossier.ts, and scripts/generate-snapshots.sh.
+EOF
+run_tangle_case "Task: fix Gmail threading. Source backlog: $backlog_file item \"Gmail threading des réponses CoproOS\". Files: src/lib/email/sendEmail.server.ts"
+if [[ "$CAPTURED_DECOMPOSE_PROMPT" == *"This unrelated fixture mentions"* ]]; then
+    test_fail "source backlog mention injected the full Markdown file"
+elif [[ "$CAPTURED_VALIDATE_PROMPT" == *"This unrelated fixture mentions"* ]]; then
+    test_fail "validation prompt included backlog file content"
+else
+    test_pass
+fi
+
 test_case "wildcard-looking Markdown tokens are not glob-expanded"
 glob_dir="$RESULTS_DIR/glob-case"
 mkdir -p "$glob_dir"

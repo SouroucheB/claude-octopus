@@ -20,8 +20,18 @@ extract_tangle_write_scope_lines() {
 
     printf '%s\n' "$text" \
         | awk '
+            BEGIN { in_plan = 0 }
             {
                 line = tolower($0)
+                if (line ~ /^---[[:space:]]+plan:/) {
+                    in_plan = 1
+                    next
+                }
+                if (line ~ /^---[[:space:]]+end plan[[:space:]]+---/) {
+                    in_plan = 0
+                    next
+                }
+                if (in_plan == 1) next
                 if (line ~ /(^|[[:space:]])files:[[:space:]]/) print
                 else if (line ~ /write scope/) print
                 else if (line ~ /may (create|update|edit|modify|write)/) print
@@ -37,10 +47,23 @@ extract_tangle_readwrite_context() {
 
     printf '%s\n' "$text" \
         | awk '
-            BEGIN { skip = 0 }
+            BEGIN { skip = 0; in_plan = 0 }
             {
                 line = tolower($0)
+                if (line ~ /^---[[:space:]]+plan:/) {
+                    in_plan = 1
+                    next
+                }
+                if (line ~ /^---[[:space:]]+end plan[[:space:]]+---/) {
+                    in_plan = 0
+                    next
+                }
+                if (in_plan == 1) next
                 if (line ~ /^(#+[[:space:]]*)?(evidence to inspect|inputs?|read-only inputs?|context artifact|required checks|report requirements)[[:space:]]*:/) {
+                    skip = 1
+                    next
+                }
+                if (line ~ /^(#+[[:space:]]*)?(source backlog|backlog source|backlog item|sources?|source docs?|reference docs?|references?|background docs?|context docs?)[[:space:]]*:/) {
                     skip = 1
                     next
                 }

@@ -196,6 +196,36 @@ else
     test_fail "timeout with real worktree evidence was not distinguished from missing implementation evidence"
 fi
 
+test_case "timeout evidence is not blocked by unrelated resolved plan references"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-plan-noise.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-plan-noise.md" \
+        "Changed src/app/page.tsx before timing out."
+    noisy_prompt='Implement the app change in src/app/page.tsx.
+
+The following referenced plan file has been resolved. Use it as implementation context and do NOT modify the plan file itself (docs/BACKLOG.md).
+
+--- PLAN: docs/BACKLOG.md ---
+This backlog context mentions unrelated read-only files: AGENTS.md, AUDIT.md,
+src/lib/engine/applyPerception.ts, src/lib/engine/projectDossier.ts,
+and scripts/generate-snapshots.sh.
+--- END PLAN ---'
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-plan-noise" "$noisy_prompt" "$RESULTS_DIR/before-timeout-plan-noise.txt" >/dev/null 2>&1
+    grep -q "### Quality Gate: WARNING" "$RESULTS_DIR/tangle-validation-evidence-timeout-plan-noise.md" && \
+    grep -q "Evidence-backed timeouts: 1/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-plan-noise.md" && \
+    ! sed -n '/#### Missing Explicit File Coverage/,/### Worktree Change Evidence/p' "$RESULTS_DIR/tangle-validation-evidence-timeout-plan-noise.md" | grep -q "AGENTS.md"
+); then
+    test_pass
+else
+    test_fail "resolved plan context refs blocked evidence-backed timeout"
+fi
+
 test_case "timeout with only octopus internal artifacts still fails"
 if (
     cd "$REPO_DIR"

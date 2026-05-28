@@ -1004,6 +1004,46 @@ tangle_select_subtask_agent() {
     printf '%s|%s|%s\n' "$agent" "$role" "$pane_icon"
 }
 
+octopus_trim_text() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+octopus_should_resolve_markdown_plan_ref() {
+    local prompt="$1"
+    local raw_file_ref="$2"
+    local file_ref="$3"
+    local trimmed_prompt
+    trimmed_prompt=$(octopus_trim_text "$prompt")
+
+    [[ -n "$raw_file_ref" && -n "$file_ref" ]] || return 1
+
+    # Do not treat wildcard-looking Markdown mentions as concrete plan files.
+    case "$raw_file_ref" in
+        *'*'*|*'?'*|*'['*|*']'*) return 1 ;;
+    esac
+
+    # A prompt that is exactly the Markdown file path is an explicit plan input.
+    if [[ "$trimmed_prompt" == "$raw_file_ref" || "$trimmed_prompt" == "$file_ref" ]]; then
+        return 0
+    fi
+
+    local lower_prompt
+    lower_prompt=$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')
+
+    # Backlog/source citations are read-only provenance, not a request to inject
+    # an entire project backlog as implementation context.
+    if printf '%s\n' "$lower_prompt" | grep -Eq '(^|[^a-z])(source backlog|backlog source|backlog item|source[[:space:]]*:|sources[[:space:]]*:|source docs?[[:space:]]*:|reference docs?[[:space:]]*:)' 2>/dev/null; then
+        return 1
+    fi
+
+    # Keep compatibility with explicit plan-style instructions such as
+    # "please implement plan.md carefully" or "use the implementation plan.md".
+    printf '%s\n' "$lower_prompt" | grep -Eq '(^|[^a-z])(implement|apply|execute|follow|use|run|from|according to|plan|implementation plan|handoff|spec)[^[:cntrl:]]*\.md([^a-z]|$)' 2>/dev/null
+}
+
 # Phase 3: TANGLE (Develop) - Enhanced map-reduce with validation
 # Tentacles work together in a coordinated tangle of activity
 tangle_develop() {
@@ -1080,15 +1120,14 @@ tangle_develop() {
         fi
     done
     [[ "$noglob_was_set" == "false" ]] && set +f
-    if [[ -n "$file_ref" && -f "$file_ref" ]]; then
+    if [[ -n "$file_ref" && -f "$file_ref" ]] && octopus_should_resolve_markdown_plan_ref "$prompt" "$raw_file_ref" "$file_ref"; then
         local file_content
         file_content=$(<"$file_ref")
         local plan_block="--- PLAN: ${file_ref} ---
 ${file_content}
 --- END PLAN ---"
-        local trimmed_prompt="$prompt"
-        trimmed_prompt="${trimmed_prompt#"${trimmed_prompt%%[![:space:]]*}"}"
-        trimmed_prompt="${trimmed_prompt%"${trimmed_prompt##*[![:space:]]}"}"
+        local trimmed_prompt
+        trimmed_prompt=$(octopus_trim_text "$prompt")
 
         if [[ "$trimmed_prompt" == "$raw_file_ref" || "$trimmed_prompt" == "$file_ref" ]]; then
             resolved_prompt="Implement the code changes described in the following plan. Do NOT modify the plan file itself (${file_ref}).
@@ -1102,6 +1141,8 @@ The following referenced plan file has been resolved. Use it as implementation c
 ${plan_block}"
         fi
         log INFO "Resolved file reference: ${file_ref} - injecting content into decompose prompt"
+    elif [[ -n "$file_ref" && -f "$file_ref" ]]; then
+        log INFO "Markdown file mentioned but not resolved as plan context: ${file_ref}"
     fi
 
     local decompose_prompt="Decompose this task into subtasks that can be executed in parallel.

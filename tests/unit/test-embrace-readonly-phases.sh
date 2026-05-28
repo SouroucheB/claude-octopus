@@ -34,6 +34,16 @@ else
     test_fail "embrace debate gate prompt does not carry a read-only guard"
 fi
 
+test_case "pre-Develop aborts restore non-Develop worktree mutations"
+if grep -q "_capture_pre_develop_worktree_snapshot" "$WORKFLOWS" && \
+   grep -q "_restore_pre_develop_worktree_snapshot" "$WORKFLOWS" && \
+   grep -q "_embrace_phase_is_pre_develop_abort" "$WORKFLOWS" && \
+   grep -q "debate-define-develop" "$WORKFLOWS"; then
+    test_pass
+else
+    test_fail "pre-Develop abort restore guard is missing"
+fi
+
 test_case "codex command uses read-only sandbox outside Embrace Develop"
 log() { :; }
 PLUGIN_DIR="$PROJECT_ROOT"

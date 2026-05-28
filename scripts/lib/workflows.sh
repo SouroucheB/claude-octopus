@@ -2414,6 +2414,7 @@ embrace_full_workflow() {
     local resume_from=""
     local previous_octopus_run_id="${OCTOPUS_RUN_ID:-}"
     local embrace_managed_run_id=false
+    local pre_develop_snapshot_dir=""
     local probe_synthesis="" grasp_consensus="" tangle_validation="" ink_output=""
     local define_gate_output="" develop_gate_output="" embrace_report=""
     local embrace_previous_int_trap="" embrace_previous_term_trap="" embrace_signal_abort_ran=false
@@ -2520,6 +2521,75 @@ ${obs_ctx}"
     _current_embrace_output() {
         local file="$1"
         [[ -n "$file" && -f "$file" ]] && printf '%s\n' "$file"
+    }
+
+    _embrace_runner_owned_path() {
+        local path="$1"
+        case "$path" in
+            ""|.git|.git/*|results|results/*|runs|runs/*|.claude-octopus|.claude-octopus/*|metrics-session.json|progress.json|pids|session.json|.cache|.cache/*)
+                return 0
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+    }
+
+    _capture_pre_develop_worktree_snapshot() {
+        [[ "${OCTOPUS_EMBRACE_RESTORE_PREDEVELOP_MUTATIONS:-true}" == "false" ]] && return 0
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+        pre_develop_snapshot_dir="${RESULTS_DIR}/.embrace-predevelop-worktree-${task_group}"
+        mkdir -p "$pre_develop_snapshot_dir"
+        git diff --binary > "${pre_develop_snapshot_dir}/worktree.diff" 2>/dev/null || true
+        git diff --cached --binary > "${pre_develop_snapshot_dir}/index.diff" 2>/dev/null || true
+        git ls-files --others --exclude-standard 2>/dev/null | sort > "${pre_develop_snapshot_dir}/untracked-before.txt" || true
+    }
+
+    _restore_pre_develop_worktree_snapshot() {
+        local phase="${1:-}"
+        local before_file current_file path
+
+        [[ "${OCTOPUS_EMBRACE_RESTORE_PREDEVELOP_MUTATIONS:-true}" == "false" ]] && return 0
+        [[ -n "$pre_develop_snapshot_dir" && -d "$pre_develop_snapshot_dir" ]] || return 0
+        git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+        log WARN "Restoring non-Develop worktree mutations before stopping at ${phase}"
+
+        git restore --staged --worktree -- . >/dev/null 2>&1 || \
+            log WARN "Unable to restore tracked worktree changes for pre-Develop abort"
+
+        before_file="${pre_develop_snapshot_dir}/untracked-before.txt"
+        current_file="${pre_develop_snapshot_dir}/untracked-current.txt"
+        git ls-files --others --exclude-standard 2>/dev/null | sort > "$current_file" || true
+
+        comm -13 "$before_file" "$current_file" 2>/dev/null | while IFS= read -r path; do
+            _embrace_runner_owned_path "$path" && continue
+            case "$path" in
+                /*|../*|*/../*|.) continue ;;
+            esac
+            rm -rf -- "$path" 2>/dev/null || true
+        done
+
+        if [[ -s "${pre_develop_snapshot_dir}/index.diff" ]]; then
+            git apply --index --whitespace=nowarn "${pre_develop_snapshot_dir}/index.diff" >/dev/null 2>&1 || \
+                log WARN "Unable to reapply pre-existing staged worktree diff after pre-Develop restore"
+        fi
+        if [[ -s "${pre_develop_snapshot_dir}/worktree.diff" ]]; then
+            git apply --whitespace=nowarn "${pre_develop_snapshot_dir}/worktree.diff" >/dev/null 2>&1 || \
+                log WARN "Unable to reapply pre-existing unstaged worktree diff after pre-Develop restore"
+        fi
+    }
+
+    _embrace_phase_is_pre_develop_abort() {
+        case "${1:-}" in
+            probe|grasp|debate-define-develop)
+                return 0
+                ;;
+            *)
+                return 1
+                ;;
+        esac
     }
 
     _cleanup_embrace_exports() {
@@ -2649,6 +2719,10 @@ ${obs_ctx}"
         echo -e "Results: ${RESULTS_DIR}/"
         echo ""
 
+        if _embrace_phase_is_pre_develop_abort "$phase"; then
+            _restore_pre_develop_worktree_snapshot "$phase"
+        fi
+
         _write_embrace_session_state "$phase" "failed"
         save_session_checkpoint "$phase" "failed" "$output"
         _write_embrace_run_report "FAILED" "$phase" "$reason"
@@ -2708,6 +2782,7 @@ ${obs_ctx}"
 
     local workflow_dir="${RESULTS_DIR}/embrace-${task_group}"
     mkdir -p "$workflow_dir"
+    _capture_pre_develop_worktree_snapshot
 
     # Track timing
     local start_time=$SECONDS

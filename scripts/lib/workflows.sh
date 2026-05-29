@@ -1880,7 +1880,8 @@ embrace_debate_gate_extract_verdict() {
 
         [[ "$verdictish" == "true" ]] || continue
 
-        if [[ "$upper" == *"DO NOT PROCEED"* || "$upper" == *"SHOULD NOT PROCEED"* || "$upper" == *"CANNOT PROCEED"* || "$upper" == *"CAN NOT PROCEED"* || "$upper" == *"MUST NOT PROCEED"* || "$upper" == *"WILL NOT PROCEED"* || "$upper" == *"UNABLE TO PROCEED"* || "$upper" == *"NOT SAFE TO PROCEED"* || "$upper" == *"NE PAS PROCEDER"* || "$upper" == *"NE PAS PROCÉDER"* ]]; then
+        if [[ "$upper" == *"DO NOT PROCEED"* || "$upper" == *"SHOULD NOT PROCEED"* || "$upper" == *"CANNOT PROCEED"* || "$upper" == *"CAN NOT PROCEED"* || "$upper" == *"MUST NOT PROCEED"* || "$upper" == *"WILL NOT PROCEED"* || "$upper" == *"UNABLE TO PROCEED"* || "$upper" == *"NOT SAFE TO PROCEED"* || "$upper" == *"NE PAS PROCEDER"* || "$upper" == *"NE PAS PROCÉDER"* ]] || \
+           printf '%s\n' "$upper" | grep -Eiq 'PROCEED(ING)?[[:space:]]+(IS[[:space:]]+)?NOT[[:space:]]+RECOMMENDED|RECOMMEND(S|ED)?[[:space:]]+AGAINST[[:space:]]+PROCEED(ING)?|DO[[:space:]]+NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?|NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?'; then
             printf '%s\n' "stop"
             return 0
         fi
@@ -1896,7 +1897,8 @@ embrace_debate_gate_extract_verdict() {
             printf '%s\n' "stop"
             return 0
         fi
-        if [[ "$upper" == *"PROCEED"* ]]; then
+        if [[ "$stripped" == PROCEED* ]] || \
+           printf '%s\n' "$upper" | grep -Eiq '(^|[^A-Z0-9_])(VERDICT|DECISION)[^A-Z0-9_]+PROCEED([^A-Z0-9_]|$)'; then
             printf '%s\n' "proceed"
             return 0
         fi
@@ -1920,7 +1922,7 @@ embrace_debate_gate_has_blocking_verdict() {
     esac
 
     printf '%s\n' "$text" \
-        | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED)|SHOULD NOT PROCEED|CANNOT PROCEED|CAN NOT PROCEED|MUST NOT PROCEED|WILL NOT PROCEED|UNABLE TO PROCEED|NOT SAFE TO PROCEED)([^A-Z_]|$)'
+        | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED)|SHOULD NOT PROCEED|CANNOT PROCEED|CAN NOT PROCEED|MUST NOT PROCEED|WILL NOT PROCEED|UNABLE TO PROCEED|NOT SAFE TO PROCEED|PROCEED(ING)?[[:space:]]+(IS[[:space:]]+)?NOT[[:space:]]+RECOMMENDED|RECOMMEND(S|ED)?[[:space:]]+AGAINST[[:space:]]+PROCEED(ING)?|DO[[:space:]]+NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?|NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?)([^A-Z_]|$)'
 }
 embrace_debate_gate_block_is_self_referential() {
     local text="$1"

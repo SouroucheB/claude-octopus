@@ -294,6 +294,15 @@ else
     test_fail "negated proceed wording was parsed as non-blocking"
 fi
 
+test_case "non-contiguous proceed negations are blocking"
+if embrace_debate_gate_has_blocking_verdict $'Decision: PROCEED is not recommended until validation passes.' && \
+   embrace_debate_gate_has_blocking_verdict $'Verdict: recommend against proceeding until evidence exists.' && \
+   embrace_debate_gate_has_blocking_verdict $'Gate verdict: do not recommend proceeding because validation is missing.'; then
+    test_pass
+else
+    test_fail "non-contiguous proceed negation was parsed as non-blocking"
+fi
+
 test_case "proceed-with-risks prose is not a verdict"
 if embrace_debate_gate_has_blocking_verdict $'Risks: proceeding with risks is unacceptable.\nVerdict: REVISE'; then
     test_pass

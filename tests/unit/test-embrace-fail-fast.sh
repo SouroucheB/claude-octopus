@@ -177,6 +177,13 @@ EOF
     fi
     printf '%s\n' "gate response from ${1:-agent}"
 }
+parse_yaml_workflow() { return 0; }
+run_yaml_workflow() {
+    local task_group="${3:-test}"
+    PHASE_CALLS+="yaml "
+    printf '%s\n' "# yaml delivery" > "$RESULTS_DIR/ink-synthesis-${task_group}.md"
+    printf '%s\n' "$RESULTS_DIR/ink-synthesis-${task_group}.md"
+}
 save_session_checkpoint() {
     CHECKPOINTS+="${1}:${2}:${3:-}"$'\n'
 }
@@ -234,6 +241,7 @@ run_embrace_case() {
     CASE_NAME="$1"
     OCTOPUS_EMBRACE_DEBATE_GATES="${2:-none}"
     RESUME_PHASE="${3:-}"
+    OCTOPUS_YAML_RUNTIME="${4:-disabled}"
     PHASE_CALLS=""
     CHECKPOINTS=""
     PREFLIGHT_ARGS=""
@@ -256,6 +264,7 @@ run_embrace_case() {
     embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
     EMBRACE_STATUS=$?
     FAKE_DATE_EPOCH=""
+    OCTOPUS_YAML_RUNTIME=disabled
 
     return 0
 }
@@ -286,6 +295,18 @@ if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
     test_pass
 else
     test_fail "embrace ran debate gates even though none were requested"
+fi
+
+run_embrace_case "yaml_auto_available" "none" "" "auto" || true
+YAML_AUTO_ARTIFACTS=$(ls "$RESULTS_DIR"/ink-synthesis-*.md 2>/dev/null || true)
+
+test_case "embrace auto runtime stays on hardcoded artifact contract"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe grasp tangle ink " ]] && \
+   [[ -z "$YAML_AUTO_ARTIFACTS" ]]; then
+    test_pass
+else
+    test_fail "embrace auto runtime used YAML path or produced non-canonical artifacts (status=$EMBRACE_STATUS calls='$PHASE_CALLS')"
 fi
 
 run_embrace_case "all_ok" "both" || true

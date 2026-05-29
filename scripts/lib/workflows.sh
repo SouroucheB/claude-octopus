@@ -2902,6 +2902,15 @@ ${obs_ctx}"
         use_yaml_runtime=false
     fi
 
+    if [[ "$use_yaml_runtime" == "true" && "${OCTOPUS_EMBRACE_ALLOW_YAML_RUNTIME:-false}" != "true" ]]; then
+        if [[ "$OCTOPUS_YAML_RUNTIME" == "enabled" ]]; then
+            log "ERROR" "YAML runtime for Embrace is disabled until it implements the canonical phase artifact and run report contract"
+            return 1
+        fi
+        log "WARN" "YAML runtime auto-disabled for Embrace until canonical phase artifact and run report contract is implemented"
+        use_yaml_runtime=false
+    fi
+
     if [[ "$use_yaml_runtime" == "true" ]]; then
         log "INFO" "Delegating to YAML workflow runtime for embrace workflow"
         echo -e "${CYAN}Using YAML-driven workflow runtime (embrace.yaml)${NC}"

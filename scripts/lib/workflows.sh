@@ -696,6 +696,49 @@ ${_blind_spot_checklist}"
     display_progress_summary
 }
 
+embrace_phase_context_sanitize() {
+    LC_ALL=C sed \
+        -e 's/\[Synthesis failed - raw results attached\]/[Upstream phase synthesis failed; raw fallback omitted]/g' \
+        -e 's/\[Auto-synthesis failed - raw findings below\]/[Upstream phase synthesis failed; raw fallback omitted]/g'
+}
+
+build_embrace_phase_artifact_context() {
+    local file="$1"
+    local label="$2"
+    local max_chars="${3:-20000}"
+    local base
+    local size
+
+    [[ -f "$file" ]] || return 0
+    [[ "$max_chars" =~ ^[0-9]+$ ]] || max_chars=20000
+    max_chars=$((10#$max_chars))
+    [[ "$max_chars" -lt 200 ]] && max_chars=200
+
+    base=$(basename "$file")
+    size=$(wc -c < "$file" 2>/dev/null | tr -d '[:space:]')
+    size="${size:-0}"
+
+    echo "${label}:"
+    echo "- Artifact: ${base}"
+    echo "- Size: ${size} bytes"
+    if [[ "$size" =~ ^[0-9]+$ && "$size" -gt "$max_chars" ]]; then
+        echo "- Included: first ${max_chars} bytes (truncated)"
+    else
+        echo "- Included: full file"
+    fi
+    echo ""
+    echo '```markdown'
+    if [[ "$size" =~ ^[0-9]+$ && "$size" -gt "$max_chars" ]]; then
+        head -c "$max_chars" "$file" 2>/dev/null | embrace_phase_context_sanitize
+        echo ""
+        echo "[... truncated by embrace phase context: original ${size} bytes, included ${max_chars} bytes ...]"
+    else
+        embrace_phase_context_sanitize < "$file"
+    fi
+    echo '```'
+    echo ""
+}
+
 # Phase 2: GRASP (Define) - Consensus building on approach
 # The octopus grasps the core problem with coordinated tentacles
 grasp_define() {
@@ -727,7 +770,7 @@ grasp_define() {
     # Include probe context if available
     local context=""
     if [[ -n "$probe_results" && -f "$probe_results" ]]; then
-        context="Previous research findings:\n$(<"$probe_results")\n\n"
+        context="$(build_embrace_phase_artifact_context "$probe_results" "Previous research findings" "${OCTOPUS_GRASP_CONTEXT_CHARS:-20000}")"$'\n\n'
         log INFO "Using probe context from: $probe_results"
     fi
 
@@ -1106,7 +1149,7 @@ tangle_develop() {
     # Load problem definition if available
     local context=""
     if [[ -n "$grasp_file" && -f "$grasp_file" ]]; then
-        context="Problem Definition:\n$(<"$grasp_file")\n\n"
+        context="$(build_embrace_phase_artifact_context "$grasp_file" "Problem Definition" "${OCTOPUS_TANGLE_CONTEXT_CHARS:-20000}")"$'\n\n'
         log INFO "Using grasp context from: $grasp_file"
     fi
 

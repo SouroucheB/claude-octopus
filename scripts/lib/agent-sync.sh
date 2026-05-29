@@ -385,6 +385,17 @@ ${provider_ctx}"
         if [[ "$agent_type" == gemini* && "$_sync_reason" == "GEMINI_QUOTA_EXHAUSTED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
             mark_provider_quota_exhausted "gemini"
         fi
+        if [[ "$_sync_status" == "degraded" ]]; then
+            if [[ -z "$output" && "$agent_type" == codex* && -s "$temp_err" ]]; then
+                output=$(octo_sanitize_provider_stderr "$agent_type" "$temp_err" 2>/dev/null || cat "$temp_err")
+            fi
+            type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "$_sync_status" "$tokens_in" "$(octo_estimate_tokens_for_file "$temp_out" 2>/dev/null || echo 0)" "$_sync_reason" "$_elapsed_ms" "" "$role" || true
+            case "$agent_type" in codex*|gemini*|perplexity*|cursor-agent*)
+                output=$(wrap_cli_output "$agent_type" "$output") ;; esac
+            rm -f "$temp_err" "$temp_out"
+            echo "$output"
+            return $exit_code
+        fi
         type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "$_sync_status" "$tokens_in" "$(octo_estimate_tokens_for_file "$temp_out" 2>/dev/null || echo 0)" "$_sync_reason" "$_elapsed_ms" "" "$role" || true
         rm -f "$temp_err" "$temp_out"
         return $exit_code

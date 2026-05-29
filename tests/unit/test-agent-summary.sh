@@ -117,6 +117,18 @@ else
     test_fail "expected Codex stderr transcript to be degraded, got: ${classification:-<empty>}"
 fi
 
+test_case "classify_agent_output treats non-zero useful stdout as degraded"
+codex_nonzero_output="$WORKSPACE_DIR/results/codex-nonzero-useful.out"
+codex_nonzero_stderr="$WORKSPACE_DIR/results/codex-nonzero-useful.err"
+printf '%s\n' "Verdict: PROCEED_WITH_RISKS" "Useful gate evidence before non-zero exit." > "$codex_nonzero_output"
+> "$codex_nonzero_stderr"
+classification="$(classify_agent_output "$codex_nonzero_output" 2 "codex" "$codex_nonzero_stderr")"
+if [[ "$classification" == "degraded:Exit code 2 with usable output" ]]; then
+    test_pass
+else
+    test_fail "expected non-zero useful stdout to be degraded, got: ${classification:-<empty>}"
+fi
+
 test_case "Codex stderr sanitizer omits echoed prompt skill context"
 codex_prompt_echo="$WORKSPACE_DIR/results/codex-prompt-echo.err"
 cat > "$codex_prompt_echo" <<'EOF'

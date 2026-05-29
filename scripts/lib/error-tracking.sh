@@ -313,13 +313,21 @@ classify_agent_output() {
         return 0
     fi
 
-    if [[ "$exit_code" -ne 0 ]]; then
-        echo "failed:Exit code $exit_code"
+    if octo_file_has_provider_rejection "$output_file" "$stderr_file"; then
+        echo "failed:Prompt rejected by provider (oversize)"
         return 0
     fi
 
-    if octo_file_has_provider_rejection "$output_file" "$stderr_file"; then
-        echo "failed:Prompt rejected by provider (oversize)"
+    if [[ "$exit_code" -ne 0 ]]; then
+        if [[ -s "$output_file" ]] && grep -q '[[:alnum:]]' "$output_file" 2>/dev/null; then
+            echo "degraded:Exit code $exit_code with usable output"
+            return 0
+        fi
+        if [[ "$agent" == codex* ]] && octo_file_has_codex_recoverable_stderr "$stderr_file"; then
+            echo "degraded:Codex response captured on stderr"
+            return 0
+        fi
+        echo "failed:Exit code $exit_code"
         return 0
     fi
 

@@ -862,9 +862,11 @@ Execution instructions:
 - For [CODING] work, edit the repository files directly in the current worktree. Do not only describe a plan or paste code snippets.
 - For [CODING] work, treat file paths/directories named in the assigned subtask as your exclusive write scope. Do not edit files owned by another subtask; report a blocker if the required change crosses scopes.
 - Runner-owned Octopus artifacts are not a worker write scope. Do not create, update, delete, or claim ownership of Octopus state, gate, validation, delivery, report, or artifact files; the runner owns them.
+- For gate evidence, use current-run embrace-gate artifacts with timestamps and provider statuses; Octopus state.json alone is not proof that a gate executed.
 - If the subtask creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
 - Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the subtask must report a blocker.
 - In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
+- End the final output with a line exactly: TANGLE_REPORT_COMPLETE.
 - If the assigned subtask is incomplete, contradictory, or omits required context, report the blocker instead of inventing scope.
 EOF
 }
@@ -2608,6 +2610,7 @@ ${obs_ctx}"
         unset OCTOPUS_TASK_GROUP
         unset OCTOPUS_TOTAL_PHASES
         unset OCTOPUS_COMPLETED_PHASES
+        unset OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT
         unset CLAUDE_CODE_DISABLE_CRON 2>/dev/null || true
         if [[ -n "${embrace_previous_int_trap:-}" ]]; then eval "$embrace_previous_int_trap"; else trap - INT; fi
         if [[ -n "${embrace_previous_term_trap:-}" ]]; then eval "$embrace_previous_term_trap"; else trap - TERM; fi
@@ -2882,6 +2885,7 @@ ${obs_ctx}"
         unset OCTOPUS_TASK_GROUP
         unset OCTOPUS_TOTAL_PHASES
         unset OCTOPUS_COMPLETED_PHASES
+        unset OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT
         unset CLAUDE_CODE_DISABLE_CRON 2>/dev/null || true
         return 0
     fi
@@ -2991,6 +2995,11 @@ ${obs_ctx}"
 
     # Phase 3: TANGLE (Develop)
     if [[ -z "$resume_from" || "$resume_from" == "null" || "$resume_from" == "probe" || "$resume_from" == "grasp" ]]; then
+        if [[ -n "$define_gate_output" ]]; then
+            export OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT="$define_gate_output"
+        else
+            unset OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT
+        fi
         _restore_pre_develop_worktree_snapshot "tangle preflight"
         export OCTOPUS_WORKFLOW_PHASE="tangle"
         _write_embrace_session_state "tangle" "running"

@@ -279,6 +279,67 @@ else
     test_fail "analysis prompt unexpectedly required worktree changes"
 fi
 
+test_case "truncated verification report fails validation"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-truncated-report.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-truncated-report.md" \
+        $'## Worktree Changes\n- src/app/page.tsx\n\n## Integration Evidence\n- src/app/page.tsx is wired in the worktree.\n\n## Verification\n- canary.txt co'
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-truncated-report" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-truncated-report.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "Truncated or incomplete Tangle report" "$RESULTS_DIR/tangle-validation-evidence-truncated-report.md"
+); then
+    test_pass
+else
+    test_fail "truncated Verification section was accepted as a successful implementation report"
+fi
+
+test_case "state-json-only gate proof fails validation"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-state-only-gate-proof.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-state-only-gate-proof.md" \
+        $'## Worktree Changes\n- src/app/page.tsx\n\n## Integration Evidence\n- src/app/page.tsx is wired in the worktree.\n\n## Verification\n- Verified .claude-octopus/state.json contains embrace_debate_gate/define-develop, so the gate was evaluated.\nTANGLE_REPORT_COMPLETE'
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-state-only-gate-proof" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-state-only-gate-proof.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "State-only gate execution proof" "$RESULTS_DIR/tangle-validation-evidence-state-only-gate-proof.md"
+); then
+    test_pass
+else
+    test_fail "state.json-only gate proof was accepted as current-run gate execution evidence"
+fi
+
+test_case "state-json insufficiency warning does not fail validation"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-state-warning.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-state-warning.md" \
+        $'## Worktree Changes\n- src/app/page.tsx\n\n## Integration Evidence\n- src/app/page.tsx is wired in the worktree.\n\n## Verification\n- Octopus state.json alone is not proof that a Define to Develop gate executed.\nTANGLE_REPORT_COMPLETE'
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-state-warning" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-state-warning.txt" >/dev/null 2>&1
+    grep -q "No truncated reports or state-only gate proofs detected." "$RESULTS_DIR/tangle-validation-evidence-state-warning.md"
+); then
+    test_pass
+else
+    test_fail "state.json insufficiency warning was treated as a state-only gate proof"
+fi
+
 test_case "failed quality gate writes validation report before abort"
 if (
     cd "$REPO_DIR"

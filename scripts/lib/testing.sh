@@ -184,6 +184,105 @@ check_tangle_current_worktree_evidence() {
     rm -f "$current_file"
 }
 
+tangle_result_verification_section() {
+    local result_file="$1"
+
+    extract_tangle_result_output "$result_file" | awk '
+        /^## Verification[[:space:]]*$/ { capture = 1; next }
+        /^## [A-Za-z0-9 _-]+[[:space:]]*$/ && capture { capture = 0 }
+        capture && /^```/ { next }
+        capture && /^<!-- / { next }
+        capture { print }
+    ' 2>/dev/null || true
+}
+
+tangle_result_has_truncated_report() {
+    local result_file="$1"
+    local output verification last_line
+
+    if grep -Eiq 'OUTPUT TRUNCATED|Status: SUCCESS \(DEGRADED: Output truncated' "$result_file" 2>/dev/null; then
+        return 0
+    fi
+
+    output=$(extract_tangle_result_output "$result_file")
+    [[ "$output" == *"## Verification"* ]] || return 1
+
+    verification=$(tangle_result_verification_section "$result_file")
+    last_line=$(printf '%s\n' "$verification" | sed '/^[[:space:]]*$/d' | tail -1)
+    [[ -n "$last_line" ]] || return 0
+
+    case "$last_line" in
+        *"."|*"!"|*"?"|*":"|*";"|*","|*")"|*"]"|*"\`"|*"\""|*"TANGLE_REPORT_COMPLETE")
+            return 1
+            ;;
+    esac
+
+    printf '%s\n' "$last_line" | grep -Eq '[[:space:]][a-z]{1,3}$'
+}
+
+tangle_result_has_state_only_gate_proof() {
+    local result_file="$1"
+    local output
+    output=$(extract_tangle_result_output "$result_file")
+
+    printf '%s\n' "$output" | grep -Eiq '(^|[^A-Za-z0-9_])state\.json([^A-Za-z0-9_]|$)|\.claude-octopus/state\.json' || return 1
+    printf '%s\n' "$output" | grep -Eiq 'embrace_debate_gate|define[-_/ ]develop|Define[[:space:]]*(->|to)[[:space:]]*Develop|debate gate|gate' || return 1
+    printf '%s\n' "$output" | grep -Eiq 'state\.json.{0,120}(contains|shows|records|proves|proof|present|exists)|verified.{0,80}state\.json|state\.json.{0,160}so the gate|gate (was )?(evaluated|executed|passed|present).{0,120}state\.json' || return 1
+
+    if printf '%s\n' "$output" | grep -Eiq 'state\.json.{0,80}(not proof|insufficient|not sufficient|cannot prove|is not proof)'; then
+        return 1
+    fi
+
+    if printf '%s\n' "$output" | grep -Eiq 'embrace-gate-define-develop-[0-9A-Za-z_.@%+-]+\.md|Provider Statuses|Gate Provider Timeouts|Generated:'; then
+        return 1
+    fi
+
+    return 0
+}
+
+tangle_result_integrity_issues() {
+    local result_file="$1"
+    local issues=""
+
+    if tangle_result_has_truncated_report "$result_file"; then
+        issues+="Truncated or incomplete Tangle report: required Verification evidence appears empty, degraded, or cut mid-line."$'\n'
+    fi
+
+    if tangle_result_has_state_only_gate_proof "$result_file"; then
+        issues+="State-only gate execution proof: .claude-octopus/state.json is not sufficient without current-run embrace-gate artifact/status evidence."$'\n'
+    fi
+
+    printf '%s' "$issues"
+}
+
+tangle_gate_execution_evidence_report() {
+    local task_group="$1"
+    local gate_file="${OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT:-}"
+    local expected_base="embrace-gate-define-develop-${task_group}.md"
+
+    if [[ -z "$gate_file" ]]; then
+        echo "No prior Embrace gate artifact was provided to Tangle validation."
+        return 0
+    fi
+
+    if [[ ! -f "$gate_file" ]]; then
+        echo "#### Missing Gate Artifact"
+        echo "Expected Define -> Develop gate artifact was provided but is not readable: ${gate_file}"
+        return 0
+    fi
+
+    echo "Define -> Develop gate execution verified from runner artifact:"
+    echo "- Artifact: ${gate_file}"
+    if [[ "$(basename "$gate_file")" != "$expected_base" ]]; then
+        echo "- Current-run check: expected ${expected_base}; got $(basename "$gate_file")"
+    else
+        echo "- Current-run check: ${expected_base}"
+    fi
+    grep -m1 '^\*\*Generated:\*\*' "$gate_file" 2>/dev/null | sed 's/^/- /' || true
+    grep -m1 '^\*\*Provider Statuses:\*\*' "$gate_file" 2>/dev/null | sed 's/^/- /' || true
+    grep -m1 '^\*\*Gate Provider Timeouts:\*\*' "$gate_file" 2>/dev/null | sed 's/^/- /' || true
+}
+
 validate_tangle_results() {
     local task_group="$1"
     local original_prompt="$2"
@@ -200,6 +299,8 @@ validate_tangle_results() {
         local implementation_timeout_count=0
         local reasoning_success_count=0
         local reasoning_fail_count=0
+        local report_integrity_fail_count=0
+        local report_integrity_issues=""
         FAILED_SUBTASKS=""  # Reset for this validation pass (string-based)
 
         for result in "$RESULTS_DIR"/*-tangle-${task_group}*.md; do
@@ -231,6 +332,17 @@ validate_tangle_results() {
             local result_timed_out="false"
             if grep -q "Status: TIMEOUT" "$result" 2>/dev/null; then
                 result_timed_out="true"
+            fi
+
+            if [[ "$counts_for_implementation" == "true" && "$result_succeeded" == "true" ]]; then
+                local result_integrity_issues
+                result_integrity_issues=$(tangle_result_integrity_issues "$result")
+                if [[ -n "$result_integrity_issues" ]]; then
+                    result_succeeded="false"
+                    ((report_integrity_fail_count++)) || true
+                    report_integrity_issues+="$(basename "$result")"$'\n'
+                    report_integrity_issues+="$(printf '%s\n' "$result_integrity_issues" | sed '/^$/d; s/^/  - /')"$'\n'
+                fi
             fi
 
             if [[ "$counts_for_implementation" == "true" ]]; then
@@ -324,6 +436,12 @@ validate_tangle_results() {
             log WARN "Tangle produced no new worktree changes for an implementation task" 2>/dev/null || true
         fi
 
+        if [[ -n "$report_integrity_issues" ]]; then
+            gate_status="FAILED"
+            gate_color="${RED}"
+            log WARN "Tangle report integrity failures: $(echo "$report_integrity_issues" | tr '\n' ' ')" 2>/dev/null || true
+        fi
+
         # v8.20.1: Record quality gate metric
         record_task_metric "quality_gate" "$success_rate" 2>/dev/null || true
 
@@ -400,6 +518,8 @@ $challenge_result
 
         # Write validation report before branching so abort/escalate/retry paths
         # still leave an actionable artifact for embrace and post-run diagnosis.
+        local gate_execution_evidence
+        gate_execution_evidence=$(tangle_gate_execution_evidence_report "$task_group")
         cat > "$validation_file" << EOF
 # TANGLE Phase Validation Report
 ## Task: $original_prompt
@@ -412,6 +532,7 @@ $challenge_result
 - Provider timeouts: ${implementation_timeout_count}/${total} implementation result files
 - Evidence-backed timeouts: ${evidence_backed_timeout_count}/${implementation_timeout_count} implementation timeout result files (counted only when explicit file coverage and non-runner-owned worktree evidence are present)
 - Reasoning-only: ${reasoning_success_count}/${reasoning_total} successful, ${reasoning_fail_count}/${reasoning_total} failed/skipped result files (excluded from implementation score)
+- Report integrity failures: ${report_integrity_fail_count}/${total} implementation result files
 - Decision Branch: ${quality_branch}
 - Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
 
@@ -439,6 +560,17 @@ $(if [[ "$requires_worktree_changes" == "true" ]]; then
 else
     echo "Not required for this prompt."
 fi)
+
+### Tangle Report Integrity
+$(if [[ -n "$report_integrity_issues" ]]; then
+    echo "#### Integrity Failures"
+    printf '%s\n' "$report_integrity_issues" | sed '/^$/d'
+else
+    echo "No truncated reports or state-only gate proofs detected."
+fi)
+
+### Gate Execution Evidence
+${gate_execution_evidence}
 
 ### Subtask Results
 $results

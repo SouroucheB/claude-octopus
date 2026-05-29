@@ -103,4 +103,12 @@ else
     test_fail "spawned prompts did not require direct worktree edits and integration evidence"
 fi
 
+test_case "subtask prompts reject state-json-only gate evidence"
+if [[ "$captured_prompts" == *"Octopus state.json alone is not proof"* ]] && \
+   [[ "$captured_prompts" == *"current-run embrace-gate"* ]]; then
+    test_pass
+else
+    test_fail "spawned prompts did not require artifact/status proof for gate execution"
+fi
+
 test_summary

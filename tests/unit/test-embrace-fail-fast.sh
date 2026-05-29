@@ -285,6 +285,22 @@ else
     test_fail "embrace stopped despite explicit PROCEED_WITH_RISKS verdict"
 fi
 
+test_case "negated proceed gate verdict is blocking"
+if embrace_debate_gate_has_blocking_verdict $'Decision: should not proceed without fixing data loss.' && \
+   embrace_debate_gate_has_blocking_verdict $'Verdict: cannot proceed safely until the timeout is addressed.' && \
+   embrace_debate_gate_has_blocking_verdict $'Gate verdict: unable to proceed because validation is missing.'; then
+    test_pass
+else
+    test_fail "negated proceed wording was parsed as non-blocking"
+fi
+
+test_case "proceed-with-risks prose is not a verdict"
+if embrace_debate_gate_has_blocking_verdict $'Risks: proceeding with risks is unacceptable.\nVerdict: REVISE'; then
+    test_pass
+else
+    test_fail "proceed-with-risks prose overrode the actual REVISE verdict"
+fi
+
 CASE_NAME="gate_claude_hangs"
 OCTOPUS_EMBRACE_DEBATE_GATES="define"
 OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT=1

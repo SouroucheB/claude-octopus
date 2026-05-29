@@ -38,6 +38,10 @@ write_success_result() {
     local path="$1"
     local body="$2"
     local role="${3:-implementer}"
+    local auto_verification="${4:-true}"
+    if [[ "$auto_verification" == "true" && "$body" != *"## Verification"* ]]; then
+        body="${body}"$'\n\n## Verification\n- Test fixture verification completed.\nTANGLE_REPORT_COMPLETE'
+    fi
     cat > "$path" <<EOF
 # Agent: codex
 # Task ID: tangle-evidence-0
@@ -338,6 +342,29 @@ if (
     test_pass
 else
     test_fail "state.json insufficiency warning was treated as a state-only gate proof"
+fi
+
+test_case "success report without verification fails validation"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-missing-verification.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-missing-verification.md" \
+        $'## Worktree Changes\n- src/app/page.tsx\n\n## Integration Evidence\n- src/app/page.tsx is wired in the worktree.' \
+        "implementer" \
+        "false"
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-missing-verification" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-missing-verification.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "Missing Tangle verification section" "$RESULTS_DIR/tangle-validation-evidence-missing-verification.md"
+); then
+    test_pass
+else
+    test_fail "successful implementation report without Verification section was accepted"
 fi
 
 test_case "failed quality gate writes validation report before abort"

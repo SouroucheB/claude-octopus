@@ -1878,15 +1878,14 @@ embrace_debate_gate_extract_verdict() {
             PROCEED*|REVISE*|STOP*|BLOCKED*) verdictish="true" ;;
         esac
 
-        if [[ "$upper" == *"PROCEED_WITH_RISKS"* || "$upper" == *"PROCEED-WITH-RISKS"* || "$upper" == *"PROCEED WITH RISKS"* ]]; then
-            printf '%s\n' "proceed_with_risks"
-            return 0
-        fi
-
         [[ "$verdictish" == "true" ]] || continue
 
-        if [[ "$upper" == *"DO NOT PROCEED"* || "$upper" == *"NE PAS PROCEDER"* || "$upper" == *"NE PAS PROCÉDER"* ]]; then
+        if [[ "$upper" == *"DO NOT PROCEED"* || "$upper" == *"SHOULD NOT PROCEED"* || "$upper" == *"CANNOT PROCEED"* || "$upper" == *"CAN NOT PROCEED"* || "$upper" == *"MUST NOT PROCEED"* || "$upper" == *"WILL NOT PROCEED"* || "$upper" == *"UNABLE TO PROCEED"* || "$upper" == *"NOT SAFE TO PROCEED"* || "$upper" == *"NE PAS PROCEDER"* || "$upper" == *"NE PAS PROCÉDER"* ]]; then
             printf '%s\n' "stop"
+            return 0
+        fi
+        if [[ "$upper" == *"PROCEED_WITH_RISKS"* || "$upper" == *"PROCEED-WITH-RISKS"* || "$upper" == *"PROCEED WITH RISKS"* ]]; then
+            printf '%s\n' "proceed_with_risks"
             return 0
         fi
         if [[ "$upper" == *"REVISE"* ]]; then
@@ -1921,7 +1920,7 @@ embrace_debate_gate_has_blocking_verdict() {
     esac
 
     printf '%s\n' "$text" \
-        | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED))([^A-Z_]|$)'
+        | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED)|SHOULD NOT PROCEED|CANNOT PROCEED|CAN NOT PROCEED|MUST NOT PROCEED|WILL NOT PROCEED|UNABLE TO PROCEED|NOT SAFE TO PROCEED)([^A-Z_]|$)'
 }
 embrace_debate_gate_block_is_self_referential() {
     local text="$1"

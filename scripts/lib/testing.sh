@@ -244,6 +244,10 @@ tangle_result_integrity_issues() {
     local result_file="$1"
     local issues=""
 
+    if ! grep -q '^## Verification[[:space:]]*$' "$result_file" 2>/dev/null; then
+        issues+="Missing Tangle verification section: successful implementation reports must include usable verification evidence."$'\n'
+    fi
+
     if tangle_result_has_truncated_report "$result_file"; then
         issues+="Truncated or incomplete Tangle report: required Verification evidence appears empty, degraded, or cut mid-line."$'\n'
     fi

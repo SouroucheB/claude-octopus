@@ -50,6 +50,9 @@ trap 'rm -rf "$RESULTS_DIR"' EXIT
 write_success_result() {
     local file="$1"
     local output="$2"
+    if [[ "$output" != *"## Verification"* ]]; then
+        output="${output}"$'\n\n## Verification\n- Test fixture verification completed.\nTANGLE_REPORT_COMPLETE'
+    fi
     cat > "$file" <<EOF
 # Agent: codex
 # Task ID: tangle-coverage-0

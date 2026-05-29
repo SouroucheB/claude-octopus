@@ -837,8 +837,10 @@ tangle_sanitize_runner_owned_paths() {
         | sed -E \
             -e 's#`?(\./)?\.claude-octopus(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
             -e 's#`?(\./)?\.octo(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
+            -e 's#`?(\./)?results(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
             -e 's#`?~/.claude-octopus(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
             -e 's#`?/[^`[:space:],;)]*/\.claude-octopus(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
+            -e 's#`?/[^`[:space:],;)]*/results(/[^`[:space:],;)]*)?`?#[runner-owned artifact path removed]#g' \
             -e 's#`?(probe-synthesis|grasp-consensus|tangle-validation|embrace-gate|delivery|embrace-report)-[A-Za-z0-9_.@%+-]+\.md`?#[runner-owned artifact path removed]#g'
 }
 

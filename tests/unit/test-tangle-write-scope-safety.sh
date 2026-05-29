@@ -106,9 +106,10 @@ fi
 test_case "runner-owned artifact scopes are not delegated to worker prompts"
 runner_owned_prompt=$(build_tangle_subtask_prompt \
     "Validate the full Embrace workflow while changing validation.txt only." \
-    "Apply the marker and update workflow artifacts. Files: \`validation.txt\`, \`.claude-octopus/\`, \`tangle-validation-123.md\`, \`delivery-123.md\`")
+    "Apply the marker and update workflow artifacts. Files: \`validation.txt\`, \`.claude-octopus/\`, \`results/tangle-validation-123.md\`, \`tangle-validation-123.md\`, \`delivery-123.md\`")
 if [[ "$runner_owned_prompt" == *"validation.txt"* ]] && \
    [[ "$runner_owned_prompt" != *".claude-octopus"* ]] && \
+   [[ "$runner_owned_prompt" != *"results/"* ]] && \
    [[ "$runner_owned_prompt" != *"tangle-validation-123.md"* ]] && \
    [[ "$runner_owned_prompt" != *"delivery-123.md"* ]] && \
    [[ "$runner_owned_prompt" == *"Runner-owned Octopus artifacts"* ]]; then

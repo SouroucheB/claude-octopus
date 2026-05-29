@@ -490,7 +490,7 @@ get_resume_phase() {
 get_phase_output() {
     local phase="$1"
     if [[ -f "$SESSION_FILE" ]] && command -v jq &> /dev/null; then
-        jq -r ".phases.$phase.output // \"\"" "$SESSION_FILE"
+        jq -r --arg phase "$phase" '.phases[$phase].output // ""' "$SESSION_FILE"
     fi
 }
 

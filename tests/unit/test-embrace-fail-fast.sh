@@ -53,6 +53,7 @@ CASE_NAME=""
 PHASE_CALLS=""
 CHECKPOINTS=""
 EMBRACE_STATUS=0
+RESUME_PHASE=""
 
 log() { :; }
 cleanup_old_results() { :; }
@@ -61,6 +62,21 @@ cleanup_expired_checkpoints() { :; }
 reset_provider_lockouts() { :; }
 search_observations() { :; }
 init_session() { :; }
+check_resume_session() { [[ -n "$RESUME_PHASE" ]]; }
+get_resume_phase() { printf '%s\n' "$RESUME_PHASE"; }
+get_phase_output() {
+    local phase="$1"
+    local file=""
+    case "$phase" in
+        probe) file="$RESULTS_DIR/probe-synthesis-resume.md" ;;
+        grasp) file="$RESULTS_DIR/grasp-consensus-resume.md" ;;
+        debate-define-develop) file="$RESULTS_DIR/embrace-gate-define-develop-resume.md" ;;
+        tangle) file="$RESULTS_DIR/tangle-validation-resume.md" ;;
+        debate-develop-deliver) file="$RESULTS_DIR/embrace-gate-develop-deliver-resume.md" ;;
+        ink) file="$RESULTS_DIR/delivery-resume.md" ;;
+    esac
+    [[ -n "$file" && -f "$file" ]] && printf '%s\n' "$file"
+}
 display_workflow_cost_estimate() { return 0; }
 PREFLIGHT_ARGS=""
 preflight_check() { PREFLIGHT_ARGS+="${1:-false}"$'\n'; return 0; }
@@ -183,18 +199,45 @@ ink_deliver() {
     printf '%s\n' "# delivery" > "$RESULTS_DIR/delivery-${OCTOPUS_TASK_GROUP:-test}.md"
 }
 
+seed_resume_artifacts() {
+    local phase="$1"
+
+    printf '%s\n' "# resumed probe synthesis" > "$RESULTS_DIR/probe-synthesis-resume.md"
+    case "$phase" in probe) return 0 ;; esac
+
+    printf '%s\n' "# resumed grasp consensus" > "$RESULTS_DIR/grasp-consensus-resume.md"
+    case "$phase" in grasp) return 0 ;; esac
+
+    printf '%s\n' "# resumed define gate" > "$RESULTS_DIR/embrace-gate-define-develop-resume.md"
+    case "$phase" in debate-define-develop) return 0 ;; esac
+
+    printf '%s\n' "### Quality Gate: PASSED" > "$RESULTS_DIR/tangle-validation-resume.md"
+    case "$phase" in tangle) return 0 ;; esac
+
+    printf '%s\n' "# resumed develop gate" > "$RESULTS_DIR/embrace-gate-develop-deliver-resume.md"
+    case "$phase" in debate-develop-deliver) return 0 ;; esac
+
+    printf '%s\n' "# resumed delivery" > "$RESULTS_DIR/delivery-resume.md"
+}
+
 run_embrace_case() {
     set +e
     CASE_NAME="$1"
     OCTOPUS_EMBRACE_DEBATE_GATES="${2:-none}"
+    RESUME_PHASE="${3:-}"
     PHASE_CALLS=""
     CHECKPOINTS=""
     PREFLIGHT_ARGS=""
     EMBRACE_STATUS=0
+    RESUME_SESSION=false
     EMBRACE_DEBATE_GATE_OUTPUT=""
     unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT
     rm -rf "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR"
     mkdir -p "$RESULTS_DIR" "$LOGS_DIR" "$WORKSPACE_DIR" "$HOME"
+    if [[ -n "$RESUME_PHASE" ]]; then
+        RESUME_SESSION=true
+        seed_resume_artifacts "$RESUME_PHASE"
+    fi
 
     embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
     EMBRACE_STATUS=$?
@@ -346,6 +389,34 @@ if embrace_debate_gate_has_blocking_verdict $'Decision: PROCEED\nNo machine-read
 else
     test_fail "missing/invalid structured verdict did not fail closed"
 fi
+
+run_embrace_case "resume_after_define_gate" "both" "debate-define-develop" || true
+
+test_case "resume after define gate runs tangle instead of skipping it"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "tangle ink " ]] && \
+   [[ "$CHECKPOINTS" != *"debate-define-develop"* ]] && \
+   [[ "$CHECKPOINTS" == *"tangle:"* ]] && \
+   [[ "$CHECKPOINTS" == *"debate-develop-deliver"* ]]; then
+    test_pass
+else
+    test_fail "resume from debate-define-develop did not continue at Tangle (status=$EMBRACE_STATUS calls='$PHASE_CALLS' checkpoints='$CHECKPOINTS')"
+fi
+
+run_embrace_case "resume_after_tangle" "both" "tangle" || true
+
+test_case "resume after tangle does not rerun define gate or tangle"
+if [[ "$EMBRACE_STATUS" -eq 0 ]] && \
+   [[ "$PHASE_CALLS" == "ink " ]] && \
+   [[ "$CHECKPOINTS" != *"debate-define-develop"* ]] && \
+   [[ "$CHECKPOINTS" != *"tangle:"* ]] && \
+   [[ "$CHECKPOINTS" == *"debate-develop-deliver"* ]]; then
+    test_pass
+else
+    test_fail "resume from tangle reran an earlier phase (status=$EMBRACE_STATUS calls='$PHASE_CALLS' checkpoints='$CHECKPOINTS')"
+fi
+RESUME_PHASE=""
+RESUME_SESSION=false
 
 CASE_NAME="gate_claude_hangs"
 OCTOPUS_EMBRACE_DEBATE_GATES="define"

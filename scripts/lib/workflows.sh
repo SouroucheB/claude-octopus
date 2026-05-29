@@ -2547,6 +2547,29 @@ ${obs_ctx}"
         [[ -n "$file" && -f "$file" ]] && printf '%s\n' "$file"
     }
 
+    _embrace_phase_order() {
+        case "${1:-}" in
+            probe) echo 1 ;;
+            grasp) echo 2 ;;
+            debate-define-develop) echo 3 ;;
+            tangle) echo 4 ;;
+            debate-develop-deliver) echo 5 ;;
+            ink) echo 6 ;;
+            *) return 1 ;;
+        esac
+    }
+
+    _embrace_should_run_phase() {
+        local phase="$1"
+        local resume_order phase_order
+
+        [[ -z "$resume_from" || "$resume_from" == "null" ]] && return 0
+        resume_order=$(_embrace_phase_order "$resume_from" 2>/dev/null) || return 0
+        phase_order=$(_embrace_phase_order "$phase" 2>/dev/null) || return 0
+
+        [[ "$phase_order" -gt "$resume_order" ]]
+    }
+
     _embrace_runner_owned_path() {
         local path="$1"
         case "$path" in
@@ -2907,7 +2930,7 @@ ${obs_ctx}"
     # HARDCODED PHASE LOGIC (fallback when YAML runtime not available)
     # ═══════════════════════════════════════════════════════════════════════════
     # Phase 1: PROBE (Discover)
-    if [[ -z "$resume_from" || "$resume_from" == "null" ]]; then
+    if _embrace_should_run_phase "probe"; then
         export OCTOPUS_WORKFLOW_PHASE="probe"
         _write_embrace_session_state "probe" "running"
         echo ""
@@ -2946,7 +2969,7 @@ ${obs_ctx}"
     fi
 
     # Phase 2: GRASP (Define)
-    if [[ -z "$resume_from" || "$resume_from" == "null" || "$resume_from" == "probe" ]]; then
+    if _embrace_should_run_phase "grasp"; then
         export OCTOPUS_WORKFLOW_PHASE="grasp"
         _write_embrace_session_state "grasp" "running"
         echo ""
@@ -2988,26 +3011,35 @@ ${obs_ctx}"
     # Autonomy controls whether humans are asked between phases; it must not
     # silently waive a gate the user explicitly selected.
     if embrace_debate_gate_requested "define-develop"; then
-        _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"
-        export OCTOPUS_WORKFLOW_PHASE="debate-define-develop"
-        _write_embrace_session_state "debate-define-develop" "running"
-        if ! embrace_debate_gate "define-develop" "$prompt" "$grasp_consensus"; then
+        if _embrace_should_run_phase "debate-define-develop"; then
+            _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"
+            export OCTOPUS_WORKFLOW_PHASE="debate-define-develop"
+            _write_embrace_session_state "debate-define-develop" "running"
+            if ! embrace_debate_gate "define-develop" "$prompt" "$grasp_consensus"; then
+                define_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
+                _abort_embrace_phase "debate-define-develop" "requested debate gate failed" "$grasp_consensus"
+                return 1
+            fi
             define_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
-            _abort_embrace_phase "debate-define-develop" "requested debate gate failed" "$grasp_consensus"
-            return 1
+            if [[ -z "$define_gate_output" || ! -f "$define_gate_output" ]]; then
+                _abort_embrace_phase "debate-define-develop" "requested debate gate produced no artifact" "$grasp_consensus"
+                return 1
+            fi
+            _write_embrace_session_state "debate-define-develop" "completed"
+            handle_autonomy_checkpoint "debate-define-develop" "completed"
+            sleep 1
+        else
+            define_gate_output=$(get_phase_output "debate-define-develop")
+            if [[ -z "$define_gate_output" || ! -f "$define_gate_output" ]]; then
+                _abort_embrace_phase "debate-define-develop" "resume requested but define gate artifact is missing" "$grasp_consensus"
+                return 1
+            fi
+            log INFO "Skipping define-develop debate gate (resuming)"
         fi
-        define_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
-        if [[ -z "$define_gate_output" || ! -f "$define_gate_output" ]]; then
-            _abort_embrace_phase "debate-define-develop" "requested debate gate produced no artifact" "$grasp_consensus"
-            return 1
-        fi
-        _write_embrace_session_state "debate-define-develop" "completed"
-        handle_autonomy_checkpoint "debate-define-develop" "completed"
-        sleep 1
     fi
 
     # Phase 3: TANGLE (Develop)
-    if [[ -z "$resume_from" || "$resume_from" == "null" || "$resume_from" == "probe" || "$resume_from" == "grasp" ]]; then
+    if _embrace_should_run_phase "tangle"; then
         if [[ -n "$define_gate_output" ]]; then
             export OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT="$define_gate_output"
         else
@@ -3059,51 +3091,70 @@ ${obs_ctx}"
 
     # Optional requested gate: Develop → Deliver.
     if embrace_debate_gate_requested "develop-deliver"; then
-        export OCTOPUS_WORKFLOW_PHASE="debate-develop-deliver"
-        _write_embrace_session_state "debate-develop-deliver" "running"
-        if ! embrace_debate_gate "develop-deliver" "$prompt" "$tangle_validation"; then
+        if _embrace_should_run_phase "debate-develop-deliver"; then
+            export OCTOPUS_WORKFLOW_PHASE="debate-develop-deliver"
+            _write_embrace_session_state "debate-develop-deliver" "running"
+            if ! embrace_debate_gate "develop-deliver" "$prompt" "$tangle_validation"; then
+                develop_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
+                _abort_embrace_phase "debate-develop-deliver" "requested debate gate failed" "$tangle_validation"
+                return 1
+            fi
             develop_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
-            _abort_embrace_phase "debate-develop-deliver" "requested debate gate failed" "$tangle_validation"
-            return 1
+            if [[ -z "$develop_gate_output" || ! -f "$develop_gate_output" ]]; then
+                _abort_embrace_phase "debate-develop-deliver" "requested debate gate produced no artifact" "$tangle_validation"
+                return 1
+            fi
+            _write_embrace_session_state "debate-develop-deliver" "completed"
+            handle_autonomy_checkpoint "debate-develop-deliver" "completed"
+            sleep 1
+        else
+            develop_gate_output=$(get_phase_output "debate-develop-deliver")
+            if [[ -z "$develop_gate_output" || ! -f "$develop_gate_output" ]]; then
+                _abort_embrace_phase "debate-develop-deliver" "resume requested but develop gate artifact is missing" "$tangle_validation"
+                return 1
+            fi
+            log INFO "Skipping develop-deliver debate gate (resuming)"
         fi
-        develop_gate_output="$EMBRACE_DEBATE_GATE_OUTPUT"
-        if [[ -z "$develop_gate_output" || ! -f "$develop_gate_output" ]]; then
-            _abort_embrace_phase "debate-develop-deliver" "requested debate gate produced no artifact" "$tangle_validation"
-            return 1
-        fi
-        _write_embrace_session_state "debate-develop-deliver" "completed"
-        handle_autonomy_checkpoint "debate-develop-deliver" "completed"
-        sleep 1
     fi
 
     # Phase 4: INK (Deliver)
-    export OCTOPUS_WORKFLOW_PHASE="ink"
-    _write_embrace_session_state "ink" "running"
-    echo ""
-    echo -e "${CYAN}[4/4] Starting INK phase (Deliver)...${NC}"
-    echo ""
-    if ! ink_deliver "$prompt" "$tangle_validation"; then
-        _abort_embrace_phase "ink" "ink_deliver returned non-zero" "$tangle_validation"
-        return 1
-    fi
+    if _embrace_should_run_phase "ink"; then
+        export OCTOPUS_WORKFLOW_PHASE="ink"
+        _write_embrace_session_state "ink" "running"
+        echo ""
+        echo -e "${CYAN}[4/4] Starting INK phase (Deliver)...${NC}"
+        echo ""
+        if ! ink_deliver "$prompt" "$tangle_validation"; then
+            _abort_embrace_phase "ink" "ink_deliver returned non-zero" "$tangle_validation"
+            return 1
+        fi
 
-    # v7.25.0: Display phase metrics
-    if command -v display_phase_metrics &> /dev/null; then
-        display_phase_metrics "ink" 2>/dev/null || true
-    fi
+        # v7.25.0: Display phase metrics
+        if command -v display_phase_metrics &> /dev/null; then
+            display_phase_metrics "ink" 2>/dev/null || true
+        fi
 
-    # v8.14.0: Capture phase context in persistent state
-    ink_output=$(_current_embrace_output "$RESULTS_DIR/delivery-${task_group}.md")
-    if [[ -z "$ink_output" ]]; then
-        _abort_embrace_phase "ink" "missing current-run delivery artifact (expected delivery-${task_group}.md)" "$tangle_validation"
-        return 1
-    fi
-    update_context "deliver" "$(head -20 "$ink_output" 2>/dev/null | tr '\n' ' ')" 2>/dev/null || true
+        # v8.14.0: Capture phase context in persistent state
+        ink_output=$(_current_embrace_output "$RESULTS_DIR/delivery-${task_group}.md")
+        if [[ -z "$ink_output" ]]; then
+            _abort_embrace_phase "ink" "missing current-run delivery artifact (expected delivery-${task_group}.md)" "$tangle_validation"
+            return 1
+        fi
+        update_context "deliver" "$(head -20 "$ink_output" 2>/dev/null | tr '\n' ' ')" 2>/dev/null || true
 
-    OCTOPUS_COMPLETED_PHASES=4
-    export OCTOPUS_WORKFLOW_PHASE="complete"
-    _write_embrace_session_state "ink" "completed"
-    save_session_checkpoint "ink" "completed" "$ink_output"
+        OCTOPUS_COMPLETED_PHASES=4
+        export OCTOPUS_WORKFLOW_PHASE="complete"
+        _write_embrace_session_state "ink" "completed"
+        save_session_checkpoint "ink" "completed" "$ink_output"
+    else
+        ink_output=$(get_phase_output "ink")
+        if [[ -z "$ink_output" || ! -f "$ink_output" ]]; then
+            _abort_embrace_phase "ink" "resume requested but delivery artifact is missing" "$tangle_validation"
+            return 1
+        fi
+        export OCTOPUS_WORKFLOW_PHASE="complete"
+        log INFO "Skipping ink phase (resuming)"
+    fi
 
     # v8.18.0: Record phase completion decision
     write_structured_decision \

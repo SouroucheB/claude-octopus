@@ -47,7 +47,8 @@ fi
 test_case "pre-Develop restore preserves pre-existing untracked file contents"
 if grep -q "_capture_pre_develop_untracked_contents" "$WORKFLOWS" && \
    grep -q "_restore_pre_develop_untracked_contents" "$WORKFLOWS" && \
-   grep -q "untracked-before.txt" "$WORKFLOWS"; then
+   grep -q "untracked-before.txt" "$WORKFLOWS" && \
+   grep -q "core.quotePath=false" "$WORKFLOWS"; then
     test_pass
 else
     test_fail "pre-Develop restore does not snapshot/reapply pre-existing untracked files"

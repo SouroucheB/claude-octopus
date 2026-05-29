@@ -2706,7 +2706,7 @@ ${obs_ctx}"
         mkdir -p "$pre_develop_snapshot_dir"
         git diff --binary > "${pre_develop_snapshot_dir}/worktree.diff" 2>/dev/null || true
         git diff --cached --binary > "${pre_develop_snapshot_dir}/index.diff" 2>/dev/null || true
-        git ls-files --others --exclude-standard 2>/dev/null | sort > "${pre_develop_snapshot_dir}/untracked-before.txt" || true
+        git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | sort > "${pre_develop_snapshot_dir}/untracked-before.txt" || true
         _capture_pre_develop_untracked_contents
     }
 
@@ -2725,7 +2725,7 @@ ${obs_ctx}"
 
         before_file="${pre_develop_snapshot_dir}/untracked-before.txt"
         current_file="${pre_develop_snapshot_dir}/untracked-current.txt"
-        git ls-files --others --exclude-standard 2>/dev/null | sort > "$current_file" || true
+        git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | sort > "$current_file" || true
 
         comm -13 "$before_file" "$current_file" 2>/dev/null | while IFS= read -r path; do
             _embrace_runner_owned_path "$path" && continue

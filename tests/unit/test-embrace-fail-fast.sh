@@ -76,6 +76,11 @@ run_agent_sync() {
         return 2
     fi
     if [[ "$CASE_NAME" == "gate_codex_degraded_output" && "${5:-}" == "embrace-gate" ]]; then
+        if [[ "${4:-}" == "synthesizer" ]]; then
+            printf '%s\n' "VERDICT: PROCEED_WITH_RISKS"
+            printf '%s\n' "Required actions before next phase: none."
+            return 0
+        fi
         if [[ "${1:-}" == "codex" && "${4:-}" == "code-reviewer" ]]; then
             printf '%s\n' "Verdict: PROCEED_WITH_RISKS - Codex degraded but useful."
             return 2
@@ -84,7 +89,8 @@ run_agent_sync() {
     fi
     if [[ "$CASE_NAME" == "gate_blocks_revise" && "${5:-}" == "embrace-gate" ]]; then
         if [[ "${4:-}" == "synthesizer" ]]; then
-            printf '%s\n' "Verdict: REVISE — do not enter Develop until blockers are resolved."
+            printf '%s\n' "VERDICT: REVISE"
+            printf '%s\n' "Do not enter Develop until blockers are resolved."
         else
             printf '%s\n' "Verdict: REVISE"
         fi
@@ -93,7 +99,7 @@ run_agent_sync() {
     if [[ "$CASE_NAME" == "gate_self_referential_revise" && "${5:-}" == "embrace-gate" ]]; then
         if [[ "${4:-}" == "synthesizer" ]]; then
             cat <<'EOF'
-Verdict: REVISE (blocking)
+VERDICT: REVISE
 
 The current-run embrace-gate-define-develop-*.md artifact is missing. The context also lacks current-run tangle-validation-*.md and delivery-*.md artifacts. However, this review itself is the gate input and those artifacts cannot be prerequisites for entering Develop.
 EOF
@@ -105,6 +111,8 @@ EOF
     if [[ "$CASE_NAME" == "gate_proceed_with_risks" && "${5:-}" == "embrace-gate" ]]; then
         if [[ "${4:-}" == "synthesizer" ]]; then
             cat <<'EOF'
+VERDICT: PROCEED_WITH_RISKS
+
 ## Gate Synthesis
 
 ### Verdict consolide
@@ -125,13 +133,22 @@ EOF
         printf '%s\n' "Verdict: PROCEED"
         return 0
     fi
+    if [[ "$CASE_NAME" == "gate_claude_hangs" && "${5:-}" == "embrace-gate" && "${4:-}" == "synthesizer" ]]; then
+        printf '%s\n' "VERDICT: PROCEED"
+        return 0
+    fi
     if [[ "$CASE_NAME" == "gate_synthesis_partial_revise_timeout" && "${5:-}" == "embrace-gate" ]]; then
         if [[ "${4:-}" == "synthesizer" ]]; then
-            printf '%s\n' "Gate verdict: REVISE — partial blocking synthesis before timeout."
+            printf '%s\n' "VERDICT: REVISE"
+            printf '%s\n' "partial blocking synthesis before timeout."
             /bin/sleep 5
             return 0
         fi
         printf '%s\n' "Verdict: PROCEED"
+        return 0
+    fi
+    if [[ "${5:-}" == "embrace-gate" && "${4:-}" == "synthesizer" ]]; then
+        printf '%s\n' "VERDICT: PROCEED"
         return 0
     fi
     printf '%s\n' "gate response from ${1:-agent}"
@@ -308,6 +325,26 @@ if embrace_debate_gate_has_blocking_verdict $'Risks: proceeding with risks is un
     test_pass
 else
     test_fail "proceed-with-risks prose overrode the actual REVISE verdict"
+fi
+
+test_case "structured gate verdict is authoritative"
+if ! embrace_debate_gate_has_blocking_verdict $'VERDICT: PROCEED\nRisks: data loss was reviewed.' && \
+   ! embrace_debate_gate_has_blocking_verdict $'VERDICT: PROCEED_WITH_RISKS\nRisks: proceed with monitoring.' && \
+   embrace_debate_gate_has_blocking_verdict $'VERDICT: REVISE\nNotes: later we may proceed.' && \
+   embrace_debate_gate_has_blocking_verdict $'VERDICT: STOP\nNotes: do not proceed.'; then
+    test_pass
+else
+    test_fail "structured verdict token was not authoritative"
+fi
+
+test_case "missing or invalid structured gate verdict fails closed"
+if embrace_debate_gate_has_blocking_verdict $'Decision: PROCEED\nNo machine-readable verdict.' && \
+   embrace_debate_gate_has_blocking_verdict $'Verdict: we advise against proceeding.' && \
+   embrace_debate_gate_has_blocking_verdict $'VERDICT: HOLD\nNo canonical verdict.' && \
+   embrace_debate_gate_has_blocking_verdict $'VERDICT: PROCEED only after fixing the data loss bug'; then
+    test_pass
+else
+    test_fail "missing/invalid structured verdict did not fail closed"
 fi
 
 CASE_NAME="gate_claude_hangs"

@@ -1864,44 +1864,36 @@ embrace_debate_gate_requested() {
 
 embrace_debate_gate_extract_verdict() {
     local text="$1"
-    local line upper stripped verdictish
+    local line upper stripped value
 
     while IFS= read -r line; do
         upper=$(printf '%s' "$line" | tr '[:lower:]' '[:upper:]')
-        stripped=$(printf '%s' "$upper" | sed 's/^[[:space:]*`#>.:-]*//')
-        verdictish="false"
+        stripped=$(printf '%s' "$upper" | sed -E 's/^[[:space:]*`#>.:-]*//; s/[[:space:]]+$//')
+        [[ "$stripped" == VERDICT:* ]] || continue
 
-        if [[ "$upper" == *"VERDICT"* || "$upper" == *"DECISION"* ]]; then
-            verdictish="true"
-        fi
-        case "$stripped" in
-            PROCEED*|REVISE*|STOP*|BLOCKED*) verdictish="true" ;;
+        value="${stripped#VERDICT:}"
+        value=$(printf '%s' "$value" | sed -E 's/^[[:space:]*`_]+//; s/[[:space:]*`_.,;:]+$//')
+
+        case "$value" in
+            PROCEED)
+                printf '%s\n' "proceed"
+                return 0
+                ;;
+            PROCEED_WITH_RISKS)
+                printf '%s\n' "proceed_with_risks"
+                return 0
+                ;;
+            REVISE)
+                printf '%s\n' "revise"
+                return 0
+                ;;
+            STOP)
+                printf '%s\n' "stop"
+                return 0
+                ;;
         esac
 
-        [[ "$verdictish" == "true" ]] || continue
-
-        if [[ "$upper" == *"DO NOT PROCEED"* || "$upper" == *"SHOULD NOT PROCEED"* || "$upper" == *"CANNOT PROCEED"* || "$upper" == *"CAN NOT PROCEED"* || "$upper" == *"MUST NOT PROCEED"* || "$upper" == *"WILL NOT PROCEED"* || "$upper" == *"UNABLE TO PROCEED"* || "$upper" == *"NOT SAFE TO PROCEED"* || "$upper" == *"NE PAS PROCEDER"* || "$upper" == *"NE PAS PROCÉDER"* ]] || \
-           printf '%s\n' "$upper" | grep -Eiq 'PROCEED(ING)?[[:space:]]+(IS[[:space:]]+)?NOT[[:space:]]+RECOMMENDED|RECOMMEND(S|ED)?[[:space:]]+AGAINST[[:space:]]+PROCEED(ING)?|DO[[:space:]]+NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?|NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?'; then
-            printf '%s\n' "stop"
-            return 0
-        fi
-        if [[ "$upper" == *"PROCEED_WITH_RISKS"* || "$upper" == *"PROCEED-WITH-RISKS"* || "$upper" == *"PROCEED WITH RISKS"* ]]; then
-            printf '%s\n' "proceed_with_risks"
-            return 0
-        fi
-        if [[ "$upper" == *"REVISE"* ]]; then
-            printf '%s\n' "revise"
-            return 0
-        fi
-        if [[ "$upper" == *"STOP"* || "$upper" == *"BLOCKED"* ]]; then
-            printf '%s\n' "stop"
-            return 0
-        fi
-        if [[ "$stripped" == PROCEED* ]] || \
-           printf '%s\n' "$upper" | grep -Eiq '(^|[^A-Z0-9_])(VERDICT|DECISION)[^A-Z0-9_]+PROCEED([^A-Z0-9_]|$)'; then
-            printf '%s\n' "proceed"
-            return 0
-        fi
+        return 1
     done <<< "$text"
 
     return 1
@@ -1921,9 +1913,9 @@ embrace_debate_gate_has_blocking_verdict() {
             ;;
     esac
 
-    printf '%s\n' "$text" \
-        | grep -Eiq '(^|[^A-Z_])(REVISE|STOP|BLOCKED|BLOQU[ÉE]?|NE PAS (ENTRER|PROC[ÉE]DER)|DO NOT (ENTER|PROCEED)|SHOULD NOT PROCEED|CANNOT PROCEED|CAN NOT PROCEED|MUST NOT PROCEED|WILL NOT PROCEED|UNABLE TO PROCEED|NOT SAFE TO PROCEED|PROCEED(ING)?[[:space:]]+(IS[[:space:]]+)?NOT[[:space:]]+RECOMMENDED|RECOMMEND(S|ED)?[[:space:]]+AGAINST[[:space:]]+PROCEED(ING)?|DO[[:space:]]+NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?|NOT[[:space:]]+RECOMMEND[[:space:]]+PROCEED(ING)?)([^A-Z_]|$)'
+    return 0
 }
+
 embrace_debate_gate_block_is_self_referential() {
     local text="$1"
     local lower
@@ -1936,18 +1928,25 @@ embrace_debate_gate_block_is_self_referential() {
     if [[ "$lower" != *"this review itself is the gate input"* && \
           "$lower" != *"cannot be prerequisites"* && \
           "$lower" != *"ne peut pas être un prérequis"* && \
+          "$lower" != *"cannot exist before"* && \
+          "$lower" != *"does not exist yet"* && \
+          "$lower" != *"future phase"* && \
           "$lower" != *"produit par ce gate"* && \
           "$lower" != *"runner will materialize"* ]]; then
         return 1
     fi
 
-    if [[ "$lower" == *"security"* || \
+    if [[ "$lower" == *"missing requirements"* || \
+          "$lower" == *"security"* || \
           "$lower" == *"data loss"* || \
           "$lower" == *"destructive"* || \
           "$lower" == *"wrong file"* || \
           "$lower" == *"mauvais fichier"* || \
           "$lower" == *"overlap"* || \
-          "$lower" == *"chevauche"* ]]; then
+          "$lower" == *"chevauche"* || \
+          "$lower" == *"unsafe"* || \
+          "$lower" == *"contradictory requirements"* || \
+          "$lower" == *"unverified"* ]]; then
         return 1
     fi
 
@@ -2227,12 +2226,17 @@ ${focus}
 Context excerpt:
 ${context_excerpt}
 
-Return a concise gate review with:
-1. Verdict: PROCEED, PROCEED_WITH_RISKS, REVISE, or STOP
-2. Blocking issues, if any
-3. Non-blocking risks
-4. Concrete changes needed before the next phase
-5. Evidence from the context artifact"
+Return a concise gate review. Start with exactly one machine-readable line:
+VERDICT: PROCEED
+VERDICT: PROCEED_WITH_RISKS
+VERDICT: REVISE
+VERDICT: STOP
+
+Then include:
+1. Blocking issues, if any
+2. Non-blocking risks
+3. Concrete changes needed before the next phase
+4. Evidence from the context artifact"
 
     local codex_view="" gemini_view="" claude_view="" synthesis=""
     local codex_status="failed" gemini_status="failed" claude_status="failed"
@@ -2323,11 +2327,19 @@ ${gemini_view:-[no output]}
 Claude:
 ${claude_view:-[no output]}
 
-Return:
-1. Gate verdict
-2. Required actions before next phase
-3. Risks accepted if proceeding
-4. Provider participation summary"
+Return format:
+- First line must be exactly one of:
+  VERDICT: PROCEED
+  VERDICT: PROCEED_WITH_RISKS
+  VERDICT: REVISE
+  VERDICT: STOP
+- Do not put rationale on the VERDICT line.
+- Put all explanation after the first line.
+
+Then include:
+1. Required actions before next phase
+2. Risks accepted if proceeding
+3. Provider participation summary"
 
     provider_rc=0
     synthesis_timeout=$(embrace_gate_provider_timeout "claude-sonnet" "$synthesis_prompt")

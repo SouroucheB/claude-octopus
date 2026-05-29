@@ -2650,6 +2650,54 @@ ${obs_ctx}"
         esac
     }
 
+    _embrace_snapshot_path_safe() {
+        local path="$1"
+
+        case "$path" in
+            ""|/*|../*|*/../*|.)
+                return 1
+                ;;
+        esac
+        _embrace_runner_owned_path "$path" && return 1
+        return 0
+    }
+
+    _capture_pre_develop_untracked_contents() {
+        local before_file="${pre_develop_snapshot_dir}/untracked-before.txt"
+        local store_dir="${pre_develop_snapshot_dir}/untracked-files"
+        local path target_dir
+
+        [[ -s "$before_file" ]] || return 0
+        mkdir -p "$store_dir"
+
+        while IFS= read -r path; do
+            _embrace_snapshot_path_safe "$path" || continue
+            [[ -f "$path" ]] || continue
+            target_dir="${store_dir}/$(dirname "$path")"
+            mkdir -p "$target_dir"
+            cp -p -- "$path" "${store_dir}/${path}" 2>/dev/null || \
+                log WARN "Unable to snapshot pre-existing untracked file: $path"
+        done < "$before_file"
+    }
+
+    _restore_pre_develop_untracked_contents() {
+        local before_file="${pre_develop_snapshot_dir}/untracked-before.txt"
+        local store_dir="${pre_develop_snapshot_dir}/untracked-files"
+        local path source_path
+
+        [[ -d "$store_dir" && -s "$before_file" ]] || return 0
+
+        while IFS= read -r path; do
+            _embrace_snapshot_path_safe "$path" || continue
+            source_path="${store_dir}/${path}"
+            [[ -f "$source_path" ]] || continue
+            rm -rf -- "$path" 2>/dev/null || true
+            mkdir -p "$(dirname "$path")"
+            cp -p -- "$source_path" "$path" 2>/dev/null || \
+                log WARN "Unable to restore pre-existing untracked file: $path"
+        done < "$before_file"
+    }
+
     _capture_pre_develop_worktree_snapshot() {
         [[ "${OCTOPUS_EMBRACE_RESTORE_PREDEVELOP_MUTATIONS:-true}" == "false" ]] && return 0
         git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
@@ -2659,6 +2707,7 @@ ${obs_ctx}"
         git diff --binary > "${pre_develop_snapshot_dir}/worktree.diff" 2>/dev/null || true
         git diff --cached --binary > "${pre_develop_snapshot_dir}/index.diff" 2>/dev/null || true
         git ls-files --others --exclude-standard 2>/dev/null | sort > "${pre_develop_snapshot_dir}/untracked-before.txt" || true
+        _capture_pre_develop_untracked_contents
     }
 
     _restore_pre_develop_worktree_snapshot() {
@@ -2685,6 +2734,8 @@ ${obs_ctx}"
             esac
             rm -rf -- "$path" 2>/dev/null || true
         done
+
+        _restore_pre_develop_untracked_contents
 
         if [[ -s "${pre_develop_snapshot_dir}/index.diff" ]]; then
             git apply --index --whitespace=nowarn "${pre_develop_snapshot_dir}/index.diff" >/dev/null 2>&1 || \

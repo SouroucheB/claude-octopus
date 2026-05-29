@@ -44,6 +44,15 @@ else
     test_fail "pre-Develop abort restore guard is missing"
 fi
 
+test_case "pre-Develop restore preserves pre-existing untracked file contents"
+if grep -q "_capture_pre_develop_untracked_contents" "$WORKFLOWS" && \
+   grep -q "_restore_pre_develop_untracked_contents" "$WORKFLOWS" && \
+   grep -q "untracked-before.txt" "$WORKFLOWS"; then
+    test_pass
+else
+    test_fail "pre-Develop restore does not snapshot/reapply pre-existing untracked files"
+fi
+
 test_case "Define gate restores non-Develop mutations before provider evaluation"
 if sed -n '/embrace_debate_gate_requested "define-develop"/,/embrace_debate_gate "define-develop"/p' "$WORKFLOWS" | \
    grep -q '_restore_pre_develop_worktree_snapshot "debate-define-develop preflight"'; then

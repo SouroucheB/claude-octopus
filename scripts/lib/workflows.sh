@@ -2547,6 +2547,29 @@ ${obs_ctx}"
         [[ -n "$file" && -f "$file" ]] && printf '%s\n' "$file"
     }
 
+    _prepare_current_embrace_output() {
+        local file="$1"
+        local stale_file
+
+        [[ -n "$file" && -e "$file" ]] || return 0
+        stale_file="${file}.stale-before-${task_group}-$$"
+        if mv -f -- "$file" "$stale_file" 2>/dev/null; then
+            log WARN "Quarantined stale current-run artifact before phase: $file"
+            return 0
+        fi
+
+        if [[ ! -e "$file" ]]; then
+            return 0
+        fi
+        if rm -f -- "$file" 2>/dev/null; then
+            log WARN "Removed stale current-run artifact before phase: $file"
+            return 0
+        else
+            log WARN "Unable to quarantine stale current-run artifact before phase: $file"
+            return 1
+        fi
+    }
+
     _embrace_phase_order() {
         case "${1:-}" in
             probe) echo 1 ;;
@@ -2932,6 +2955,10 @@ ${obs_ctx}"
     # Phase 1: PROBE (Discover)
     if _embrace_should_run_phase "probe"; then
         export OCTOPUS_WORKFLOW_PHASE="probe"
+        if ! _prepare_current_embrace_output "$RESULTS_DIR/probe-synthesis-${task_group}.md"; then
+            _abort_embrace_phase "probe" "unable to clear pre-existing current-run probe synthesis artifact"
+            return 1
+        fi
         _write_embrace_session_state "probe" "running"
         echo ""
         echo -e "${CYAN}[1/4] Starting PROBE phase (Discover)...${NC}"
@@ -2971,6 +2998,10 @@ ${obs_ctx}"
     # Phase 2: GRASP (Define)
     if _embrace_should_run_phase "grasp"; then
         export OCTOPUS_WORKFLOW_PHASE="grasp"
+        if ! _prepare_current_embrace_output "$RESULTS_DIR/grasp-consensus-${task_group}.md"; then
+            _abort_embrace_phase "grasp" "unable to clear pre-existing current-run grasp consensus artifact" "$probe_synthesis"
+            return 1
+        fi
         _write_embrace_session_state "grasp" "running"
         echo ""
         echo -e "${CYAN}[2/4] Starting GRASP phase (Define)...${NC}"
@@ -3047,6 +3078,10 @@ ${obs_ctx}"
         fi
         _restore_pre_develop_worktree_snapshot "tangle preflight"
         export OCTOPUS_WORKFLOW_PHASE="tangle"
+        if ! _prepare_current_embrace_output "$RESULTS_DIR/tangle-validation-${task_group}.md"; then
+            _abort_embrace_phase "tangle" "unable to clear pre-existing current-run tangle validation artifact" "$grasp_consensus"
+            return 1
+        fi
         _write_embrace_session_state "tangle" "running"
         echo ""
         echo -e "${CYAN}[3/4] Starting TANGLE phase (Develop)...${NC}"
@@ -3120,6 +3155,10 @@ ${obs_ctx}"
     # Phase 4: INK (Deliver)
     if _embrace_should_run_phase "ink"; then
         export OCTOPUS_WORKFLOW_PHASE="ink"
+        if ! _prepare_current_embrace_output "$RESULTS_DIR/delivery-${task_group}.md"; then
+            _abort_embrace_phase "ink" "unable to clear pre-existing current-run delivery artifact" "$tangle_validation"
+            return 1
+        fi
         _write_embrace_session_state "ink" "running"
         echo ""
         echo -e "${CYAN}[4/4] Starting INK phase (Deliver)...${NC}"

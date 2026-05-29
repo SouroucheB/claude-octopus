@@ -54,6 +54,7 @@ PHASE_CALLS=""
 CHECKPOINTS=""
 EMBRACE_STATUS=0
 RESUME_PHASE=""
+FAKE_DATE_EPOCH=""
 
 log() { :; }
 cleanup_old_results() { :; }
@@ -87,6 +88,13 @@ complete_session() { :; }
 write_structured_decision() { :; }
 earn_skill() { :; }
 sleep() { :; }
+date() {
+    if [[ -n "${FAKE_DATE_EPOCH:-}" && "${1:-}" == "+%s" ]]; then
+        printf '%s\n' "$FAKE_DATE_EPOCH"
+        return 0
+    fi
+    command date "$@"
+}
 run_agent_sync() {
     if [[ "$CASE_NAME" == "gate_agents_fail" && "${5:-}" == "embrace-gate" ]]; then
         return 2
@@ -177,6 +185,7 @@ probe_discover() {
     PHASE_CALLS+="probe "
     [[ "$CASE_NAME" == "signal_interrupt" ]] && { /bin/sleep 5; return 0; }
     [[ "$CASE_NAME" == "missing_probe_output" ]] && return 0
+    [[ "$CASE_NAME" == "stale_current_probe_artifact" ]] && return 0
     printf '%s\n' "# probe synthesis" > "$RESULTS_DIR/probe-synthesis-${OCTOPUS_TASK_GROUP:-test}.md"
 }
 
@@ -229,6 +238,7 @@ run_embrace_case() {
     CHECKPOINTS=""
     PREFLIGHT_ARGS=""
     EMBRACE_STATUS=0
+    FAKE_DATE_EPOCH=""
     RESUME_SESSION=false
     EMBRACE_DEBATE_GATE_OUTPUT=""
     unset OCTOPUS_EMBRACE_GATE_PROVIDER_TIMEOUT
@@ -238,9 +248,14 @@ run_embrace_case() {
         RESUME_SESSION=true
         seed_resume_artifacts "$RESUME_PHASE"
     fi
+    if [[ "$CASE_NAME" == "stale_current_probe_artifact" ]]; then
+        FAKE_DATE_EPOCH="1780094000"
+        printf '%s\n' "# stale probe from earlier attempt" > "$RESULTS_DIR/probe-synthesis-${FAKE_DATE_EPOCH}.md"
+    fi
 
     embrace_full_workflow "Implement the requested feature" >/dev/null 2>&1
     EMBRACE_STATUS=$?
+    FAKE_DATE_EPOCH=""
 
     return 0
 }
@@ -508,6 +523,17 @@ if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
     test_pass
 else
     test_fail "embrace did not stop cleanly when probe produced no synthesis artifact"
+fi
+
+run_embrace_case "stale_current_probe_artifact" || true
+
+test_case "stale same-task probe artifact cannot satisfy current run"
+if [[ "$EMBRACE_STATUS" -ne 0 ]] && \
+   [[ "$PHASE_CALLS" == "probe " ]] && \
+   [[ "$CHECKPOINTS" == *"probe:failed:"* ]]; then
+    test_pass
+else
+    test_fail "embrace accepted a stale same-task probe artifact (status=$EMBRACE_STATUS calls='$PHASE_CALLS')"
 fi
 
 run_embrace_case "tangle_fails" || true

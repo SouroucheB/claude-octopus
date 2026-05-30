@@ -15,9 +15,46 @@ prouver completement, par exemple:
 - presence des artifacts Probe, Grasp, gate demande, Tangle, Ink/report;
 - mutation limitee a un fichier de canary.
 
-Ne pas utiliser ce runbook pour un run CoproOS lourd.
+Ne pas utiliser la procedure canary ci-dessous pour un run CoproOS lourd.
 
-## Preconditions
+## Deux modes de run a ne pas confondre
+
+Il y a deux processus distincts.
+
+### Canary / validation orchestration
+
+Pour un canary minimal ou une validation Embrace sans code produit, le repo
+temporaire dans `/private/tmp` est attendu. Le but est d'isoler l'orchestration:
+un fichier `canary.txt`, un `task.md`, puis un script et un log dans
+`/private/tmp`.
+
+### Run produit CoproOS
+
+Pour un vrai Embrace sur CoproOS, ne pas creer la branche ni le checkout produit
+dans `/private/tmp`. La branche de travail doit exister dans le checkout produit:
+
+`/Users/sourouche/Documents/CoproOS`
+
+Process valide le 2026-05-30:
+
+1. Verifier le plugin actif, son commit, et le harness tokenless.
+2. Preserver les changements locaux de la branche courante avant le switch
+   (`git stash push -m ... -- <fichiers>` ou commit explicite).
+3. Dans `/Users/sourouche/Documents/CoproOS`, creer ou switcher une branche
+   dediee au run, par exemple `embrace/gmail-threading-debug-rerun-bc5c4d5`.
+4. Verifier `git status --short --branch`: branche attendue et worktree propre.
+5. Utiliser `/private/tmp` uniquement pour le script de lancement et le log
+   `tee`, pas pour la branche ou le worktree produit.
+6. Le script de lancement doit refuser si la branche repo, le commit repo, le
+   commit plugin, le repo dirty, ou le plugin dirty ne correspondent pas.
+7. Apres le run, garder le diff sur cette branche produit. Ne restaurer le stash
+   precedent que lors du retour sur la branche precedente.
+
+Exemple de commande finale pour un run produit: le script et le log peuvent
+rester dans `/private/tmp`, mais `REPO` doit pointer vers
+`/Users/sourouche/Documents/CoproOS`.
+
+## Preconditions canary
 
 - Plugin actif: `/Users/sourouche/.claude-octopus/install/embrace-stability-stack`
 - Worktree plugin propre ou avec uniquement des changements intentionnels.

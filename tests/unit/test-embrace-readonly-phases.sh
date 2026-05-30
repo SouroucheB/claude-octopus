@@ -64,6 +64,24 @@ else
     test_fail "pre-Develop restore does not verify exact git status before/after restore"
 fi
 
+test_case "pre-Develop snapshot skips post-Tangle resume"
+if grep -q "_embrace_resume_has_developed_worktree" "$WORKFLOWS" && \
+   sed -n '/_capture_pre_develop_worktree_snapshot()/,/^    }/p' "$WORKFLOWS" | grep -q "_embrace_resume_has_developed_worktree"; then
+    test_pass
+else
+    test_fail "pre-Develop snapshot does not skip resume states at/after Tangle"
+fi
+
+test_case "pre-Develop untracked snapshot preserves symlinks and fails closed"
+if sed -n '/_capture_pre_develop_untracked_contents()/,/^    }/p' "$WORKFLOWS" | grep -q "readlink" && \
+   sed -n '/_capture_pre_develop_untracked_contents()/,/^    }/p' "$WORKFLOWS" | grep -q "ln -s" && \
+   sed -n '/_capture_pre_develop_untracked_contents()/,/^    }/p' "$WORKFLOWS" | grep -Fq 'return "$rc"' && \
+   grep -q 'if ! _capture_pre_develop_worktree_snapshot' "$WORKFLOWS"; then
+    test_pass
+else
+    test_fail "pre-Develop untracked snapshot lacks symlink support or fail-closed capture"
+fi
+
 test_case "Define gate restores non-Develop mutations before provider evaluation"
 if sed -n '/embrace_debate_gate_requested "define-develop"/,/embrace_debate_gate "define-develop"/p' "$WORKFLOWS" | \
    grep -q 'if ! _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"'; then

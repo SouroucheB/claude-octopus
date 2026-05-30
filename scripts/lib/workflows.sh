@@ -2703,6 +2703,16 @@ ${obs_ctx}"
         [[ "$phase_order" -gt "$resume_order" ]]
     }
 
+    _embrace_resume_has_developed_worktree() {
+        local resume_order tangle_order
+
+        [[ -n "$resume_from" && "$resume_from" != "null" ]] || return 1
+        resume_order=$(_embrace_phase_order "$resume_from" 2>/dev/null) || return 1
+        tangle_order=$(_embrace_phase_order "tangle" 2>/dev/null) || return 1
+
+        [[ "$resume_order" -ge "$tangle_order" ]]
+    }
+
     _embrace_runner_owned_path() {
         local path="$1"
         case "$path" in
@@ -2730,37 +2740,79 @@ ${obs_ctx}"
     _capture_pre_develop_untracked_contents() {
         local before_file="${pre_develop_snapshot_dir}/untracked-before.txt"
         local store_dir="${pre_develop_snapshot_dir}/untracked-files"
-        local path target_dir
+        local path target_dir target_path link_target rc=0
 
         [[ -s "$before_file" ]] || return 0
         mkdir -p "$store_dir"
 
         while IFS= read -r path; do
             _embrace_snapshot_path_safe "$path" || continue
-            [[ -f "$path" ]] || continue
+            target_path="${store_dir}/${path}"
             target_dir="${store_dir}/$(dirname "$path")"
             mkdir -p "$target_dir"
-            cp -p -- "$path" "${store_dir}/${path}" 2>/dev/null || \
-                log WARN "Unable to snapshot pre-existing untracked file: $path"
+
+            if [[ -L "$path" ]]; then
+                link_target=$(readlink "$path" 2>/dev/null || true)
+                if [[ -n "$link_target" ]]; then
+                    rm -f -- "$target_path" 2>/dev/null || true
+                    ln -s "$link_target" "$target_path" 2>/dev/null || {
+                        log ERROR "Unable to snapshot pre-existing untracked symlink: $path"
+                        rc=1
+                    }
+                else
+                    log ERROR "Unable to read pre-existing untracked symlink target: $path"
+                    rc=1
+                fi
+            elif [[ -f "$path" ]]; then
+                cp -p -- "$path" "$target_path" 2>/dev/null || {
+                    log ERROR "Unable to snapshot pre-existing untracked file: $path"
+                    rc=1
+                }
+            else
+                log ERROR "Unable to snapshot pre-existing untracked path (unsupported type): $path"
+                rc=1
+            fi
         done < "$before_file"
+
+        return "$rc"
     }
 
     _restore_pre_develop_untracked_contents() {
         local before_file="${pre_develop_snapshot_dir}/untracked-before.txt"
         local store_dir="${pre_develop_snapshot_dir}/untracked-files"
-        local path source_path
+        local path source_path link_target rc=0
 
         [[ -d "$store_dir" && -s "$before_file" ]] || return 0
 
         while IFS= read -r path; do
             _embrace_snapshot_path_safe "$path" || continue
             source_path="${store_dir}/${path}"
-            [[ -f "$source_path" ]] || continue
             rm -rf -- "$path" 2>/dev/null || true
             mkdir -p "$(dirname "$path")"
-            cp -p -- "$source_path" "$path" 2>/dev/null || \
-                log WARN "Unable to restore pre-existing untracked file: $path"
+
+            if [[ -L "$source_path" ]]; then
+                link_target=$(readlink "$source_path" 2>/dev/null || true)
+                if [[ -n "$link_target" ]]; then
+                    ln -s "$link_target" "$path" 2>/dev/null || {
+                        log WARN "Unable to restore pre-existing untracked symlink: $path"
+                        rc=1
+                    }
+                else
+                    log WARN "Unable to read snapshotted untracked symlink target: $path"
+                    rc=1
+                fi
+            elif [[ -f "$source_path" ]]; then
+                cp -p -- "$source_path" "$path" 2>/dev/null || {
+                    log WARN "Unable to restore pre-existing untracked file: $path"
+                    rc=1
+                }
+            else
+                log WARN "Missing snapshot for pre-existing untracked path: $path"
+                rc=1
+            fi
         done < "$before_file"
+
+        return "$rc"
     }
 
     _capture_pre_develop_status() {
@@ -2779,6 +2831,10 @@ ${obs_ctx}"
     _capture_pre_develop_worktree_snapshot() {
         [[ "${OCTOPUS_EMBRACE_RESTORE_PREDEVELOP_MUTATIONS:-true}" == "false" ]] && return 0
         git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+        if _embrace_resume_has_developed_worktree; then
+            log INFO "Skipping pre-Develop worktree snapshot on post-Tangle resume"
+            return 0
+        fi
 
         pre_develop_snapshot_dir="${RESULTS_DIR}/.embrace-predevelop-worktree-${task_group}"
         mkdir -p "$pre_develop_snapshot_dir"
@@ -2814,7 +2870,10 @@ ${obs_ctx}"
             rm -rf -- "$path" 2>/dev/null || true
         done
 
-        _restore_pre_develop_untracked_contents
+        if ! _restore_pre_develop_untracked_contents; then
+            log ERROR "Pre-Develop restore could not restore pre-existing untracked contents at ${phase}"
+            return 1
+        fi
 
         if [[ -s "${pre_develop_snapshot_dir}/index.diff" ]]; then
             git apply --index --whitespace=nowarn "${pre_develop_snapshot_dir}/index.diff" >/dev/null 2>&1 || \
@@ -3041,7 +3100,10 @@ ${obs_ctx}"
 
     local workflow_dir="${RESULTS_DIR}/embrace-${task_group}"
     mkdir -p "$workflow_dir"
-    _capture_pre_develop_worktree_snapshot
+    if ! _capture_pre_develop_worktree_snapshot; then
+        _abort_embrace_phase "init" "failed to capture pre-Develop worktree snapshot"
+        return 1
+    fi
 
     # Track timing
     local start_time=$SECONDS

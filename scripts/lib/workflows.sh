@@ -2727,6 +2727,19 @@ ${obs_ctx}"
         done < "$before_file"
     }
 
+    _capture_pre_develop_status() {
+        git -c core.quotePath=false status --porcelain=v1 --untracked-files=all 2>/dev/null \
+            | while IFS= read -r line; do
+                local path="${line:3}"
+                case "$path" in
+                    *" -> "*) path="${path##* -> }" ;;
+                esac
+                _embrace_runner_owned_path "$path" && continue
+                printf '%s\n' "$line"
+            done \
+            | sort -u
+    }
+
     _capture_pre_develop_worktree_snapshot() {
         [[ "${OCTOPUS_EMBRACE_RESTORE_PREDEVELOP_MUTATIONS:-true}" == "false" ]] && return 0
         git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
@@ -2736,12 +2749,13 @@ ${obs_ctx}"
         git diff --binary > "${pre_develop_snapshot_dir}/worktree.diff" 2>/dev/null || true
         git diff --cached --binary > "${pre_develop_snapshot_dir}/index.diff" 2>/dev/null || true
         git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | sort > "${pre_develop_snapshot_dir}/untracked-before.txt" || true
+        _capture_pre_develop_status > "${pre_develop_snapshot_dir}/status-before.txt" || true
         _capture_pre_develop_untracked_contents
     }
 
     _restore_pre_develop_worktree_snapshot() {
         local phase="${1:-}"
-        local before_file current_file path
+        local before_file current_file path status_before status_after
 
         [[ "${OCTOPUS_EMBRACE_RESTORE_PREDEVELOP_MUTATIONS:-true}" == "false" ]] && return 0
         [[ -n "$pre_develop_snapshot_dir" && -d "$pre_develop_snapshot_dir" ]] || return 0
@@ -2774,6 +2788,19 @@ ${obs_ctx}"
             git apply --whitespace=nowarn "${pre_develop_snapshot_dir}/worktree.diff" >/dev/null 2>&1 || \
                 log WARN "Unable to reapply pre-existing unstaged worktree diff after pre-Develop restore"
         fi
+
+        status_before="${pre_develop_snapshot_dir}/status-before.txt"
+        status_after="${pre_develop_snapshot_dir}/status-after.txt"
+        if [[ -f "$status_before" ]]; then
+            _capture_pre_develop_status > "$status_after" || true
+            if ! cmp -s "$status_before" "$status_after"; then
+                log ERROR "Pre-Develop restore did not preserve pre-existing git status at ${phase}"
+                diff -u "$status_before" "$status_after" 2>/dev/null | sed 's/^/  /' >&2 || true
+                return 1
+            fi
+        fi
+
+        return 0
     }
 
     _embrace_phase_is_pre_develop_abort() {
@@ -3177,7 +3204,10 @@ ${obs_ctx}"
     # silently waive a gate the user explicitly selected.
     if embrace_debate_gate_requested "define-develop"; then
         if _embrace_should_run_phase "debate-define-develop"; then
-            _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"
+            if ! _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"; then
+                _abort_embrace_phase "debate-define-develop" "pre-Develop worktree restore failed before debate gate" "$grasp_consensus"
+                return 1
+            fi
             export OCTOPUS_WORKFLOW_PHASE="debate-define-develop"
             _write_embrace_session_state "debate-define-develop" "running"
             if ! embrace_debate_gate "define-develop" "$prompt" "$grasp_consensus"; then
@@ -3210,7 +3240,10 @@ ${obs_ctx}"
         else
             unset OCTOPUS_EMBRACE_DEFINE_GATE_ARTIFACT
         fi
-        _restore_pre_develop_worktree_snapshot "tangle preflight"
+        if ! _restore_pre_develop_worktree_snapshot "tangle preflight"; then
+            _abort_embrace_phase "tangle" "pre-Develop worktree restore failed before Tangle" "$grasp_consensus"
+            return 1
+        fi
         export OCTOPUS_WORKFLOW_PHASE="tangle"
         if ! _prepare_current_embrace_output "$RESULTS_DIR/tangle-validation-${task_group}.md"; then
             _abort_embrace_phase "tangle" "unable to clear pre-existing current-run tangle validation artifact" "$grasp_consensus"

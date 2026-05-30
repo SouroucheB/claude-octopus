@@ -54,20 +54,30 @@ else
     test_fail "pre-Develop restore does not snapshot/reapply pre-existing untracked files"
 fi
 
-test_case "Define gate restores non-Develop mutations before provider evaluation"
-if sed -n '/embrace_debate_gate_requested "define-develop"/,/embrace_debate_gate "define-develop"/p' "$WORKFLOWS" | \
-   grep -q '_restore_pre_develop_worktree_snapshot "debate-define-develop preflight"'; then
+test_case "pre-Develop restore verifies exact pre-existing git status"
+if grep -q "_capture_pre_develop_status" "$WORKFLOWS" && \
+   grep -q "status-before.txt" "$WORKFLOWS" && \
+   grep -q "status-after.txt" "$WORKFLOWS" && \
+   grep -q "cmp -s" "$WORKFLOWS"; then
     test_pass
 else
-    test_fail "Define→Develop gate does not restore pre-Develop mutations before provider evaluation"
+    test_fail "pre-Develop restore does not verify exact git status before/after restore"
+fi
+
+test_case "Define gate restores non-Develop mutations before provider evaluation"
+if sed -n '/embrace_debate_gate_requested "define-develop"/,/embrace_debate_gate "define-develop"/p' "$WORKFLOWS" | \
+   grep -q 'if ! _restore_pre_develop_worktree_snapshot "debate-define-develop preflight"'; then
+    test_pass
+else
+    test_fail "Define→Develop gate does not fail closed when preflight restore cannot preserve status"
 fi
 
 test_case "Tangle restores non-Develop mutations before provider evaluation"
 if sed -n '/# Phase 3: TANGLE/,/tangle_develop "$prompt" "$grasp_consensus"/p' "$WORKFLOWS" | \
-   grep -q '_restore_pre_develop_worktree_snapshot "tangle preflight"'; then
+   grep -q 'if ! _restore_pre_develop_worktree_snapshot "tangle preflight"'; then
     test_pass
 else
-    test_fail "Tangle does not restore pre-Develop mutations before provider evaluation"
+    test_fail "Tangle does not fail closed when preflight restore cannot preserve status"
 fi
 
 test_case "codex command uses read-only sandbox outside Embrace Develop"

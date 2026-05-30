@@ -8,6 +8,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 AGENTS="$PROJECT_ROOT/scripts/lib/agents.sh"
 SPAWN="$PROJECT_ROOT/scripts/lib/spawn.sh"
 AGENT_SYNC="$PROJECT_ROOT/scripts/lib/agent-sync.sh"
+INTELLIGENCE="$PROJECT_ROOT/scripts/lib/intelligence.sh"
 
 source "$SCRIPT_DIR/../helpers/test-framework.sh"
 test_suite "embrace context hygiene"
@@ -15,10 +16,11 @@ test_suite "embrace context hygiene"
 test_case "touched libs have valid bash syntax"
 if bash -n "$AGENTS" 2>/dev/null && \
    bash -n "$SPAWN" 2>/dev/null && \
-   bash -n "$AGENT_SYNC" 2>/dev/null; then
+   bash -n "$AGENT_SYNC" 2>/dev/null && \
+   bash -n "$INTELLIGENCE" 2>/dev/null; then
     test_pass
 else
-    test_fail "syntax error in agents/spawn/agent-sync libs"
+    test_fail "syntax error in agents/spawn/agent-sync/intelligence libs"
 fi
 
 source "$AGENTS"
@@ -104,6 +106,41 @@ if grep -B 20 -A 20 "## Earned Project Skills" "$SPAWN" | grep -q "octopus_shoul
     test_pass
 else
     test_fail "spawn_agent does not gate historical context injection"
+fi
+
+test_case "spawn_agent gates file heuristics with historical context"
+if grep -B 20 -A 20 "## File Heuristics" "$SPAWN" | grep -q "octopus_should_inject_historical_context"; then
+    test_pass
+else
+    test_fail "spawn_agent does not gate heuristic context injection"
+fi
+
+test_case "heuristic context is workspace scoped"
+heuristic_root="$(mktemp -d)"
+if (
+    log() { :; }
+    export HOME="$heuristic_root/home"
+    mkdir -p "$HOME" "$heuristic_root/project-a" "$heuristic_root/project-b"
+    # shellcheck source=/dev/null
+    source "$INTELLIGENCE"
+
+    cd "$heuristic_root/project-a"
+    export WORKSPACE_DIR="$PWD"
+    result_file="$heuristic_root/result.md"
+    printf '%s\n' "Read src/index.ts and src/shared.ts" > "$result_file"
+    record_run_pattern "codex" "edit src/index.ts" "$result_file"
+    record_run_pattern "codex" "edit src/index.ts" "$result_file"
+
+    cd "$heuristic_root/project-b"
+    export WORKSPACE_DIR="$PWD"
+    hint="$(build_heuristic_context "edit src/index.ts")"
+    [[ -z "$hint" ]]
+); then
+    rm -rf "$heuristic_root"
+    test_pass
+else
+    rm -rf "$heuristic_root"
+    test_fail "heuristic context leaked across workspaces"
 fi
 
 test_case "run_agent_sync gates earned skills and provider history"

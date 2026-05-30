@@ -873,6 +873,30 @@ run_file_validation() {
 
 # Record files mentioned in a successful agent run for co-occurrence learning
 # Usage: record_run_pattern <agent_type> <prompt> <result_file>
+octo_heuristic_scope_key() {
+    local root="${WORKSPACE_DIR:-}"
+    if [[ -z "$root" ]]; then
+        root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    fi
+    [[ -z "$root" ]] && root="$(pwd)"
+
+    local normalized_root
+    normalized_root=$(cd "$root" 2>/dev/null && pwd -P) || normalized_root="$root"
+
+    local branch="nogit"
+    branch=$(git -C "$normalized_root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "nogit")
+
+    printf '%s|%s' "$normalized_root" "$branch"
+}
+
+octo_json_escape_string() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/ }"
+    printf '%s' "$value"
+}
+
 record_run_pattern() {
     [[ "${OCTOPUS_HEURISTIC_LEARNING:-on}" == "off" ]] && return 0
 
@@ -902,7 +926,11 @@ record_run_pattern() {
     local timestamp
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
 
-    local entry="{\"ts\":\"$timestamp\",\"agent\":\"$agent_type\",\"prompt_sig\":\"$prompt_sig\",\"files\":\"$files_found\"}"
+    local scope_key
+    scope_key=$(octo_heuristic_scope_key 2>/dev/null || echo "unknown")
+    scope_key=$(octo_json_escape_string "$scope_key")
+
+    local entry="{\"ts\":\"$timestamp\",\"scope\":\"$scope_key\",\"agent\":\"$agent_type\",\"prompt_sig\":\"$prompt_sig\",\"files\":\"$files_found\"}"
 
     octo_db_append "$patterns_file" "$entry" 200
     log "DEBUG" "Recorded run pattern: ${files_found:0:80}..." 2>/dev/null || true
@@ -919,6 +947,11 @@ build_heuristic_context() {
 
     [[ -f "$patterns_file" ]] || return 0
 
+    local scope_key scope_marker
+    scope_key=$(octo_heuristic_scope_key 2>/dev/null || echo "unknown")
+    scope_key=$(octo_json_escape_string "$scope_key")
+    scope_marker="\"scope\":\"$scope_key\""
+
     # Extract candidate file names from the current prompt
     local target_files
     target_files=$(echo "$prompt" | grep -oE '[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,5}' | \
@@ -933,7 +966,8 @@ build_heuristic_context() {
         [[ -z "$file" ]] && continue
         # Find patterns that mention this file and extract their co-occurring files
         local cooccurring
-        cooccurring=$(grep -F "$file" "$patterns_file" 2>/dev/null | \
+        cooccurring=$(grep -F "$scope_marker" "$patterns_file" 2>/dev/null | \
+            grep -F "$file" | \
             grep -oE '[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,5}' | \
             grep -vE "^${file//\//\\/}$" | \
             grep '/' | sort | uniq -c | sort -rn | \

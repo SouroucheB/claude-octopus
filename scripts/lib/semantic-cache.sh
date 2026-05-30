@@ -50,7 +50,7 @@ check_cache_semantic() {
 
     # Try exact match first
     local cache_key
-    cache_key=$(echo "$prompt" | shasum -a 256 | awk '{print $1}')
+    cache_key=$(get_cache_key "$prompt")
     if check_cache "$cache_key" 2>/dev/null; then
         echo "$cache_key"
         return 0
@@ -59,8 +59,13 @@ check_cache_semantic() {
     # Scan bigram files for fuzzy matches
     local best_key=""
     local best_sim="0"
+    local current_scope
+    current_scope=$(octopus_cache_scope_key 2>/dev/null || echo "unknown")
     for bigram_file in "${cache_dir}"/*.bigrams; do
         [[ ! -f "$bigram_file" ]] && continue
+        local scope_file="${bigram_file%.bigrams}.scope"
+        [[ -f "$scope_file" ]] || continue
+        [[ "$(cat "$scope_file" 2>/dev/null || true)" == "$current_scope" ]] || continue
 
         local cached_prompt
         cached_prompt=$(cat "$bigram_file" 2>/dev/null || true)
@@ -100,6 +105,7 @@ save_to_cache_semantic() {
         cache_dir=$(octopus_resolve_cache_dir)
         mkdir -p "$cache_dir"
         echo "$prompt" > "${cache_dir}/${cache_key}.bigrams"
+        octopus_cache_scope_key > "${cache_dir}/${cache_key}.scope"
     fi
 }
 
@@ -140,9 +146,28 @@ deduplicate_results() {
 # Config: CACHE_DIR, CACHE_TTL
 # ═══════════════════════════════════════════════════════════════════════════════
 
+octopus_cache_scope_key() {
+    local root="${WORKSPACE_DIR:-}"
+    if [[ -z "$root" ]]; then
+        root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+    fi
+    [[ -z "$root" ]] && root="$(pwd)"
+
+    local normalized_root
+    normalized_root=$(cd "$root" 2>/dev/null && pwd -P) || normalized_root="$root"
+
+    local branch="nogit"
+    branch=$(git -C "$normalized_root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "nogit")
+
+    local commit="nogit"
+    commit=$(git -C "$normalized_root" rev-parse --verify HEAD 2>/dev/null || echo "nogit")
+
+    printf '%s|%s|%s' "$normalized_root" "$branch" "$commit"
+}
+
 get_cache_key() {
     local prompt="$1"
-    echo -n "$prompt" | shasum -a 256 | cut -d' ' -f1
+    printf '%s\n%s' "$(octopus_cache_scope_key)" "$prompt" | shasum -a 256 | cut -d' ' -f1
 }
 
 # Check if cached result exists and is fresh

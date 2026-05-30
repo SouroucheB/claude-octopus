@@ -79,6 +79,27 @@ else
     test_fail "cache path did not resolve under WORKSPACE_DIR"
 fi
 
+test_case "cache key includes workspace identity"
+WORKSPACE_DIR="$TEST_ROOT/workspace-a"
+mkdir -p "$WORKSPACE_DIR"
+key_a="$(get_cache_key "same prompt")"
+WORKSPACE_DIR="$TEST_ROOT/workspace-b"
+mkdir -p "$WORKSPACE_DIR"
+key_b="$(get_cache_key "same prompt")"
+if [[ -n "$key_a" && -n "$key_b" && "$key_a" != "$key_b" ]]; then
+    test_pass
+else
+    test_fail "identical prompt produced identical cache key across workspaces"
+fi
+
+test_case "semantic exact cache lookup uses scoped cache key helper"
+semantic_body=$(sed -n '/^check_cache_semantic()/,/^}/p' "$SEMANTIC_CACHE_LIB")
+if printf '%s\n' "$semantic_body" | grep -q 'cache_key=$(get_cache_key "$prompt")'; then
+    test_pass
+else
+    test_fail "check_cache_semantic computes an unscoped prompt-only key"
+fi
+
 test_case "probe cache hit uses resolved cache reader"
 probe_body=$(sed -n '/^probe_discover()/,/^}/p' "$WORKFLOWS_LIB")
 if printf '%s\n' "$probe_body" | grep -q 'get_cached_result "\$cache_key"' && \

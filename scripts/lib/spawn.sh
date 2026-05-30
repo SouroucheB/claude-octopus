@@ -271,7 +271,9 @@ ${provider_ctx}"
     fi
 
     # v9.3.0: Inject heuristic context from past successful runs (VARIABLE)
-    if [[ "${OCTOPUS_HEURISTIC_LEARNING:-on}" != "off" ]] && type build_heuristic_context &>/dev/null 2>&1; then
+    if [[ "${OCTOPUS_HEURISTIC_LEARNING:-on}" != "off" ]] \
+        && octopus_should_inject_historical_context "${phase:-}" \
+        && type build_heuristic_context &>/dev/null 2>&1; then
         local heuristic_ctx
         heuristic_ctx=$(build_heuristic_context "$enhanced_prompt" 2>/dev/null) || true
         if [[ -n "$heuristic_ctx" ]]; then
@@ -284,6 +286,8 @@ ${provider_ctx}"
 ${heuristic_ctx}"
             log "DEBUG" "Injected heuristic context (${#heuristic_ctx} chars)"
         fi
+    else
+        log "DEBUG" "Heuristic context disabled for workflow=${OCTOPUS_WORKFLOW_TYPE:-none}, phase=${phase:-none}"
     fi
 
     # v8.10.0/v9.37.0: Enforce context budget AFTER all injections and after

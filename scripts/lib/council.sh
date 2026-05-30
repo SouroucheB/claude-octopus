@@ -1575,7 +1575,7 @@ council_scan_veto_artifacts() {
             persona="$(council_slug_to_persona "$slug")"
             council_veto_capable_persona "$persona" || continue
 
-            if grep -Eiq '^[[:space:]]*veto[[:space:]]*:[[:space:]]*critical|["'\'']severity["'\''][[:space:]]*:[[:space:]]*["'\'']critical["'\'']' "$file"; then
+            if grep -Eiq '^[[:space:]]*veto[[:space:]]*:[[:space:]]*critical|^[[:space:]]*\{[^}]*["'\'']severity["'\''][[:space:]]*:[[:space:]]*["'\'']critical["'\'']' "$file"; then
                 confidence="$(awk -F: 'tolower($1) ~ /^[[:space:]]*confidence[[:space:]]*$/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 ~ /^[0-9.]+$/) { print $2; exit } }' "$file")"
                 reason="$(awk -F: 'tolower($1) ~ /^[[:space:]]*reason[[:space:]]*$/ { sub(/^[^:]*:[[:space:]]*/, ""); print; exit }' "$file")"
                 if [[ -z "$confidence" ]]; then

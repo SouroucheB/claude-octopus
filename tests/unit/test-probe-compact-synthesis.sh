@@ -107,6 +107,36 @@ session_limit="$RESULTS_DIR/claude-sonnet-probe-${task_group}-4.md"
 OCTOPUS_PROBE_SYNTHESIS_FILE_CHARS=900
 OCTOPUS_PROBE_SYNTHESIS_CONTEXT_CHARS=6000
 
+test_case "ranked results keep final SUCCESS even when body quotes failed status"
+generic_results="$TEST_ROOT/generic-results"
+mkdir -p "$generic_results"
+quoted_failure_success="$generic_results/codex-task.md"
+terminal_failure="$generic_results/gemini-task.md"
+{
+    echo "# Agent: codex"
+    echo ""
+    echo "## Output"
+    echo "This review quotes a stale marker: Status: FAILED should not decide terminal status."
+    echo "It also quotes a full marker for analysis only: ## Status: FAILED (example)."
+    make_payload "QUOTED_SUCCESS" 20
+    echo ""
+    echo "## Status: SUCCESS"
+} > "$quoted_failure_success"
+{
+    echo "# Agent: gemini"
+    echo ""
+    echo "## Output"
+    make_payload "TERMINAL_FAILED" 20
+    echo ""
+    echo "## Status: FAILED (exit code: 1)"
+} > "$terminal_failure"
+ranked="$(rank_results_by_signals "$generic_results")"
+if [[ "$ranked" == *"$quoted_failure_success"* ]] && [[ "$ranked" != *"$terminal_failure"* ]]; then
+    test_pass
+else
+    test_fail "ranker dropped final SUCCESS or kept terminal FAILED; ranked=${ranked:-<empty>}"
+fi
+
 test_case "compact probe context is bounded and sanitizes failed synthesis markers"
 context="$(build_probe_synthesis_context "$task_group")"
 if [[ ${#context} -le 5200 ]] && \

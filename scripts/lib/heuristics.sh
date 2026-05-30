@@ -129,6 +129,24 @@ probe_result_file_is_usable() {
     return 0
 }
 
+result_terminal_status() {
+    local file="$1"
+    [[ -f "$file" ]] || return 0
+
+    awk '
+        /^##[[:space:]]+Status:[[:space:]]+/ {
+            status = $0
+            sub(/^##[[:space:]]+Status:[[:space:]]+/, "", status)
+            sub(/[[:space:](].*$/, "", status)
+        }
+        END { if (status != "") print status }
+    ' "$file" 2>/dev/null
+}
+
+result_has_terminal_failed_status() {
+    [[ "$(result_terminal_status "$1")" == "FAILED" ]]
+}
+
 # Rank result files and return them ordered best-first (one path per line)
 # Usage: rank_results_by_signals /path/to/results [filter]
 rank_results_by_signals() {
@@ -145,7 +163,7 @@ rank_results_by_signals() {
         if [[ "$filter" == probe-* ]]; then
             probe_result_file_is_usable "$result" || continue
         else
-            grep -q "Status: FAILED" "$result" 2>/dev/null && continue
+            result_has_terminal_failed_status "$result" && continue
             type octo_file_has_provider_rejection >/dev/null 2>&1 && octo_file_has_provider_rejection "$result" && continue
         fi
 
@@ -155,6 +173,7 @@ rank_results_by_signals() {
     done
 
     # Sort descending by score, output paths only
+    [[ ${#scored[@]} -gt 0 ]] || return 0
     printf '%s\n' "${scored[@]}" | sort -t'|' -k1 -rn | cut -d'|' -f2
 }
 
@@ -304,7 +323,7 @@ aggregate_results() {
             [[ "$result" == *aggregate* ]] && continue
             [[ "$result" == *.raw-concat* ]] && continue
             [[ -n "$filter" && "$result" != *"$filter"* ]] && continue
-            grep -q "Status: FAILED" "$result" 2>/dev/null && continue
+            result_has_terminal_failed_status "$result" && continue
             type octo_file_has_provider_rejection >/dev/null 2>&1 && octo_file_has_provider_rejection "$result" && continue
             ranked_files+="$result"$'\n'
         done
@@ -318,7 +337,7 @@ aggregate_results() {
     while IFS= read -r result; do
         [[ -z "$result" ]] && continue
         [[ ! -f "$result" ]] && continue
-        grep -q "Status: FAILED" "$result" 2>/dev/null && continue
+        result_has_terminal_failed_status "$result" && continue
         type octo_file_has_provider_rejection >/dev/null 2>&1 && octo_file_has_provider_rejection "$result" && continue
         local score
         score=$(score_result_file "$result")

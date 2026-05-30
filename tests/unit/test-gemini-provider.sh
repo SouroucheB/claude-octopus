@@ -788,6 +788,37 @@ test_gemini_exec_wrapper_no_retry_on_429() {
     [[ $rc -ne 0 ]] && test_pass || test_fail "wrapper retried on 429 (should bail out)"
 }
 
+test_spawn_gemini_quota_watcher_records_detection() {
+    test_case "spawn: Gemini quota watcher passes detected-file marker"
+    local spawn="$PROJECT_ROOT/scripts/lib/spawn.sh"
+    local watcher_block
+    watcher_block=$(sed -n '/start_quota_watcher \\/,/quota_detected_file/p' "$spawn")
+    if [[ "$watcher_block" == *'quota_detected_file'* ]]; then
+        test_pass
+    else
+        test_fail "spawn.sh should pass quota_detected_file to start_quota_watcher"
+    fi
+}
+
+test_spawn_gemini_quota_sigterm_fails_not_timeout() {
+    test_case "spawn: Gemini quota-killed SIGTERM is marked failed and quota-exhausted"
+    local spawn="$PROJECT_ROOT/scripts/lib/spawn.sh"
+    local timeout_block
+    timeout_block=$(awk '
+        /elif \[\[ \$exit_code -eq 124/ { in_timeout=1 }
+        in_timeout { print }
+        in_timeout && /^        else$/ { exit }
+    ' "$spawn")
+    if [[ "$timeout_block" == *'classify_agent_output "$temp_output" "$exit_code" "$agent_type" "$temp_errors"'* ]] \
+        && [[ "$timeout_block" == *'GEMINI_QUOTA_EXHAUSTED'* ]] \
+        && [[ "$timeout_block" == *'mark_provider_quota_exhausted "gemini"'* ]] \
+        && [[ "$timeout_block" == *'write_agent_status "$agent_type" "failed"'* ]]; then
+        test_pass
+    else
+        test_fail "spawn timeout branch should classify Gemini quota SIGTERM as failed quota exhaustion"
+    fi
+}
+
 test_gemini_exec_wrapper_blocks_disallowed_primary() {
     test_case "fallback: wrapper rejects primary model not in OCTOPUS_GEMINI_ALLOWED_MODELS"
     local helper="$PROJECT_ROOT/scripts/helpers/gemini-exec.sh"
@@ -807,6 +838,8 @@ test_gemini_fallback_classifies_modelnotfound
 test_gemini_wrapper_is_model_error_in_sync
 test_gemini_exec_wrapper_retries_on_404
 test_gemini_exec_wrapper_no_retry_on_429
+test_spawn_gemini_quota_watcher_records_detection
+test_spawn_gemini_quota_sigterm_fails_not_timeout
 test_gemini_exec_wrapper_blocks_disallowed_primary
 test_gemini_exec_wrapper_reaps_tail_on_term
 

@@ -579,6 +579,7 @@ ${heuristic_ctx}"
         local temp_output="${RESULTS_DIR}/.tmp-${task_id}.out"
         local temp_errors="${RESULTS_DIR}/.tmp-${task_id}.err"
         local raw_output="${RESULTS_DIR}/.raw-${task_id}.out"  # Backup of unfiltered output
+        local quota_detected_file="${RESULTS_DIR}/.quota-${task_id}.detected"
 
         # Update task progress with context-aware spinner verb (v7.16.0 Feature 1)
         if [[ -n "$CLAUDE_TASK_ID" ]]; then
@@ -621,6 +622,7 @@ ${heuristic_ctx}"
         local exit_code=0
         while true; do
             exit_code=0
+            rm -f "$quota_detected_file" 2>/dev/null || true
 
             # Quota fast-fail watcher: detects quota exhaustion in stderr/stdout
             # and kills the provider process early instead of waiting the full TIMEOUT.
@@ -633,7 +635,8 @@ ${heuristic_ctx}"
                     "$temp_errors" \
                     "$temp_output" \
                     quota_watcher_kill_spawn_children \
-                    "[$agent_type] Quota exhaustion detected - fast-failing (saves ~${agent_timeout}s wait)")
+                    "[$agent_type] Quota exhaustion detected - fast-failing (saves ~${agent_timeout}s wait)" \
+                    "$quota_detected_file")
             fi
 
             # v9.2.2: All agents use stdin-based prompt delivery to avoid ARG_MAX limits (Issue #173)
@@ -832,6 +835,16 @@ ${heuristic_ctx}"
             fi
         elif [[ $exit_code -eq 124 ]] || [[ $exit_code -eq 143 ]]; then
             # v7.19.0 P0.2: TIMEOUT - Preserve partial output
+            local timeout_classification="timeout:Timed out before completion"
+            if type classify_agent_output >/dev/null 2>&1; then
+                timeout_classification=$(classify_agent_output "$temp_output" "$exit_code" "$agent_type" "$temp_errors" 2>/dev/null || echo "timeout:Timed out before completion")
+            fi
+            if [[ "$agent_type" == gemini* && -s "$quota_detected_file" ]]; then
+                timeout_classification="failed:GEMINI_QUOTA_EXHAUSTED"
+            fi
+            local timeout_status="${timeout_classification%%:*}"
+            local timeout_reason="${timeout_classification#*:}"
+
             # Process whatever output exists (may be significant partial work)
             if [[ -s "$temp_output" ]]; then
                 if [[ $(grep -c '^--------$' "$temp_output" 2>/dev/null || true) -gt 0 ]]; then
@@ -856,14 +869,20 @@ ${heuristic_ctx}"
             fi
             echo '```' >> "$result_file"
             echo "" >> "$result_file"
-            echo "## Status: TIMEOUT - PARTIAL RESULTS (exit code: $exit_code)" >> "$result_file"
-            echo "" >> "$result_file"
-            echo "⚠️  **Warning**: Agent timed out after ${agent_timeout}s but partial output preserved above." >> "$result_file"
-            echo "" >> "$result_file"
-            echo "**Recommendations**:" >> "$result_file"
-            echo "- Partial results may still be valuable" >> "$result_file"
-            echo "- Consider increasing timeout: \`--timeout $((agent_timeout * 2))\`" >> "$result_file"
-            echo "- Simplify prompt to reduce complexity" >> "$result_file"
+            if [[ "$timeout_status" == "failed" ]]; then
+                echo "## Status: FAILED (${timeout_reason:-unusable output})" >> "$result_file"
+                echo "" >> "$result_file"
+                echo "Provider quota exhaustion was detected before the process exited (exit code: $exit_code)." >> "$result_file"
+            else
+                echo "## Status: TIMEOUT - PARTIAL RESULTS (exit code: $exit_code)" >> "$result_file"
+                echo "" >> "$result_file"
+                echo "⚠️  **Warning**: Agent timed out after ${agent_timeout}s but partial output preserved above." >> "$result_file"
+                echo "" >> "$result_file"
+                echo "**Recommendations**:" >> "$result_file"
+                echo "- Partial results may still be valuable" >> "$result_file"
+                echo "- Consider increasing timeout: \`--timeout $((agent_timeout * 2))\`" >> "$result_file"
+                echo "- Simplify prompt to reduce complexity" >> "$result_file"
+            fi
 
             # Append error details
             if [[ -s "$temp_errors" ]]; then
@@ -875,24 +894,38 @@ ${heuristic_ctx}"
             fi
 
             # v8.19.0: Record timeout error and save checkpoint
-            record_error "$agent_type" "$prompt" "Agent timed out" "124" "spawn_agent timeout" 2>/dev/null || true
+            if [[ "$timeout_status" == "failed" ]]; then
+                record_error "$agent_type" "$prompt" "$timeout_reason" "$exit_code" "spawn_agent quota fast-fail" 2>/dev/null || true
+            else
+                record_error "$agent_type" "$prompt" "Agent timed out" "124" "spawn_agent timeout" 2>/dev/null || true
+            fi
             local timeout_partial=""
             [[ -s "$temp_output" ]] && timeout_partial=$(<"$temp_output")
             [[ -z "$timeout_partial" && -s "$raw_output" ]] && timeout_partial=$(<"$raw_output")
             save_agent_checkpoint "$task_id" "$agent_type" "${phase:-unknown}" "$timeout_partial" 2>/dev/null || true
 
-            # Mark agent as timeout (partial success) (v7.19.0)
+            # Mark agent as timeout (partial success) or failed quota exhaustion (v7.19.0)
             local end_time_ms elapsed_ms
             end_time_ms=$(( $(date +%s) * 1000 ))
             elapsed_ms=$((end_time_ms - start_time_ms))
-            update_agent_status "$agent_type" "timeout" "$elapsed_ms" 0.0
             local tokens_out
             tokens_out=$(octo_estimate_tokens_for_file "$temp_output" 2>/dev/null || echo 0)
-            type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "timeout" "$tokens_in" "$tokens_out" "Timed out before completion" "$elapsed_ms" "$result_file" "${role:-none}" || true
-            # v8.20.0: Record timeout for provider intelligence
-            record_outcome "$agent_type" "$agent_type" "${task_type:-unknown}" "${phase:-unknown}" "timeout" "$elapsed_ms" 2>/dev/null || true
-            # v9.13: Record timeout as transient failure for circuit breaker
-            type record_failure &>/dev/null && record_failure "$provider_prefix" "transient" 2>/dev/null || true
+            if [[ "$timeout_status" == "failed" ]]; then
+                if [[ "$agent_type" == gemini* && "$timeout_reason" == "GEMINI_QUOTA_EXHAUSTED" ]] && type mark_provider_quota_exhausted >/dev/null 2>&1; then
+                    mark_provider_quota_exhausted "gemini"
+                fi
+                update_agent_status "$agent_type" "failed" "$elapsed_ms" 0.0
+                type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "failed" "$tokens_in" "$tokens_out" "$timeout_reason" "$elapsed_ms" "$result_file" "${role:-none}" || true
+                record_outcome "$agent_type" "$agent_type" "${task_type:-unknown}" "${phase:-unknown}" "fail" "$elapsed_ms" 2>/dev/null || true
+                type record_failure &>/dev/null && record_failure "$provider_prefix" "quota" 2>/dev/null || true
+            else
+                update_agent_status "$agent_type" "timeout" "$elapsed_ms" 0.0
+                type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "timeout" "$tokens_in" "$tokens_out" "Timed out before completion" "$elapsed_ms" "$result_file" "${role:-none}" || true
+                # v8.20.0: Record timeout for provider intelligence
+                record_outcome "$agent_type" "$agent_type" "${task_type:-unknown}" "${phase:-unknown}" "timeout" "$elapsed_ms" 2>/dev/null || true
+                # v9.13: Record timeout as transient failure for circuit breaker
+                type record_failure &>/dev/null && record_failure "$provider_prefix" "transient" 2>/dev/null || true
+            fi
         else
             # v7.19.0 P0.2: Other failures - still try to preserve output
             if [[ -s "$temp_output" ]]; then
@@ -968,7 +1001,7 @@ ${heuristic_ctx}"
         fi
 
         # Cleanup temp files (keep raw_output for debugging if result is empty)
-        rm -f "$temp_output" "$temp_errors"
+        rm -f "$temp_output" "$temp_errors" "$quota_detected_file"
         if [[ $result_size -ge 1024 ]]; then
             rm -f "$raw_output"  # Clean up if result looks good
         fi

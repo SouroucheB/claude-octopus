@@ -298,11 +298,6 @@ classify_agent_output() {
         return 0
     fi
 
-    if [[ "$exit_code" -eq 124 || "$exit_code" -eq 143 ]]; then
-        echo "timeout:Timed out before completion"
-        return 0
-    fi
-
     if [[ "$agent" == gemini* ]] && octo_file_has_gemini_trust_failure "$output_file" "$stderr_file"; then
         echo "failed:GEMINI_TRUST_REQUIRED"
         return 0
@@ -310,6 +305,11 @@ classify_agent_output() {
 
     if [[ "$agent" == gemini* ]] && octo_file_has_gemini_quota_failure "$output_file" "$stderr_file"; then
         echo "failed:GEMINI_QUOTA_EXHAUSTED"
+        return 0
+    fi
+
+    if [[ "$exit_code" -eq 124 || "$exit_code" -eq 143 ]]; then
+        echo "timeout:Timed out before completion"
         return 0
     fi
 

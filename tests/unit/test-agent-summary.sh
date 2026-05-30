@@ -169,6 +169,18 @@ else
     test_fail "expected non-Codex empty output to fail, got: ${classification:-<empty>}"
 fi
 
+test_case "classify_agent_output prioritizes Gemini quota over SIGTERM timeout"
+gemini_quota_output="$WORKSPACE_DIR/results/gemini-quota.out"
+gemini_quota_stderr="$WORKSPACE_DIR/results/gemini-quota.err"
+> "$gemini_quota_output"
+printf '%s\n' "Error: code: 429 Too Many Requests" > "$gemini_quota_stderr"
+classification="$(classify_agent_output "$gemini_quota_output" 143 "gemini" "$gemini_quota_stderr")"
+if [[ "$classification" == "failed:GEMINI_QUOTA_EXHAUSTED" ]]; then
+    test_pass
+else
+    test_fail "expected Gemini quota to win over exit 143 timeout, got: ${classification:-<empty>}"
+fi
+
 test_case "OCTOPUS_REQUIRE_ALL fails when any provider failed"
 set +e
 OCTOPUS_REQUIRE_ALL=true render_agent_summary >/tmp/octopus-agent-summary-test.out 2>/dev/null

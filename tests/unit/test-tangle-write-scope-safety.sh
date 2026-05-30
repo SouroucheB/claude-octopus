@@ -73,6 +73,15 @@ else
     test_fail "directory/file overlap detection is incorrect"
 fi
 
+test_case "absolute and relative scopes overlap inside workspace"
+absolute_scope="${WORKSPACE_DIR}/src/lib/templates/NA02_REQUEST_REPORT.ts"
+relative_scope="src/lib/templates/NA02_REQUEST_REPORT.ts"
+if tangle_scopes_overlap "$absolute_scope" "$relative_scope"; then
+    test_pass
+else
+    test_fail "absolute and relative paths to the same file were treated as disjoint"
+fi
+
 test_case "absolute write scopes are recognized"
 absolute_subtasks="1. [CODING] Update canary. Files: /private/tmp/embrace-canary.abc/canary.txt"
 if tangle_validate_parallel_write_scopes "$absolute_subtasks"; then

@@ -124,6 +124,23 @@ check_explicit_file_coverage() {
     printf '%s' "$missing"
 }
 
+check_explicit_file_worktree_coverage() {
+    local original_prompt="$1"
+    local worktree_paths="$2"
+    local missing=""
+    local ref
+
+    while IFS= read -r ref; do
+        [[ -z "$ref" ]] && continue
+        case $'\n'"$worktree_paths"$'\n' in
+            *$'\n'"$ref"$'\n'*) ;;
+            *) missing+="${ref}"$'\n' ;;
+        esac
+    done <<< "$(extract_explicit_file_refs "$original_prompt")"
+
+    printf '%s' "$missing"
+}
+
 snapshot_tangle_worktree_paths() {
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
 
@@ -382,6 +399,7 @@ validate_tangle_results() {
         local worktree_changes=""
         local current_worktree_evidence=""
         local worktree_change_mode="new"
+        local missing_worktree_explicit_files=""
         local requires_worktree_changes=false
         if [[ -n "$worktree_before_file" && -f "$worktree_before_file" ]] && \
            tangle_prompt_requires_worktree_changes "$original_prompt"; then
@@ -393,6 +411,9 @@ validate_tangle_results() {
                     worktree_changes="$current_worktree_evidence"
                     worktree_change_mode="current"
                 fi
+            fi
+            if [[ -n "$worktree_changes" ]]; then
+                missing_worktree_explicit_files=$(check_explicit_file_worktree_coverage "$original_prompt" "$worktree_changes")
             fi
         fi
 
@@ -433,6 +454,12 @@ validate_tangle_results() {
             gate_status="FAILED"
             gate_color="${RED}"
             log WARN "Tangle missing explicit file coverage: $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+        fi
+
+        if [[ -n "$missing_worktree_explicit_files" ]]; then
+            gate_status="FAILED"
+            gate_color="${RED}"
+            log WARN "Tangle missing worktree evidence for explicit files: $(echo "$missing_worktree_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
         fi
 
         if [[ "$requires_worktree_changes" == "true" && -z "$worktree_changes" ]]; then
@@ -545,6 +572,9 @@ $challenge_result
 $(if [[ -n "$missing_explicit_files" ]]; then
     echo "#### Missing Explicit File Coverage"
     echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
+elif [[ -n "$missing_worktree_explicit_files" ]]; then
+    echo "#### Missing Worktree Evidence For Explicit Files"
+    echo "$missing_worktree_explicit_files" | sed '/^$/d; s/^/- /'
 else
     echo "All explicit file references from the task were covered by tangle outputs."
 fi)

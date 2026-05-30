@@ -47,8 +47,11 @@ validate_tangle_results() { :; }
 
 run_agent_sync() {
     cat <<'EOF'
-1. [CODING] Template polish. Files: src/lib/templates/NA10_HANDLE_SILENCE.ts
+1. [CODING] Template polish.
+   Files: src/lib/templates/NA10_HANDLE_SILENCE.ts
+   Expected output: update the silence template and run targeted checks.
 2. [REASONING] Integration review
+   Inputs: final git diff and Tangle validation.
 EOF
 }
 
@@ -90,6 +93,15 @@ if [[ "$captured_prompts" == *"Assigned subtask:"* ]] && \
     test_pass
 else
     test_fail "spawned prompts lost the assigned subtask text"
+fi
+
+test_case "subtask prompts include continuation lines"
+if [[ "$captured_prompts" == *"Files: src/lib/templates/NA10_HANDLE_SILENCE.ts"* ]] && \
+   [[ "$captured_prompts" == *"Expected output: update the silence template"* ]] && \
+   [[ "$captured_prompts" == *"Inputs: final git diff"* ]]; then
+    test_pass
+else
+    test_fail "spawned prompts lost continuation lines from decomposed subtasks"
 fi
 
 test_case "coding subtask prompts require direct edits and integration evidence"

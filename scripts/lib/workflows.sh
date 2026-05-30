@@ -969,16 +969,39 @@ tangle_scope_is_directory() {
     [[ "$base" != *.* ]]
 }
 
+tangle_normalize_scope_path() {
+    local scope="$1"
+    local workspace_root="${WORKSPACE_DIR:-$(pwd)}"
+    local workspace_raw
+    local workspace_physical
+
+    scope="${scope%/}"
+    scope="${scope#./}"
+
+    if [[ "$scope" == /* && -n "$workspace_root" ]]; then
+        workspace_raw="${workspace_root%/}"
+        workspace_physical="$(cd "$workspace_root" 2>/dev/null && pwd -P || printf '%s' "$workspace_raw")"
+        case "$scope" in
+            "$workspace_raw"/*) scope="${scope#"$workspace_raw"/}" ;;
+            "$workspace_physical"/*) scope="${scope#"$workspace_physical"/}" ;;
+        esac
+    fi
+
+    printf '%s' "$scope"
+}
+
 tangle_scopes_overlap() {
-    local left="${1%/}"
-    local right="${2%/}"
+    local left
+    local right
+    left=$(tangle_normalize_scope_path "$1")
+    right=$(tangle_normalize_scope_path "$2")
     [[ -z "$left" || -z "$right" ]] && return 1
     [[ "$left" == "$right" ]] && return 0
 
-    if tangle_scope_is_directory "$1" && [[ "$right" == "$left"/* ]]; then
+    if tangle_scope_is_directory "$left" && [[ "$right" == "$left"/* ]]; then
         return 0
     fi
-    if tangle_scope_is_directory "$2" && [[ "$left" == "$right"/* ]]; then
+    if tangle_scope_is_directory "$right" && [[ "$left" == "$right"/* ]]; then
         return 0
     fi
 
@@ -1248,7 +1271,7 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
     subtasks=$(run_agent_sync "codex" "$decompose_prompt" 120 "researcher" "tangle") || {
         log WARN "Decomposition failed with all providers, falling back to direct execution"
         local direct_prompt
-        direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because decomposition failed with all providers.")
+        direct_prompt=$(build_tangle_direct_prompt "$resolved_prompt" "Decomposition failed with all providers.")
         spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
         log INFO "Step 3: Validation gate..."
@@ -1294,14 +1317,27 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
     local subtask_num=0
     local pids=()
     local task_ids=()
+    local subtask_blocks=()
+    local current_subtask=""
 
-    fleet_dispatch_begin
     while IFS= read -r line; do
         [[ -z "$line" ]] && continue
-        [[ ! "$line" =~ ^[0-9]+[\.\)] ]] && continue
+        if [[ "$line" =~ ^[0-9]+[\.\)] ]]; then
+            if [[ -n "$current_subtask" ]]; then
+                subtask_blocks+=("$current_subtask")
+            fi
+            current_subtask=$(echo "$line" | sed 's/^[0-9]*[\.\)]\s*//')
+        elif [[ -n "$current_subtask" ]]; then
+            current_subtask="${current_subtask}"$'\n'"${line}"
+        fi
+    done <<< "$subtasks"
+    if [[ -n "$current_subtask" ]]; then
+        subtask_blocks+=("$current_subtask")
+    fi
 
-        local subtask
-        subtask=$(echo "$line" | sed 's/^[0-9]*[\.\)]\s*//')
+    fleet_dispatch_begin
+    local subtask
+    for subtask in "${subtask_blocks[@]}"; do
         local selection
         local agent
         local role
@@ -1331,7 +1367,7 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
         fi
         task_ids+=("$task_id")
         ((subtask_num++)) || true
-    done <<< "$subtasks"
+    done
     fleet_dispatch_end
 
     log INFO "Spawned $subtask_num development threads"

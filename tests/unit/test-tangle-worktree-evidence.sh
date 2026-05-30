@@ -129,6 +129,27 @@ else
     test_fail "validation failed despite a new worktree path"
 fi
 
+test_case "explicit file coverage requires matching worktree path"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-claimed-missing.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return null }\n' > src/app/page.tsx
+    write_success_result "$RESULTS_DIR/codex-tangle-evidence-claimed-missing.md" \
+        "Changed src/app/page.tsx and src/app/missing.ts."
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-claimed-missing" "Implement changes in src/app/page.tsx and src/app/missing.ts" "$RESULTS_DIR/before-claimed-missing.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "src/app/missing.ts" "$RESULTS_DIR/tangle-validation-evidence-claimed-missing.md"
+); then
+    test_pass
+else
+    test_fail "validation accepted claimed file coverage without matching worktree evidence"
+fi
+
 test_case "implementation prompt with verified current worktree path passes validation"
 if (
     cd "$REPO_DIR"

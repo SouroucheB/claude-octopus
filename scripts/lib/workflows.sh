@@ -916,6 +916,35 @@ Execution instructions:
 EOF
 }
 
+build_tangle_direct_prompt() {
+    local original_task="$1"
+    local fallback_reason="$2"
+
+    original_task=$(tangle_sanitize_runner_owned_paths "$original_task")
+    fallback_reason=$(tangle_sanitize_runner_owned_paths "$fallback_reason")
+
+    cat <<EOF
+Original task context:
+${original_task}
+
+Direct fallback reason:
+${fallback_reason}
+
+Execution instructions:
+- You are the single Tangle implementer for the full original task.
+- Treat the original task as authoritative for requirements, explicit file targets, acceptance criteria, and forbidden changes.
+- Do not treat file paths mentioned in the fallback reason as a new or narrower write scope; the fallback reason is diagnostic only.
+- For [CODING] work, edit the repository files directly in the current worktree. Do not only describe a plan or paste code snippets.
+- Runner-owned Octopus artifacts are not a worker write scope. Do not create, update, delete, or claim ownership of Octopus state, gate, validation, delivery, report, or artifact files; the runner owns them.
+- For gate evidence, use current-run embrace-gate artifacts with timestamps and provider statuses; Octopus state.json alone is not proof that a gate executed.
+- If the task creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
+- Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the task must report a blocker.
+- In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
+- End the final output with a line exactly: TANGLE_REPORT_COMPLETE.
+- If the original task is incomplete, contradictory, or unsafe to complete, report the blocker instead of inventing scope or delivering a partial scoped fix as success.
+EOF
+}
+
 tangle_extract_write_scopes() {
     local text="$1"
 
@@ -1240,7 +1269,7 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
     if [[ $parseable_subtask_count -eq 0 ]]; then
         log WARN "Decomposition produced no parseable subtasks, falling back to direct execution"
         local direct_prompt
-        direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because decomposition produced no parseable subtasks.")
+        direct_prompt=$(build_tangle_direct_prompt "$resolved_prompt" "Decomposition produced no parseable subtasks.")
         spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
         log INFO "Step 3: Validation gate..."
@@ -1252,7 +1281,7 @@ Output as numbered list with [CODING] or [REASONING] prefix for each subtask."
     if ! parallel_safety_reason=$(tangle_validate_parallel_write_scopes "$subtasks"); then
         log WARN "Unsafe parallel decomposition: ${parallel_safety_reason}"
         local direct_prompt
-        direct_prompt=$(build_tangle_subtask_prompt "$resolved_prompt" "Implement the full task directly because parallel decomposition is unsafe: ${parallel_safety_reason}")
+        direct_prompt=$(build_tangle_direct_prompt "$resolved_prompt" "parallel decomposition is unsafe: ${parallel_safety_reason}")
         spawn_agent "codex" "$direct_prompt" "tangle-${task_group}-direct" "implementer" "tangle"
         wait
         log INFO "Step 3: Validation gate..."

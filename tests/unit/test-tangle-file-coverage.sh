@@ -108,6 +108,37 @@ else
 fi
 
 rm -f "$RESULTS_DIR"/*.md
+write_success_result "$RESULTS_DIR/codex-tangle-coverage-instruction-doc-0.md" \
+    "Updated src/app/page.tsx and validated the targeted unit test."
+
+instruction_doc_prompt=$(cat <<'EOF'
+Update src/app/page.tsx.
+
+Verification expectations:
+- If UI/e2e specs are touched, follow AGENTS.md Playwright rules.
+EOF
+)
+
+test_case "conditional instruction docs are not required as file coverage"
+if validate_tangle_results "coverage-instruction-doc" "$instruction_doc_prompt" >/dev/null 2>&1; then
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-instruction-doc.md")"
+    coverage_section="$(sed -n '/### Explicit File Coverage/,/### Worktree Change Evidence/p' "$RESULTS_DIR/tangle-validation-coverage-instruction-doc.md")"
+    if [[ "$report" == *"Quality Gate: PASSED"* ]] && \
+       [[ "$coverage_section" != *"AGENTS.md"* ]]; then
+        test_pass
+    else
+        test_fail "conditional AGENTS.md instruction still appeared in coverage report"
+    fi
+else
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-instruction-doc.md" 2>/dev/null || true)"
+    if [[ "$report" == *"AGENTS.md"* ]]; then
+        test_fail "validation failed because conditional AGENTS.md instruction was treated as file coverage"
+    else
+        test_fail "validation failed unexpectedly for conditional instruction doc prompt"
+    fi
+fi
+
+rm -f "$RESULTS_DIR"/*.md
 write_success_result "$RESULTS_DIR/codex-tangle-coverage-audit-0.md" \
     "Wrote OCTO_REAL_AUDIT_REPORT.md with the scoped audit recommendation."
 

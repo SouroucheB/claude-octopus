@@ -76,6 +76,14 @@ else
     test_fail "direct fallback did not receive the original task constraints"
 fi
 
+test_case "direct fallback does not impose subtask exclusive write scope"
+if [[ "$DIRECT_PROMPT" == *"single Tangle implementer"* ]] && \
+   [[ "$DIRECT_PROMPT" != *"exclusive write scope"* ]]; then
+    test_pass
+else
+    test_fail "direct fallback still constrains the worker with subtask exclusive write scope"
+fi
+
 test_case "fallback still runs tangle validation"
 if [[ "$VALIDATION_CALLED" == "true" ]]; then
     test_pass

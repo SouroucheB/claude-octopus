@@ -75,6 +75,7 @@ extract_tangle_readwrite_context() {
                 }
                 if (line ~ /do not (modify|edit|touch|change|write)/) next
                 if (line ~ /do not stage|do not commit|do not push/) next
+                if (line ~ /agents\.md/ && line ~ /(follow|respect|according to|per|rules|instructions)/ && line !~ /(create|update|edit|modify|write)/) next
                 if (skip == 0) print
             }
         '

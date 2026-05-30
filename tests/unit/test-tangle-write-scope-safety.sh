@@ -150,6 +150,14 @@ else
     test_fail "direct fallback prompt did not preserve the overlap reason and original scope"
 fi
 
+test_case "unsafe direct fallback keeps full-task scope"
+if [[ "$DIRECT_PROMPT" == *"single Tangle implementer"* ]] && \
+   [[ "$DIRECT_PROMPT" != *"exclusive write scope"* ]]; then
+    test_pass
+else
+    test_fail "unsafe direct fallback still inherited subtask exclusive write scope"
+fi
+
 test_case "unsafe fallback still runs tangle validation"
 if [[ "$VALIDATION_CALLED" == "true" ]]; then
     test_pass

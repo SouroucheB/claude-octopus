@@ -141,6 +141,70 @@ check_explicit_file_worktree_coverage() {
     printf '%s' "$missing"
 }
 
+check_file_ref_list_coverage() {
+    local required_refs="$1"
+    local covered_refs="$2"
+    local missing=""
+    local ref
+
+    while IFS= read -r ref; do
+        [[ -z "$ref" ]] && continue
+        case $'\n'"$covered_refs"$'\n' in
+            *$'\n'"$ref"$'\n'*) ;;
+            *) missing+="${ref}"$'\n' ;;
+        esac
+    done <<< "$required_refs"
+
+    printf '%s' "$missing"
+}
+
+extract_tangle_result_prompt_context() {
+    local result_file="$1"
+
+    awk '
+        /^# Prompt:/ {
+            capture = 1
+            sub(/^# Prompt:[[:space:]]*/, "")
+            print
+            next
+        }
+        /^# Started:/ { capture = 0 }
+        /^## Output[[:space:]]*$/ { capture = 0 }
+        capture { print }
+    ' "$result_file" 2>/dev/null || true
+}
+
+extract_tangle_result_scope_refs() {
+    local result_file="$1"
+    local original_prompt="$2"
+    local prompt_context assigned_subtask scoped_refs
+
+    prompt_context=$(extract_tangle_result_prompt_context "$result_file")
+    assigned_subtask=$(printf '%s\n' "$prompt_context" | awk '
+        /^Assigned subtask:[[:space:]]*$/ { capture = 1; next }
+        /^Execution instructions:[[:space:]]*$/ { capture = 0 }
+        capture { print }
+    ')
+
+    if [[ -n "$assigned_subtask" ]]; then
+        scoped_refs=$(extract_explicit_file_refs "$assigned_subtask")
+        if [[ -n "$scoped_refs" ]]; then
+            printf '%s\n' "$scoped_refs" | sort -u
+            return 0
+        fi
+    fi
+
+    if [[ -n "$prompt_context" ]]; then
+        scoped_refs=$(extract_explicit_file_refs "$prompt_context")
+        if [[ -n "$scoped_refs" ]]; then
+            printf '%s\n' "$scoped_refs" | sort -u
+            return 0
+        fi
+    fi
+
+    extract_explicit_file_refs "$original_prompt"
+}
+
 snapshot_tangle_worktree_paths() {
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
 
@@ -319,6 +383,7 @@ validate_tangle_results() {
         local success_count=0
         local fail_count=0
         local implementation_timeout_count=0
+        local implementation_timeout_results=()
         local reasoning_success_count=0
         local reasoning_fail_count=0
         local report_integrity_fail_count=0
@@ -372,7 +437,10 @@ validate_tangle_results() {
                     ((success_count++)) || true
                 else
                     ((fail_count++)) || true
-                    [[ "$result_timed_out" == "true" ]] && ((implementation_timeout_count++)) || true
+                    if [[ "$result_timed_out" == "true" ]]; then
+                        ((implementation_timeout_count++)) || true
+                        implementation_timeout_results+=("$result")
+                    fi
                     # Extract agent and prompt for retry (if loop-until-approved enabled)
                     if [[ "$LOOP_UNTIL_APPROVED" == "true" ]]; then
                         local agent prompt_line
@@ -418,11 +486,38 @@ validate_tangle_results() {
         fi
 
         local evidence_backed_timeout_count=0
-        if [[ "$implementation_timeout_count" -gt 0 ]] && \
-           [[ "$requires_worktree_changes" == "true" ]] && \
-           [[ -n "$worktree_changes" ]] && \
-           [[ -z "$missing_explicit_files" ]]; then
-            evidence_backed_timeout_count="$implementation_timeout_count"
+        if [[ "$implementation_timeout_count" -gt 0 && "$requires_worktree_changes" == "true" && -n "$worktree_changes" ]]; then
+            local timeout_result
+            for timeout_result in "${implementation_timeout_results[@]}"; do
+                local timeout_integrity_issues timeout_scope_refs timeout_output_refs timeout_missing_output timeout_missing_worktree
+                timeout_integrity_issues=$(tangle_result_integrity_issues "$timeout_result")
+                if [[ -n "$timeout_integrity_issues" ]]; then
+                    ((report_integrity_fail_count++)) || true
+                    report_integrity_issues+="$(basename "$timeout_result")"$'\n'
+                    report_integrity_issues+="$(printf '%s\n' "$timeout_integrity_issues" | sed '/^$/d; s/^/  - /')"$'\n'
+                    continue
+                fi
+
+                timeout_scope_refs=$(extract_tangle_result_scope_refs "$timeout_result" "$original_prompt")
+                if [[ -n "$timeout_scope_refs" ]]; then
+                    timeout_output_refs=$(extract_file_refs_from_text "$(extract_tangle_result_output "$timeout_result")")
+                    timeout_missing_output=$(check_file_ref_list_coverage "$timeout_scope_refs" "$timeout_output_refs")
+                    timeout_missing_worktree=$(check_file_ref_list_coverage "$timeout_scope_refs" "$worktree_changes")
+
+                    if [[ -n "$timeout_missing_output" ]]; then
+                        missing_explicit_files+="$timeout_missing_output"
+                    fi
+                    if [[ -n "$timeout_missing_worktree" ]]; then
+                        missing_worktree_explicit_files+="$timeout_missing_worktree"
+                    fi
+                    [[ -n "$timeout_missing_output$timeout_missing_worktree" ]] && continue
+                fi
+
+                ((evidence_backed_timeout_count++)) || true
+            done
+        fi
+
+        if [[ "$evidence_backed_timeout_count" -gt 0 ]]; then
             success_count=$((success_count + evidence_backed_timeout_count))
             fail_count=$((fail_count - evidence_backed_timeout_count))
             [[ "$fail_count" -lt 0 ]] && fail_count=0

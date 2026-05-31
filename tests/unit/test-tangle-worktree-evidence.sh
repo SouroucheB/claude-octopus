@@ -76,11 +76,13 @@ write_timeout_result() {
     local path="$1"
     local body="$2"
     local role="${3:-implementer}"
+    local prompt="${4:-}"
     cat > "$path" <<EOF
 # Agent: codex
 # Task ID: tangle-evidence-0
 # Role: $role
 # Phase: tangle
+$(if [[ -n "$prompt" ]]; then printf '# Prompt: %s\n' "$prompt"; fi)
 
 ## Output
 $body
@@ -210,7 +212,7 @@ if (
     mkdir -p src/app
     printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
     write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-evidence.md" \
-        "Changed src/app/page.tsx before timing out."
+        $'Changed src/app/page.tsx before timing out.\n\n## Verification\n- Verified src/app/page.tsx was written before the timeout.\nTANGLE_REPORT_COMPLETE'
     RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-evidence" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-timeout-evidence.txt" >/dev/null 2>&1
     grep -q "### Quality Gate: WARNING" "$RESULTS_DIR/tangle-validation-evidence-timeout-evidence.md" && \
     grep -q "Evidence-backed timeouts: 1/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-evidence.md" && \
@@ -230,8 +232,6 @@ if (
     snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-plan-noise.txt"
     mkdir -p src/app
     printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
-    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-plan-noise.md" \
-        "Changed src/app/page.tsx before timing out."
     noisy_prompt='Implement the app change in src/app/page.tsx.
 
 The following referenced plan file has been resolved. Use it as implementation context and do NOT modify the plan file itself (docs/BACKLOG.md).
@@ -241,6 +241,8 @@ This backlog context mentions unrelated read-only files: AGENTS.md, AUDIT.md,
 src/lib/engine/applyPerception.ts, src/lib/engine/projectDossier.ts,
 and scripts/generate-snapshots.sh.
 --- END PLAN ---'
+    timeout_body=$'Changed src/app/page.tsx before timing out.\n\n## Verification\n- Verified src/app/page.tsx was written before the timeout.\nTANGLE_REPORT_COMPLETE'
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-plan-noise.md" "$timeout_body"
     RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-plan-noise" "$noisy_prompt" "$RESULTS_DIR/before-timeout-plan-noise.txt" >/dev/null 2>&1
     grep -q "### Quality Gate: WARNING" "$RESULTS_DIR/tangle-validation-evidence-timeout-plan-noise.md" && \
     grep -q "Evidence-backed timeouts: 1/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-plan-noise.md" && \
@@ -249,6 +251,53 @@ and scripts/generate-snapshots.sh.
     test_pass
 else
     test_fail "resolved plan context refs blocked evidence-backed timeout"
+fi
+
+test_case "timeout evidence must intersect the timed-out subtask scope"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-wrong-scope.txt"
+    mkdir -p tests
+    printf 'test("unrelated", () => {})\n' > tests/unrelated.spec.ts
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-wrong-scope.md" \
+        $'Changed src/app/page.tsx before timing out.\n\n## Verification\n- Timed out before completing verification.\nTANGLE_REPORT_COMPLETE' \
+        "implementer" \
+        $'Original task context:\nImplement the app change.\n\nAssigned subtask:\n[CODING] Implement app page\nFiles: src/app/page.tsx\n\nExecution instructions:'
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-wrong-scope" "Implement the app change" "$RESULTS_DIR/before-timeout-wrong-scope.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "Evidence-backed timeouts: 0/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-wrong-scope.md" && \
+    grep -q "Missing Worktree Evidence For Explicit Files" "$RESULTS_DIR/tangle-validation-evidence-timeout-wrong-scope.md" && \
+    grep -q "src/app/page.tsx" "$RESULTS_DIR/tangle-validation-evidence-timeout-wrong-scope.md"
+); then
+    test_pass
+else
+    test_fail "timeout was promoted using unrelated worktree changes outside its declared scope"
+fi
+
+test_case "evidence-backed timeout must pass report integrity"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-missing-verification.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-missing-verification.md" \
+        "Changed src/app/page.tsx before timing out."
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-missing-verification" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-timeout-missing-verification.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "Evidence-backed timeouts: 0/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-missing-verification.md" && \
+    grep -q "Missing Tangle verification section" "$RESULTS_DIR/tangle-validation-evidence-timeout-missing-verification.md"
+); then
+    test_pass
+else
+    test_fail "timeout was promoted without passing report integrity checks"
 fi
 
 test_case "timeout with only octopus internal artifacts still fails"

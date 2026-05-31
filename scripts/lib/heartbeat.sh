@@ -269,7 +269,11 @@ run_with_timeout() {
         local recommended_timeout=$((timeout_secs * 2))
         local recommended_mins=$((recommended_timeout / 60))
 
-        log ERROR "Operation timed out after ${timeout_secs}s (${timeout_mins}m)"
+        if [[ $exit_code -eq 124 ]]; then
+            log ERROR "backstop: exceeded ${timeout_secs}s"
+        else
+            log ERROR "Operation terminated after ${timeout_secs}s (${timeout_mins}m)"
+        fi
         echo "" >&2
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
         echo "⚠️  TIMEOUT EXCEEDED" >&2

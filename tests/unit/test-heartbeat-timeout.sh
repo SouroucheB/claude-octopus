@@ -158,7 +158,7 @@ test_spawn_agent_uses_effective_timeout() {
     test_case "spawn_agent uses effective per-agent timeout"
 
     if grep -q "octopus_effective_agent_timeout" "$ALL_SRC" && \
-       grep -q 'run_with_timeout "\$agent_timeout"' "$ALL_SRC"; then
+       grep -q 'run_with_timeout "\$agent_backstop_timeout"' "$ALL_SRC"; then
         test_pass
     else
         test_fail "spawn_agent still appears to use the global TIMEOUT directly"

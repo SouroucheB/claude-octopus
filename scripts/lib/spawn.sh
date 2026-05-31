@@ -2,7 +2,7 @@
 # spawn_agent — extracted from orchestrate.sh (v9.7.x)
 # Agent spawning and lifecycle management
 
-if ! type start_quota_watcher >/dev/null 2>&1; then
+if ! type start_quota_watcher >/dev/null 2>&1 || ! type start_idle_watcher >/dev/null 2>&1; then
     _octopus_spawn_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     source "${_octopus_spawn_lib_dir}/quota-watcher.sh" 2>/dev/null || true
 fi
@@ -12,6 +12,21 @@ quota_watcher_kill_spawn_children() {
     pkill -TERM -P "$spawn_pid" 2>/dev/null || true
     sleep 1
     pkill -KILL -P "$spawn_pid" 2>/dev/null || true
+}
+
+octopus_set_current_shell_pid() {
+    local __target_var="$1"
+    local pid="${BASHPID:-}"
+
+    if [[ -z "$pid" ]]; then
+        local pid_file
+        pid_file=$(mktemp 2>/dev/null || mktemp -t 'octo-spawn-pid')
+        sh -c 'printf "%s\n" "$PPID"' > "$pid_file" 2>/dev/null || true
+        pid=$(cat "$pid_file" 2>/dev/null || true)
+        rm -f "$pid_file" 2>/dev/null || true
+    fi
+
+    printf -v "$__target_var" '%s' "$pid" 2>/dev/null || eval "$__target_var=\$pid"
 }
 
 if ! type octopus_should_inject_historical_context >/dev/null 2>&1; then
@@ -426,6 +441,9 @@ ${heuristic_ctx}"
         fi
     fi
     log DEBUG "Agent timeout: ${agent_timeout}s (global TIMEOUT=${TIMEOUT}s, explicit=${OCTOPUS_TIMEOUT_EXPLICIT:-false})"
+    local agent_backstop_timeout="${OCTOPUS_AGENT_MAX_WALL:-$agent_timeout}"
+    [[ "$agent_backstop_timeout" =~ ^[0-9]+$ && "$agent_backstop_timeout" -gt 0 ]] || agent_backstop_timeout="$agent_timeout"
+    log DEBUG "Agent idle timeout: ${OCTOPUS_AGENT_IDLE_TIMEOUT:-90}s; backstop: ${agent_backstop_timeout}s"
 
     # Record usage (get model from agent type, with phase/role context)
     local model
@@ -594,6 +612,7 @@ ${heuristic_ctx}"
         local temp_errors="${RESULTS_DIR}/.tmp-${task_id}.err"
         local raw_output="${RESULTS_DIR}/.raw-${task_id}.out"  # Backup of unfiltered output
         local quota_detected_file="${RESULTS_DIR}/.quota-${task_id}.detected"
+        local idle_detected_file="${RESULTS_DIR}/.idle-${task_id}.detected"
 
         # Update task progress with context-aware spinner verb (v7.16.0 Feature 1)
         if [[ -n "$CLAUDE_TASK_ID" ]]; then
@@ -637,13 +656,15 @@ ${heuristic_ctx}"
         while true; do
             exit_code=0
             rm -f "$quota_detected_file" 2>/dev/null || true
+            rm -f "$idle_detected_file" 2>/dev/null || true
+            local _spawn_pid
+            octopus_set_current_shell_pid _spawn_pid
 
             # Quota fast-fail watcher: detects quota exhaustion in stderr/stdout
             # and kills the provider process early instead of waiting the full TIMEOUT.
             # Applies to Gemini (free tier exhausts quota and retries for ~18h internally).
             local _quota_watcher_pid=""
             if [[ "$agent_type" == gemini* ]]; then
-                local _spawn_pid=$BASHPID
                 _quota_watcher_pid=$(start_quota_watcher \
                     "$_spawn_pid" \
                     "$temp_errors" \
@@ -652,15 +673,24 @@ ${heuristic_ctx}"
                     "[$agent_type] Quota exhaustion detected - fast-failing (saves ~${agent_timeout}s wait)" \
                     "$quota_detected_file")
             fi
+            local _idle_watcher_pid=""
+            _idle_watcher_pid=$(start_idle_watcher \
+                "$_spawn_pid" \
+                "$temp_errors" \
+                "$temp_output" \
+                quota_watcher_kill_spawn_children \
+                "[$agent_type] idle-timeout: no output for ${OCTOPUS_AGENT_IDLE_TIMEOUT:-90}s" \
+                "$idle_detected_file")
 
             # v9.2.2: All agents use stdin-based prompt delivery to avoid ARG_MAX limits (Issue #173)
             # Previously only gemini used stdin; codex/claude passed prompt as CLI arg which fails on large diffs
-            if printf '%s' "$enhanced_prompt" | run_with_timeout "$agent_timeout" "${cmd_array[@]}" 2> "$temp_errors" | tee "$raw_output" > "$temp_output"; then
+            if printf '%s' "$enhanced_prompt" | run_with_timeout "$agent_backstop_timeout" "${cmd_array[@]}" 2> "$temp_errors" | tee "$raw_output" > "$temp_output"; then
                 exit_code=0
             else
                 exit_code=$?
             fi
 
+            stop_idle_watcher "$_idle_watcher_pid"
             stop_quota_watcher "$_quota_watcher_pid"
 
             # v8.16: Check if failure is auth-related and retryable
@@ -855,6 +885,11 @@ ${heuristic_ctx}"
             fi
             if [[ "$agent_type" == gemini* && -s "$quota_detected_file" ]]; then
                 timeout_classification="failed:GEMINI_QUOTA_EXHAUSTED"
+            elif [[ -s "$idle_detected_file" ]]; then
+                local idle_reason
+                idle_reason=$(sed -n 's/^reason=//p' "$idle_detected_file" 2>/dev/null | head -1)
+                timeout_classification="timeout:${idle_reason:-idle: no output for ${OCTOPUS_AGENT_IDLE_TIMEOUT:-90}s}"
+                exit_code=124
             fi
             local timeout_status="${timeout_classification%%:*}"
             local timeout_reason="${timeout_classification#*:}"
@@ -890,11 +925,15 @@ ${heuristic_ctx}"
             else
                 echo "## Status: TIMEOUT - PARTIAL RESULTS (exit code: $exit_code)" >> "$result_file"
                 echo "" >> "$result_file"
-                echo "⚠️  **Warning**: Agent timed out after ${agent_timeout}s but partial output preserved above." >> "$result_file"
+                if [[ "$timeout_reason" == idle:* ]]; then
+                    echo "⚠️  **Warning**: Agent timed out (${timeout_reason}) but partial output preserved above." >> "$result_file"
+                else
+                    echo "⚠️  **Warning**: Agent timed out after ${agent_backstop_timeout}s (backstop: exceeded ${agent_backstop_timeout}s) but partial output preserved above." >> "$result_file"
+                fi
                 echo "" >> "$result_file"
                 echo "**Recommendations**:" >> "$result_file"
                 echo "- Partial results may still be valuable" >> "$result_file"
-                echo "- Consider increasing timeout: \`--timeout $((agent_timeout * 2))\`" >> "$result_file"
+                echo "- Consider increasing timeout: \`--timeout $((agent_backstop_timeout * 2))\`" >> "$result_file"
                 echo "- Simplify prompt to reduce complexity" >> "$result_file"
             fi
 
@@ -911,7 +950,7 @@ ${heuristic_ctx}"
             if [[ "$timeout_status" == "failed" ]]; then
                 record_error "$agent_type" "$prompt" "$timeout_reason" "$exit_code" "spawn_agent quota fast-fail" 2>/dev/null || true
             else
-                record_error "$agent_type" "$prompt" "Agent timed out" "124" "spawn_agent timeout" 2>/dev/null || true
+                record_error "$agent_type" "$prompt" "${timeout_reason:-Agent timed out}" "124" "spawn_agent timeout" 2>/dev/null || true
             fi
             local timeout_partial=""
             [[ -s "$temp_output" ]] && timeout_partial=$(<"$temp_output")
@@ -934,7 +973,7 @@ ${heuristic_ctx}"
                 type record_failure &>/dev/null && record_failure "$provider_prefix" "quota" 2>/dev/null || true
             else
                 update_agent_status "$agent_type" "timeout" "$elapsed_ms" 0.0
-                type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "timeout" "$tokens_in" "$tokens_out" "Timed out before completion" "$elapsed_ms" "$result_file" "${role:-none}" || true
+                type write_agent_status >/dev/null 2>&1 && write_agent_status "$agent_type" "timeout" "$tokens_in" "$tokens_out" "${timeout_reason:-Timed out before completion}" "$elapsed_ms" "$result_file" "${role:-none}" || true
                 # v8.20.0: Record timeout for provider intelligence
                 record_outcome "$agent_type" "$agent_type" "${task_type:-unknown}" "${phase:-unknown}" "timeout" "$elapsed_ms" 2>/dev/null || true
                 # v9.13: Record timeout as transient failure for circuit breaker
@@ -1015,7 +1054,7 @@ ${heuristic_ctx}"
         fi
 
         # Cleanup temp files (keep raw_output for debugging if result is empty)
-        rm -f "$temp_output" "$temp_errors" "$quota_detected_file"
+        rm -f "$temp_output" "$temp_errors" "$quota_detected_file" "$idle_detected_file"
         if [[ $result_size -ge 1024 ]]; then
             rm -f "$raw_output"  # Clean up if result looks good
         fi

@@ -87,4 +87,81 @@ else
     test_fail "quota watcher did not invoke callback"
 fi
 
+test_case "start_idle_watcher keeps target alive when stdout grows"
+idle_flag_file="$tmp_dir/idle-stdout.flag"
+test_idle_callback() {
+    local target_pid="$1"
+    printf '%s\n' "$target_pid" > "$idle_flag_file"
+    kill "$target_pid" 2>/dev/null || true
+}
+
+: > "$err_file"
+: > "$out_file"
+OCTOPUS_AGENT_IDLE_TIMEOUT=2
+OCTOPUS_AGENT_IDLE_POLL_INTERVAL=1
+(
+    for i in 1 2 3; do
+        printf 'stdout tick %s\n' "$i" >> "$out_file"
+        sleep 1
+    done
+) &
+target_pid=$!
+watcher_pid=$(start_idle_watcher "$target_pid" "$err_file" "$out_file" test_idle_callback "idle stdout test" "$tmp_dir/idle-stdout.detected")
+wait "$target_pid" 2>/dev/null || true
+stop_idle_watcher "$watcher_pid"
+if [[ ! -e "$idle_flag_file" && ! -e "$tmp_dir/idle-stdout.detected" ]]; then
+    test_pass
+else
+    test_fail "idle watcher killed stdout-active target"
+fi
+
+test_case "start_idle_watcher keeps target alive when stderr grows"
+idle_stderr_flag_file="$tmp_dir/idle-stderr.flag"
+test_idle_stderr_callback() {
+    local target_pid="$1"
+    printf '%s\n' "$target_pid" > "$idle_stderr_flag_file"
+    kill "$target_pid" 2>/dev/null || true
+}
+
+: > "$err_file"
+: > "$out_file"
+(
+    for i in 1 2 3; do
+        printf 'stderr tick %s\n' "$i" >> "$err_file"
+        sleep 1
+    done
+) &
+target_pid=$!
+watcher_pid=$(start_idle_watcher "$target_pid" "$err_file" "$out_file" test_idle_stderr_callback "idle stderr test" "$tmp_dir/idle-stderr.detected")
+wait "$target_pid" 2>/dev/null || true
+stop_idle_watcher "$watcher_pid"
+if [[ ! -e "$idle_stderr_flag_file" && ! -e "$tmp_dir/idle-stderr.detected" ]]; then
+    test_pass
+else
+    test_fail "idle watcher killed stderr-active target"
+fi
+
+test_case "start_idle_watcher kills silent target and records reason"
+idle_silent_flag_file="$tmp_dir/idle-silent.flag"
+idle_silent_detected="$tmp_dir/idle-silent.detected"
+test_idle_silent_callback() {
+    local target_pid="$1"
+    printf '%s\n' "$target_pid" > "$idle_silent_flag_file"
+    kill "$target_pid" 2>/dev/null || true
+}
+
+: > "$err_file"
+printf 'initial output\n' > "$out_file"
+( trap 'exit 143' TERM; while true; do read -r -t 1 _idle_test_input || true; done ) &
+target_pid=$!
+watcher_pid=$(start_idle_watcher "$target_pid" "$err_file" "$out_file" test_idle_silent_callback "idle silent test" "$idle_silent_detected")
+wait "$target_pid" 2>/dev/null || true
+stop_idle_watcher "$watcher_pid"
+unset OCTOPUS_AGENT_IDLE_TIMEOUT OCTOPUS_AGENT_IDLE_POLL_INTERVAL
+if [[ -s "$idle_silent_flag_file" ]] && grep -q "reason=idle: no output for 2s" "$idle_silent_detected" 2>/dev/null; then
+    test_pass
+else
+    test_fail "idle watcher did not kill silent target with recorded reason"
+fi
+
 test_summary

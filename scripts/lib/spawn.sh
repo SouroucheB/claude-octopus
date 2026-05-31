@@ -412,9 +412,19 @@ ${heuristic_ctx}"
 
     local agent_timeout="$TIMEOUT"
     if type octopus_effective_agent_timeout >/dev/null 2>&1; then
-        agent_timeout=$(octopus_effective_agent_timeout "$agent_type" "$prompt" "${phase:-}" "$TIMEOUT") || agent_timeout="$TIMEOUT"
+        agent_timeout=$(octopus_effective_agent_timeout "$agent_type" "$prompt" "${phase:-}" "$TIMEOUT" "${role:-}") || agent_timeout="$TIMEOUT"
     fi
     [[ "$agent_timeout" =~ ^[0-9]+$ ]] || agent_timeout="$TIMEOUT"
+    if [[ "${phase:-}" == "tangle" && "${role:-}" == "implementer" && -z "${OCTOPUS_AGENT_TIMEOUT:-}" && -z "${OCTOPUS_SPAWN_AGENT_TIMEOUT:-}" && "${OCTOPUS_TIMEOUT_EXPLICIT:-false}" != "true" ]] && \
+       type octopus_tangle_declared_file_count >/dev/null 2>&1; then
+        local tangle_file_count tangle_timeout_threshold
+        tangle_file_count=$(octopus_tangle_declared_file_count "$prompt")
+        tangle_timeout_threshold="${OCTOPUS_TANGLE_TIMEOUT_FILE_THRESHOLD:-4}"
+        [[ "$tangle_timeout_threshold" =~ ^[0-9]+$ ]] || tangle_timeout_threshold=4
+        if [[ "$tangle_file_count" =~ ^[0-9]+$ && "$tangle_file_count" -ge "$tangle_timeout_threshold" ]]; then
+            log INFO "Tangle implementer timeout size-aware: files=${tangle_file_count}, timeout=${agent_timeout}s"
+        fi
+    fi
     log DEBUG "Agent timeout: ${agent_timeout}s (global TIMEOUT=${TIMEOUT}s, explicit=${OCTOPUS_TIMEOUT_EXPLICIT:-false})"
 
     # Record usage (get model from agent type, with phase/role context)

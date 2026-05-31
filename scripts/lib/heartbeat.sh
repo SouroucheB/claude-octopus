@@ -121,11 +121,24 @@ compute_dynamic_timeout() {
     esac
 }
 
+octopus_tangle_declared_file_count() {
+    local prompt="${1:-}"
+
+    printf '%s\n' "$prompt" \
+        | awk '{ line = tolower($0); if (line ~ /(^|[[:space:]])files:[[:space:]]/) print }' \
+        | grep -oE '((src|lib|app|test|tests|docs|pkg|cmd|internal|scripts|config|public|assets|components|pages|utils|hooks|services|models|controllers|routes|middleware|api)/[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]{1,8}|\./[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]{1,8}|[a-zA-Z0-9_.-]+\.(md|markdown|txt|json|ya?ml|sh|bash|ts|tsx|js|jsx|mjs|cjs|css|scss|html|py|rb|go|rs|java|kt|swift|sql|toml))' 2>/dev/null \
+        | sed 's#^\./##' \
+        | sort -u \
+        | wc -l \
+        | tr -d '[:space:]'
+}
+
 octopus_effective_agent_timeout() {
     local agent_type="${1:-}"
     local prompt="${2:-}"
     local phase="${3:-}"
     local default_timeout="${4:-${TIMEOUT:-120}}"
+    local role="${5:-}"
 
     if [[ -n "${OCTOPUS_AGENT_TIMEOUT:-}" ]]; then
         echo "$OCTOPUS_AGENT_TIMEOUT"
@@ -155,6 +168,28 @@ octopus_effective_agent_timeout() {
     fi
 
     [[ "$computed" =~ ^[0-9]+$ ]] || computed="$default_timeout"
+    if [[ "$phase" == "tangle" && "$role" == "implementer" && "${OCTOPUS_TIMEOUT_EXPLICIT:-false}" != "true" ]]; then
+        local file_count threshold per_extra_file scaled max_timeout
+        file_count=$(octopus_tangle_declared_file_count "$prompt")
+        threshold="${OCTOPUS_TANGLE_TIMEOUT_FILE_THRESHOLD:-4}"
+        per_extra_file="${OCTOPUS_TANGLE_TIMEOUT_PER_EXTRA_FILE:-120}"
+        [[ "$file_count" =~ ^[0-9]+$ ]] || file_count=0
+        [[ "$threshold" =~ ^[0-9]+$ ]] || threshold=4
+        [[ "$per_extra_file" =~ ^[0-9]+$ ]] || per_extra_file=120
+
+        if [[ "$file_count" -ge "$threshold" ]]; then
+            scaled=$((computed + (file_count - threshold + 1) * per_extra_file))
+            max_timeout="${OCTOPUS_TANGLE_IMPLEMENTER_TIMEOUT_MAX:-$default_timeout}"
+            [[ "$max_timeout" =~ ^[0-9]+$ ]] || max_timeout="$default_timeout"
+            if [[ "$scaled" -gt "$max_timeout" ]]; then
+                scaled="$max_timeout"
+            fi
+            if [[ "$scaled" -gt "$computed" ]]; then
+                computed="$scaled"
+            fi
+        fi
+    fi
+
     if [[ "$default_timeout" =~ ^[0-9]+$ && "$computed" -gt "$default_timeout" ]]; then
         echo "$default_timeout"
     else

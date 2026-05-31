@@ -165,6 +165,25 @@ test_spawn_agent_uses_effective_timeout() {
     fi
 }
 
+test_tangle_implementation_timeout_scales_with_scope() {
+    test_case "Tangle implementer timeout scales with declared file scope"
+
+    local small_prompt large_prompt small_timeout large_timeout
+    unset OCTOPUS_AGENT_TIMEOUT OCTOPUS_SPAWN_AGENT_TIMEOUT OCTOPUS_TIMEOUT_EXPLICIT
+    SUPPORTS_MEMORY_LEAK_FIXES=false
+    small_prompt=$'Assigned subtask:\n[CODING] Update one file\nFiles: src/app/page.tsx'
+    large_prompt=$'Assigned subtask:\n[CODING] Update coupled threading flow\nFiles: src/lib/email/sendEmail.server.ts, src/services/commands/importEmail.server.ts, src/services/commands/sendDraft.server.ts, src/lib/email/__tests__/sendEmail.server.spec.ts, src/services/commands/__tests__/integration/importEmail.spec.ts, src/services/commands/__tests__/integration/sendDraft.spec.ts'
+
+    small_timeout=$(octopus_effective_agent_timeout "codex" "$small_prompt" "tangle" "600" "implementer")
+    large_timeout=$(octopus_effective_agent_timeout "codex" "$large_prompt" "tangle" "600" "implementer")
+
+    if [[ "$small_timeout" =~ ^[0-9]+$ && "$large_timeout" =~ ^[0-9]+$ && "$large_timeout" -gt "$small_timeout" && "$large_timeout" -ge 480 ]]; then
+        test_pass
+    else
+        test_fail "expected large Tangle scope timeout > small timeout; small=${small_timeout}, large=${large_timeout}"
+    fi
+}
+
 test_timeout_fallback_does_not_hold_pipeline_open() {
     test_case "run_with_timeout fallback closes pipeline stdout promptly"
 
@@ -210,6 +229,7 @@ test_heartbeat_macos_linux_compat
 test_dynamic_timeout_in_run_agent_sync
 test_run_agent_sync_passes_provider_to_timeout
 test_spawn_agent_uses_effective_timeout
+test_tangle_implementation_timeout_scales_with_scope
 test_timeout_fallback_does_not_hold_pipeline_open
 test_dry_run_with_heartbeat
 

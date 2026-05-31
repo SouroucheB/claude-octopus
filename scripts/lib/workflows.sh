@@ -887,6 +887,13 @@ tangle_sanitize_runner_owned_paths() {
             -e 's#`?(probe-synthesis|grasp-consensus|tangle-validation|embrace-gate|delivery|embrace-report)-[A-Za-z0-9_.@%+-]+\.md`?#[runner-owned artifact path removed]#g'
 }
 
+tangle_worker_report_contract() {
+    cat <<'EOF'
+- In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
+- End the final output with a line exactly: TANGLE_REPORT_COMPLETE.
+EOF
+}
+
 build_tangle_subtask_prompt() {
     local original_task="$1"
     local assigned_subtask="$2"
@@ -895,6 +902,9 @@ build_tangle_subtask_prompt() {
     assigned_subtask=$(tangle_sanitize_runner_owned_paths "$assigned_subtask")
 
     cat <<EOF
+Non-negotiable report contract:
+$(tangle_worker_report_contract)
+
 Original task context:
 ${original_task}
 
@@ -910,8 +920,7 @@ Execution instructions:
 - For gate evidence, use current-run embrace-gate artifacts with timestamps and provider statuses; Octopus state.json alone is not proof that a gate executed.
 - If the subtask creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
 - Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the subtask must report a blocker.
-- In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
-- End the final output with a line exactly: TANGLE_REPORT_COMPLETE.
+$(tangle_worker_report_contract)
 - If the assigned subtask is incomplete, contradictory, or omits required context, report the blocker instead of inventing scope.
 EOF
 }
@@ -924,6 +933,9 @@ build_tangle_direct_prompt() {
     fallback_reason=$(tangle_sanitize_runner_owned_paths "$fallback_reason")
 
     cat <<EOF
+Non-negotiable report contract:
+$(tangle_worker_report_contract)
+
 Original task context:
 ${original_task}
 
@@ -939,8 +951,7 @@ Execution instructions:
 - For gate evidence, use current-run embrace-gate artifacts with timestamps and provider statuses; Octopus state.json alone is not proof that a gate executed.
 - If the task creates a new exported component, command, event type, route, hook, or helper, wire it into at least one production call site unless the original task explicitly asks for an isolated artifact.
 - Tests alone are not integration evidence. User-facing features must be reachable from the relevant user flow or the task must report a blocker.
-- In the final output, include "## Worktree Changes", "## Integration Evidence", and "## Verification" sections.
-- End the final output with a line exactly: TANGLE_REPORT_COMPLETE.
+$(tangle_worker_report_contract)
 - If the original task is incomplete, contradictory, or unsafe to complete, report the blocker instead of inventing scope or delivering a partial scoped fix as success.
 EOF
 }
@@ -1110,6 +1121,29 @@ octopus_trim_text() {
     printf '%s' "$value"
 }
 
+octopus_build_resolved_plan_block() {
+    local file_ref="$1"
+    local max_chars="${OCTOPUS_TANGLE_PLAN_CONTEXT_CHARS:-12000}"
+    local size
+
+    [[ "$max_chars" =~ ^[0-9]+$ ]] || max_chars=12000
+    max_chars=$((10#$max_chars))
+    [[ "$max_chars" -lt 200 ]] && max_chars=200
+
+    size=$(wc -c < "$file_ref" 2>/dev/null | tr -d '[:space:]')
+    size="${size:-0}"
+
+    echo "--- PLAN: ${file_ref} ---"
+    if [[ "$size" =~ ^[0-9]+$ && "$size" -gt "$max_chars" ]]; then
+        head -c "$max_chars" "$file_ref" 2>/dev/null || true
+        echo ""
+        echo "[... resolved plan truncated: original ${size} bytes, included ${max_chars} bytes ...]"
+    else
+        cat "$file_ref"
+    fi
+    echo "--- END PLAN ---"
+}
+
 octopus_should_resolve_markdown_plan_ref() {
     local prompt="$1"
     local raw_file_ref="$2"
@@ -1228,11 +1262,8 @@ tangle_develop() {
     done
     [[ "$noglob_was_set" == "false" ]] && set +f
     if [[ -n "$file_ref" && -f "$file_ref" ]] && octopus_should_resolve_markdown_plan_ref "$prompt" "$raw_file_ref" "$file_ref"; then
-        local file_content
-        file_content=$(<"$file_ref")
-        local plan_block="--- PLAN: ${file_ref} ---
-${file_content}
---- END PLAN ---"
+        local plan_block
+        plan_block=$(octopus_build_resolved_plan_block "$file_ref")
         local trimmed_prompt
         trimmed_prompt=$(octopus_trim_text "$prompt")
 

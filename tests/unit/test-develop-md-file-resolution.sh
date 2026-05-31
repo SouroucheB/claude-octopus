@@ -116,6 +116,33 @@ else
     test_fail "validate_tangle_results received raw prompt instead of resolved content"
 fi
 
+test_case "resolved plan content is size-bounded"
+large_plan_file="$RESULTS_DIR/large-plan.md"
+{
+    printf '%s\n' "Update scripts/lib/workflows.sh with a bounded-plan regression fix."
+    printf 'A%.0s' {1..2000}
+    printf '%s\n' "TAIL_SHOULD_NOT_BE_INJECTED"
+} > "$large_plan_file"
+OCTOPUS_TANGLE_PLAN_CONTEXT_CHARS=200 run_tangle_case "please implement $large_plan_file"
+if [[ "$CAPTURED_VALIDATE_PROMPT" == *"Update scripts/lib/workflows.sh with a bounded-plan regression fix."* ]] && \
+   [[ "$CAPTURED_VALIDATE_PROMPT" == *"resolved plan truncated"* ]] && \
+   [[ "$CAPTURED_VALIDATE_PROMPT" != *"TAIL_SHOULD_NOT_BE_INJECTED"* ]]; then
+    test_pass
+else
+    test_fail "large resolved plan was not capped before injection"
+fi
+unset OCTOPUS_TANGLE_PLAN_CONTEXT_CHARS
+
+test_case "tangle worker report contract is in the prompt prefix"
+large_original_task=$(printf 'A%.0s' {1..5000})
+subtask_prompt="$(build_tangle_subtask_prompt "$large_original_task" $'[CODING] Update page\nFiles: src/app/page.tsx')"
+prompt_prefix="${subtask_prompt:0:1200}"
+if [[ "$prompt_prefix" == *"## Verification"* && "$prompt_prefix" == *"TANGLE_REPORT_COMPLETE"* ]]; then
+    test_pass
+else
+    test_fail "Tangle report contract is only in the truncatable prompt tail"
+fi
+
 test_case "backlog source Markdown mention is not injected as a plan"
 backlog_file="$RESULTS_DIR/BACKLOG.md"
 cat > "$backlog_file" <<'EOF'

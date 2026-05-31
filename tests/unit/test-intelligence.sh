@@ -376,7 +376,7 @@ test_apply_consensus_quorum() {
     test_case "apply_consensus resolves by quorum for matching outputs"
 
     local similar_a="React TypeScript frontend component state management hooks"
-    local similar_b="React TypeScript frontend component architecture rendering hooks"
+    local similar_b="React TypeScript frontend component state management hooks rendering"
     local different="Python Django backend API REST PostgreSQL migrations"
 
     local result
@@ -387,6 +387,21 @@ test_apply_consensus_quorum() {
         test_pass
     else
         test_fail "Quorum should resolve to one of the similar outputs"
+    fi
+}
+
+test_apply_consensus_quorum_requires_measured_agreement() {
+    test_case "apply_consensus quorum falls back when all proposals disagree"
+
+    local a="React TypeScript frontend component architecture state management"
+    local b="Python Django backend API REST database PostgreSQL migrations"
+    local c="Kubernetes Docker deployment infrastructure cloud AWS scaling"
+
+    local result
+    result=$(apply_consensus "quorum" "$a" "$b" "$c" "choose architecture")
+
+    if assert_equals "MODERATOR_MODE" "$result" "Quorum must not claim 2/3 agreement with zero overlap"; then
+        test_pass
     fi
 }
 
@@ -741,6 +756,7 @@ test_detect_agreement_similar
 test_detect_agreement_different
 test_apply_consensus_moderator
 test_apply_consensus_quorum
+test_apply_consensus_quorum_requires_measured_agreement
 
 # File Path Validation
 test_check_file_references_existing

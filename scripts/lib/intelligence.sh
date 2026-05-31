@@ -582,6 +582,14 @@ resolve_by_quorum() {
     local output_b="$2"
     local output_c="$3"
 
+    local agreement
+    agreement=$(detect_agreement "$output_a" "$output_b" "$output_c")
+    if [[ "$agreement" == "disagree" ]]; then
+        log "WARN" "Quorum: no pair met the agreement threshold; falling back to moderator synthesis" 2>/dev/null || true
+        echo "MODERATOR_MODE"
+        return 0
+    fi
+
     local kw_a kw_b kw_c
     kw_a=$(extract_keywords "$output_a" 20)
     kw_b=$(extract_keywords "$output_b" 20)

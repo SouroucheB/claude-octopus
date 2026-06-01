@@ -87,6 +87,24 @@ else
 fi
 
 rm -f "$RESULTS_DIR"/*.md
+write_success_result "$RESULTS_DIR/codex-tangle-coverage-degraded-no-worktree-0.md" \
+    "Updated src/lib/templates/NA10_HANDLE_SILENCE.ts and validated tests."
+
+test_case "no worktree evidence falls back to prose coverage"
+if validate_tangle_results "coverage-degraded-no-worktree" "$original_prompt" >/dev/null 2>&1; then
+    test_fail "validation passed without worktree evidence or prose coverage for NA20"
+else
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-degraded-no-worktree.md")"
+    if [[ "$report" == *"Quality Gate: FAILED"* ]] && \
+       [[ "$report" == *"Missing Explicit File Coverage"* ]] && \
+       [[ "$report" == *"src/lib/templates/NA20_REQUEST_MISSING_INFO.ts"* ]]; then
+        test_pass
+    else
+        test_fail "no-worktree fallback did not report missing prose coverage"
+    fi
+fi
+
+rm -f "$RESULTS_DIR"/*.md
 write_success_result "$RESULTS_DIR/codex-tangle-coverage-0.md" \
     "Updated src/lib/templates/NA10_HANDLE_SILENCE.ts and src/lib/templates/NA20_REQUEST_MISSING_INFO.ts."
 

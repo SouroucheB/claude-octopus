@@ -131,6 +131,53 @@ else
     test_fail "validation failed despite a new worktree path"
 fi
 
+test_case "worktree evidence satisfies explicit coverage when worker prose omits a changed file"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-worktree-authoritative.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return null }\n' > src/app/page.tsx
+    printf 'export const details = true\n' > src/app/details.ts
+    cat > "$RESULTS_DIR/codex-tangle-evidence-worktree-authoritative.md" <<'EOF'
+# Agent: codex
+# Task ID: tangle-evidence-0
+# Role: implementer
+# Phase: tangle
+# Prompt: Original task context:
+Implement page and details.
+
+Assigned subtask:
+[CODING] Implement app page and details.
+Files: src/app/page.tsx, src/app/details.ts
+
+Execution instructions:
+- Complete the assigned subtask.
+# Started: Mon Jun  1 00:00:00 CEST 2026
+
+## Output
+## Worktree Changes
+- src/app/page.tsx
+
+## Verification
+- Targeted fixture verification completed.
+TANGLE_REPORT_COMPLETE
+
+## Status: SUCCESS
+EOF
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-worktree-authoritative" "Implement page and details in src/app/page.tsx and src/app/details.ts" "$RESULTS_DIR/before-worktree-authoritative.txt" >/dev/null 2>&1
+    grep -q "### Quality Gate: PASSED" "$RESULTS_DIR/tangle-validation-evidence-worktree-authoritative.md" && \
+    grep -q "src/app/details.ts" "$RESULTS_DIR/tangle-validation-evidence-worktree-authoritative.md" && \
+    ! grep -q "Missing Explicit File Coverage" "$RESULTS_DIR/tangle-validation-evidence-worktree-authoritative.md" && \
+    ! grep -q "Missing Worktree Evidence For Explicit Files" "$RESULTS_DIR/tangle-validation-evidence-worktree-authoritative.md"
+); then
+    test_pass
+else
+    test_fail "worktree-covered file omitted from worker prose still failed explicit coverage"
+fi
+
 test_case "explicit file coverage requires matching worktree path"
 if (
     cd "$REPO_DIR"
@@ -150,6 +197,54 @@ if (
     test_pass
 else
     test_fail "validation accepted claimed file coverage without matching worktree evidence"
+fi
+
+test_case "worktree evidence remains required when worker prose claims an unchanged file"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-prose-only-claim.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return null }\n' > src/app/page.tsx
+    cat > "$RESULTS_DIR/codex-tangle-evidence-prose-only-claim.md" <<'EOF'
+# Agent: codex
+# Task ID: tangle-evidence-0
+# Role: implementer
+# Phase: tangle
+# Prompt: Original task context:
+Implement page and details.
+
+Assigned subtask:
+[CODING] Implement app page and details.
+Files: src/app/page.tsx, src/app/details.ts
+
+Execution instructions:
+- Complete the assigned subtask.
+# Started: Mon Jun  1 00:00:00 CEST 2026
+
+## Output
+## Worktree Changes
+- src/app/page.tsx
+- src/app/details.ts
+
+## Verification
+- Targeted fixture verification completed.
+TANGLE_REPORT_COMPLETE
+
+## Status: SUCCESS
+EOF
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-prose-only-claim" "Implement page and details in src/app/page.tsx and src/app/details.ts" "$RESULTS_DIR/before-prose-only-claim.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    grep -q "### Quality Gate: FAILED" "$RESULTS_DIR/tangle-validation-evidence-prose-only-claim.md" && \
+    grep -q "Missing Worktree Evidence For Explicit Files" "$RESULTS_DIR/tangle-validation-evidence-prose-only-claim.md" && \
+    grep -q "src/app/details.ts" "$RESULTS_DIR/tangle-validation-evidence-prose-only-claim.md"
+); then
+    test_pass
+else
+    test_fail "worker prose claim was treated as coverage without matching worktree evidence"
 fi
 
 test_case "implementation prompt with verified current worktree path passes validation"
@@ -221,6 +316,30 @@ if (
     test_pass
 else
     test_fail "timeout with real worktree evidence was not distinguished from missing implementation evidence"
+fi
+
+test_case "timeout evidence uses worktree coverage when prose omits scoped file"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/codex-tangle-evidence-*.md "$RESULTS_DIR"/tangle-validation-evidence-*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-timeout-worktree-authoritative.txt"
+    mkdir -p src/app
+    printf 'export default function Page() { return "done" }\n' > src/app/page.tsx
+    write_timeout_result "$RESULTS_DIR/codex-tangle-evidence-timeout-worktree-authoritative.md" \
+        $'Changed the assigned file before timing out.\n\n## Verification\n- Partial verification completed before timeout.\nTANGLE_REPORT_COMPLETE' \
+        "implementer" \
+        $'Original task context:\nImplement the app change.\n\nAssigned subtask:\n[CODING] Implement app page\nFiles: src/app/page.tsx\n\nExecution instructions:'
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "evidence-timeout-worktree-authoritative" "Implement the app change in src/app/page.tsx" "$RESULTS_DIR/before-timeout-worktree-authoritative.txt" >/dev/null 2>&1
+    grep -q "### Quality Gate: WARNING" "$RESULTS_DIR/tangle-validation-evidence-timeout-worktree-authoritative.md" && \
+    grep -q "Evidence-backed timeouts: 1/1 implementation timeout result files" "$RESULTS_DIR/tangle-validation-evidence-timeout-worktree-authoritative.md" && \
+    ! grep -q "Missing Explicit File Coverage" "$RESULTS_DIR/tangle-validation-evidence-timeout-worktree-authoritative.md" && \
+    ! grep -q "Missing Worktree Evidence For Explicit Files" "$RESULTS_DIR/tangle-validation-evidence-timeout-worktree-authoritative.md"
+); then
+    test_pass
+else
+    test_fail "timeout was not promoted when worktree covered a scoped file omitted from prose"
 fi
 
 test_case "timeout evidence is not blocked by unrelated resolved plan references"

@@ -515,8 +515,11 @@ validate_tangle_results() {
             fi
         fi
 
+        local coverage_evidence_available="false"
+        [[ -n "$worktree_changes" ]] && coverage_evidence_available="true"
+
         local evidence_backed_timeout_count=0
-        if [[ "$implementation_timeout_count" -gt 0 && "$requires_worktree_changes" == "true" && -n "$worktree_changes" ]]; then
+        if [[ "$implementation_timeout_count" -gt 0 && "$requires_worktree_changes" == "true" ]]; then
             local timeout_result
             for timeout_result in "${implementation_timeout_results[@]}"; do
                 local timeout_integrity_issues timeout_scope_refs timeout_output_refs timeout_missing_output timeout_missing_worktree
@@ -534,13 +537,20 @@ validate_tangle_results() {
                     timeout_missing_output=$(check_file_ref_list_coverage "$timeout_scope_refs" "$timeout_output_refs")
                     timeout_missing_worktree=$(check_file_ref_list_coverage "$timeout_scope_refs" "$worktree_changes")
 
-                    if [[ -n "$timeout_missing_output" ]]; then
-                        missing_explicit_files+="$timeout_missing_output"
+                    if [[ "$coverage_evidence_available" == "true" ]]; then
+                        if [[ -n "$timeout_missing_output" ]]; then
+                            log WARN "advisory: timed-out worker did not enumerate scoped files in prose, but worktree evidence is authoritative: $(echo "$timeout_missing_output" | tr '\n' ' ')" 2>/dev/null || true
+                        fi
+                        if [[ -n "$timeout_missing_worktree" ]]; then
+                            missing_worktree_explicit_files+="$timeout_missing_worktree"
+                            continue
+                        fi
+                    else
+                        if [[ -n "$timeout_missing_output" ]]; then
+                            missing_explicit_files+="$timeout_missing_output"
+                            continue
+                        fi
                     fi
-                    if [[ -n "$timeout_missing_worktree" ]]; then
-                        missing_worktree_explicit_files+="$timeout_missing_worktree"
-                    fi
-                    [[ -n "$timeout_missing_output$timeout_missing_worktree" ]] && continue
                 fi
 
                 ((evidence_backed_timeout_count++)) || true
@@ -575,16 +585,21 @@ validate_tangle_results() {
             gate_color="${YELLOW}"
         fi
 
-        if [[ -n "$missing_explicit_files" ]]; then
-            gate_status="FAILED"
-            gate_color="${RED}"
-            log WARN "Tangle missing explicit file coverage: $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
-        fi
-
-        if [[ -n "$missing_worktree_explicit_files" ]]; then
-            gate_status="FAILED"
-            gate_color="${RED}"
-            log WARN "Tangle missing worktree evidence for explicit files: $(echo "$missing_worktree_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+        if [[ "$coverage_evidence_available" == "true" ]]; then
+            if [[ -n "$missing_worktree_explicit_files" ]]; then
+                gate_status="FAILED"
+                gate_color="${RED}"
+                log WARN "Tangle missing worktree evidence for explicit files: $(echo "$missing_worktree_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+            fi
+            if [[ -n "$missing_explicit_files" ]]; then
+                log WARN "advisory: required files not enumerated in worker prose (covered by worktree): $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+            fi
+        else
+            if [[ -n "$missing_explicit_files" ]]; then
+                gate_status="FAILED"
+                gate_color="${RED}"
+                log WARN "Tangle missing explicit file coverage (no worktree evidence): $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+            fi
         fi
 
         if [[ "$requires_worktree_changes" == "true" && -z "$worktree_changes" ]]; then
@@ -694,12 +709,12 @@ $challenge_result
 - Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
 
 ### Explicit File Coverage
-$(if [[ -n "$missing_explicit_files" ]]; then
-    echo "#### Missing Explicit File Coverage"
-    echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
-elif [[ -n "$missing_worktree_explicit_files" ]]; then
+$(if [[ "$coverage_evidence_available" == "true" && -n "$missing_worktree_explicit_files" ]]; then
     echo "#### Missing Worktree Evidence For Explicit Files"
     echo "$missing_worktree_explicit_files" | sed '/^$/d; s/^/- /'
+elif [[ "$coverage_evidence_available" != "true" && -n "$missing_explicit_files" ]]; then
+    echo "#### Missing Explicit File Coverage"
+    echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
 else
     echo "All explicit file references from the assigned implementation scope were covered by tangle outputs."
 fi)

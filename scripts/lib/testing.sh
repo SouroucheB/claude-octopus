@@ -104,6 +104,19 @@ extract_tangle_result_output() {
     ' "$result_file" 2>/dev/null || true
 }
 
+extract_tangle_result_coverage_corpus() {
+    local result_file="$1"
+
+    awk '
+        /^## Output[[:space:]]*$/ { capture = 1; next }
+        /^## Status:/ { capture = 0; next }
+        /^## Warnings\/Errors[[:space:]]*$/ { capture = 1; next }
+        /^## Error Log[[:space:]]*$/ { capture = 1; next }
+        /^# Completed:/ { capture = 0 }
+        capture { print }
+    ' "$result_file" 2>/dev/null || true
+}
+
 check_explicit_file_coverage() {
     local original_prompt="$1"
     local output_corpus="$2"
@@ -380,6 +393,7 @@ validate_tangle_results() {
         # Collect all results
         local results=""
         local result_outputs=""
+        local result_coverage_outputs=""
         local success_count=0
         local fail_count=0
         local implementation_timeout_count=0
@@ -388,6 +402,7 @@ validate_tangle_results() {
         local reasoning_fail_count=0
         local report_integrity_fail_count=0
         local report_integrity_issues=""
+        local success_scope_refs=""
         FAILED_SUBTASKS=""  # Reset for this validation pass (string-based)
 
         for result in "$RESULTS_DIR"/*-tangle-${task_group}*.md; do
@@ -460,10 +475,25 @@ validate_tangle_results() {
             fi
             results+="$(<"$result")\n\n---\n\n"
             result_outputs+="$(extract_tangle_result_output "$result")"$'\n'
+            result_coverage_outputs+="$(extract_tangle_result_coverage_corpus "$result")"$'\n'
+            if [[ "$counts_for_implementation" == "true" && "$result_succeeded" == "true" ]]; then
+                local result_scope_refs
+                result_scope_refs=$(extract_tangle_result_scope_refs "$result" "$original_prompt")
+                if [[ -n "$result_scope_refs" ]]; then
+                    success_scope_refs=$(printf '%s\n%s\n' "$success_scope_refs" "$result_scope_refs" | sed '/^$/d' | sort -u)
+                fi
+            fi
         done
 
-        local missing_explicit_files
-        missing_explicit_files=$(check_explicit_file_coverage "$original_prompt" "$result_outputs")
+        local explicit_file_coverage_refs
+        explicit_file_coverage_refs="$success_scope_refs"
+        if [[ -z "$explicit_file_coverage_refs" ]]; then
+            explicit_file_coverage_refs=$(extract_explicit_file_refs "$original_prompt")
+        fi
+
+        local missing_explicit_files result_output_refs
+        result_output_refs=$(extract_file_refs_from_text "$result_coverage_outputs")
+        missing_explicit_files=$(check_file_ref_list_coverage "$explicit_file_coverage_refs" "$result_output_refs")
         local worktree_changes=""
         local current_worktree_evidence=""
         local worktree_change_mode="new"
@@ -474,14 +504,14 @@ validate_tangle_results() {
             requires_worktree_changes=true
             worktree_changes=$(check_tangle_worktree_changes "$worktree_before_file")
             if [[ -z "$worktree_changes" ]]; then
-                current_worktree_evidence=$(check_tangle_current_worktree_evidence "$result_outputs")
+                current_worktree_evidence=$(check_tangle_current_worktree_evidence "$result_coverage_outputs")
                 if [[ -n "$current_worktree_evidence" ]]; then
                     worktree_changes="$current_worktree_evidence"
                     worktree_change_mode="current"
                 fi
             fi
             if [[ -n "$worktree_changes" ]]; then
-                missing_worktree_explicit_files=$(check_explicit_file_worktree_coverage "$original_prompt" "$worktree_changes")
+                missing_worktree_explicit_files=$(check_file_ref_list_coverage "$explicit_file_coverage_refs" "$worktree_changes")
             fi
         fi
 
@@ -500,7 +530,7 @@ validate_tangle_results() {
 
                 timeout_scope_refs=$(extract_tangle_result_scope_refs "$timeout_result" "$original_prompt")
                 if [[ -n "$timeout_scope_refs" ]]; then
-                    timeout_output_refs=$(extract_file_refs_from_text "$(extract_tangle_result_output "$timeout_result")")
+                    timeout_output_refs=$(extract_file_refs_from_text "$(extract_tangle_result_coverage_corpus "$timeout_result")")
                     timeout_missing_output=$(check_file_ref_list_coverage "$timeout_scope_refs" "$timeout_output_refs")
                     timeout_missing_worktree=$(check_file_ref_list_coverage "$timeout_scope_refs" "$worktree_changes")
 
@@ -671,7 +701,7 @@ elif [[ -n "$missing_worktree_explicit_files" ]]; then
     echo "#### Missing Worktree Evidence For Explicit Files"
     echo "$missing_worktree_explicit_files" | sed '/^$/d; s/^/- /'
 else
-    echo "All explicit file references from the task were covered by tangle outputs."
+    echo "All explicit file references from the assigned implementation scope were covered by tangle outputs."
 fi)
 
 ### Worktree Change Evidence

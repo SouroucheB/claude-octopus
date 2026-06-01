@@ -165,13 +165,127 @@ if validate_tangle_results "coverage-audit" "$read_only_audit_prompt" >/dev/null
     report="$(cat "$RESULTS_DIR/tangle-validation-coverage-audit.md")"
     if [[ "$report" == *"Quality Gate: PASSED"* ]] && \
        [[ "$report" != *"Missing Explicit File Coverage"* ]] && \
-       [[ "$report" == *"All explicit file references from the task were covered"* ]]; then
+       [[ "$report" == *"All explicit file references from the assigned implementation scope were covered"* ]]; then
         test_pass
     else
         test_fail "audit coverage report still treated read-only evidence as missing coverage"
     fi
 else
     test_fail "validation failed because read-only evidence files were treated as write coverage"
+fi
+
+rm -f "$RESULTS_DIR"/*.md
+inspect_only_prompt=$(cat <<'EOF'
+Task: fix Gmail threading.
+
+Inspect outbound paths:
+- src/services/commands/sendDraft.server.ts
+- src/services/commands/addEmail.server.ts
+- src/lib/email/sendEmail.server.ts
+
+Implement the local threading fix.
+EOF
+)
+
+cat > "$RESULTS_DIR/codex-tangle-coverage-inspect-scope-0.md" <<'EOF'
+# Agent: codex
+# Task ID: tangle-coverage-inspect-scope-0
+# Role: implementer
+# Phase: tangle
+# Prompt: Original task context:
+Inspect outbound paths:
+- src/services/commands/sendDraft.server.ts
+- src/services/commands/addEmail.server.ts
+- src/lib/email/sendEmail.server.ts
+
+Assigned subtask:
+[CODING] Implement threading propagation.
+Files: src/services/commands/sendDraft.server.ts, src/lib/email/sendEmail.server.ts
+
+Execution instructions:
+- Complete the assigned subtask.
+# Started: Mon Jun  1 00:00:00 CEST 2026
+
+## Output
+## Worktree Changes
+- src/services/commands/sendDraft.server.ts
+- src/lib/email/sendEmail.server.ts
+
+## Integration Evidence
+- Threading metadata is propagated through sendDraft and sendEmail.
+
+## Verification
+- Targeted threading tests pass.
+TANGLE_REPORT_COMPLETE
+
+## Status: SUCCESS
+EOF
+
+test_case "success coverage uses assigned subtask scope, not inspect-only original prompt refs"
+if validate_tangle_results "coverage-inspect-scope" "$inspect_only_prompt" >/dev/null 2>&1; then
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-inspect-scope.md")"
+    coverage_section="$(sed -n '/### Explicit File Coverage/,/### Worktree Change Evidence/p' "$RESULTS_DIR/tangle-validation-coverage-inspect-scope.md")"
+    if [[ "$report" == *"Quality Gate: PASSED"* ]] && \
+       [[ "$coverage_section" != *"src/services/commands/addEmail.server.ts"* ]]; then
+        test_pass
+    else
+        test_fail "inspect-only addEmail.server.ts still appeared in missing success-path coverage"
+    fi
+else
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-inspect-scope.md" 2>/dev/null || true)"
+    if [[ "$report" == *"src/services/commands/addEmail.server.ts"* ]]; then
+        test_fail "validation failed because inspect-only addEmail.server.ts was required as success-path coverage"
+    else
+        test_fail "validation failed unexpectedly for assigned-scope success coverage"
+    fi
+fi
+
+rm -f "$RESULTS_DIR"/*.md
+cat > "$RESULTS_DIR/codex-tangle-coverage-stderr-proof-0.md" <<'EOF'
+# Agent: codex
+# Task ID: tangle-coverage-stderr-proof-0
+# Role: implementer
+# Phase: tangle
+# Prompt: Original task context:
+Update src/app/page.tsx.
+
+Assigned subtask:
+[CODING] Implement page update.
+Files: src/app/page.tsx
+
+Execution instructions:
+- Complete the assigned subtask.
+# Started: Mon Jun  1 00:00:00 CEST 2026
+
+## Output
+Codex response was emitted on stderr; see Warnings/Errors transcript below.
+
+## Verification
+- Targeted fixture verification completed.
+TANGLE_REPORT_COMPLETE
+
+## Status: SUCCESS
+
+## Warnings/Errors
+## Worktree Changes
+- src/app/page.tsx
+
+## Verification
+- stderr transcript includes the worktree evidence.
+TANGLE_REPORT_COMPLETE
+EOF
+
+test_case "success coverage accepts file evidence emitted on stderr"
+if validate_tangle_results "coverage-stderr-proof" "Update src/app/page.tsx." >/dev/null 2>&1; then
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-stderr-proof.md")"
+    if [[ "$report" == *"Quality Gate: PASSED"* ]] && \
+       [[ "$report" != *"Missing Explicit File Coverage"* ]]; then
+        test_pass
+    else
+        test_fail "stderr file evidence was still reported as missing explicit coverage"
+    fi
+else
+    test_fail "validation failed even though stderr transcript covered the assigned file"
 fi
 
 test_summary

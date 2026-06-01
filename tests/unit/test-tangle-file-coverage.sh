@@ -45,7 +45,15 @@ evaluate_quality_branch() { echo "proceed"; }
 get_gate_threshold() { echo "75"; }
 
 RESULTS_DIR="$(mktemp -d)"
-trap 'rm -rf "$RESULTS_DIR"' EXIT
+REPO_DIR="$(mktemp -d)"
+trap 'rm -rf "$RESULTS_DIR" "$REPO_DIR"' EXIT
+
+git -C "$REPO_DIR" init -q
+git -C "$REPO_DIR" config user.email test@example.com
+git -C "$REPO_DIR" config user.name "Octopus Test"
+printf 'base\n' > "$REPO_DIR/README.md"
+git -C "$REPO_DIR" add README.md
+git -C "$REPO_DIR" commit -q -m init
 
 write_success_result() {
     local file="$1"
@@ -59,6 +67,36 @@ write_success_result() {
 # Role: implementer
 # Phase: tangle
 # Prompt: Generic implementation slice
+
+## Output
+${output}
+
+## Status: SUCCESS
+EOF
+}
+
+write_scoped_success_result() {
+    local file="$1"
+    local scope="$2"
+    local output="$3"
+    if [[ "$output" != *"## Verification"* ]]; then
+        output="${output}"$'\n\n## Verification\n- Test fixture verification completed.\nTANGLE_REPORT_COMPLETE'
+    fi
+    cat > "$file" <<EOF
+# Agent: codex
+# Task ID: tangle-coverage-0
+# Role: implementer
+# Phase: tangle
+# Prompt: Original task context:
+Implement scoped file coverage fixture.
+
+Assigned subtask:
+[CODING] Implement scoped fixture.
+Files: ${scope}
+
+Execution instructions:
+- Complete the assigned subtask.
+# Started: Mon Jun  1 00:00:00 CEST 2026
 
 ## Output
 ${output}
@@ -304,6 +342,82 @@ if validate_tangle_results "coverage-stderr-proof" "Update src/app/page.tsx." >/
     fi
 else
     test_fail "validation failed even though stderr transcript covered the assigned file"
+fi
+
+test_case "glob scope is satisfied by matching concrete spec worktree change"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-glob-spec.txt"
+    mkdir -p src/services/commands/__tests__
+    printf 'test("foo", () => {})\n' > src/services/commands/__tests__/foo.spec.ts
+    write_scoped_success_result "$RESULTS_DIR/codex-tangle-coverage-glob-spec-0.md" \
+        "src/services/commands/**/*.spec.ts" \
+        $'## Worktree Changes\n- src/services/commands/__tests__/foo.spec.ts'
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "coverage-glob-spec" "Implement tests in src/services/commands/**/*.spec.ts" "$RESULTS_DIR/before-glob-spec.txt" >/dev/null 2>&1
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-glob-spec.md")"
+    coverage_section="$(sed -n '/### Explicit File Coverage/,/### Worktree Change Evidence/p' "$RESULTS_DIR/tangle-validation-coverage-glob-spec.md")"
+    [[ "$report" == *"Quality Gate: PASSED"* ]] && \
+    [[ "$coverage_section" != *".spec.ts"* ]] && \
+    [[ "$coverage_section" != *"Out-of-Scope Worktree Changes"* ]] && \
+    [[ "$coverage_section" != *"Missing Worktree Evidence For Explicit Files"* ]]
+); then
+    test_pass
+else
+    test_fail "glob declared scope was not satisfied by a concrete matching spec file"
+fi
+
+test_case "declared-but-untouched scope files are advisory under containment"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-containment-subset.txt"
+    mkdir -p src/services/commands src/lib/email
+    printf 'send draft\n' > src/services/commands/sendDraft.server.ts
+    printf 'send email\n' > src/lib/email/sendEmail.server.ts
+    write_scoped_success_result "$RESULTS_DIR/codex-tangle-coverage-containment-subset-0.md" \
+        "src/services/commands/sendDraft.server.ts, src/lib/email/sendEmail.server.ts, src/services/commands/addEmail.server.ts" \
+        $'## Worktree Changes\n- src/services/commands/sendDraft.server.ts\n- src/lib/email/sendEmail.server.ts\n\n## Integration Evidence\n- src/services/commands/addEmail.server.ts was inspected and ruled out because it does not call sendEmail.'
+    RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "coverage-containment-subset" "Implement threading in src/services/commands/sendDraft.server.ts, src/lib/email/sendEmail.server.ts, and inspect src/services/commands/addEmail.server.ts" "$RESULTS_DIR/before-containment-subset.txt" >/dev/null 2>&1
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-containment-subset.md")"
+    [[ "$report" == *"Quality Gate: PASSED"* ]] && \
+    [[ "$report" == *"Declared-but-untouched (advisory)"* ]] && \
+    [[ "$report" == *"src/services/commands/addEmail.server.ts"* ]] && \
+    [[ "$report" != *"Out-of-Scope Worktree Changes"* ]]
+); then
+    test_pass
+else
+    test_fail "declared but untouched file was still treated as a hard coverage failure"
+fi
+
+test_case "new out-of-scope worktree changes fail containment"
+if (
+    cd "$REPO_DIR"
+    rm -f "$RESULTS_DIR"/*.md
+    git reset --hard -q HEAD
+    git clean -fdq
+    snapshot_tangle_worktree_paths > "$RESULTS_DIR/before-out-of-scope.txt"
+    mkdir -p src/services/commands src/app
+    printf 'send draft\n' > src/services/commands/sendDraft.server.ts
+    printf 'page\n' > src/app/page.tsx
+    write_scoped_success_result "$RESULTS_DIR/codex-tangle-coverage-out-of-scope-0.md" \
+        "src/services/commands/sendDraft.server.ts" \
+        $'## Worktree Changes\n- src/services/commands/sendDraft.server.ts\n- src/app/page.tsx'
+    if RESULTS_DIR="$RESULTS_DIR" validate_tangle_results "coverage-out-of-scope" "Implement threading in src/services/commands/sendDraft.server.ts" "$RESULTS_DIR/before-out-of-scope.txt" >/dev/null 2>&1; then
+        exit 1
+    fi
+    report="$(cat "$RESULTS_DIR/tangle-validation-coverage-out-of-scope.md")"
+    [[ "$report" == *"Quality Gate: FAILED"* ]] && \
+    [[ "$report" == *"Out-of-Scope Worktree Changes"* ]] && \
+    [[ "$report" == *"src/app/page.tsx"* ]]
+); then
+    test_pass
+else
+    test_fail "out-of-scope worktree change did not fail containment"
 fi
 
 test_summary

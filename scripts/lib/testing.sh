@@ -9,8 +9,9 @@ extract_file_refs_from_text() {
     local text="$1"
 
     printf '%s\n' "$text" \
-        | grep -oE '((src|lib|app|test|tests|docs|pkg|cmd|internal|scripts|config|public|assets|components|pages|utils|hooks|services|models|controllers|routes|middleware|api)/[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]{1,8}|\./[a-zA-Z0-9_./-]+\.[a-zA-Z0-9]{1,8}|[a-zA-Z0-9_.-]+\.(md|markdown|txt|json|ya?ml|sh|bash|ts|tsx|js|jsx|mjs|cjs|css|scss|html|py|rb|go|rs|java|kt|swift|sql|toml))' 2>/dev/null \
+        | grep -oE '((src|lib|app|test|tests|docs|pkg|cmd|internal|scripts|config|public|assets|components|pages|utils|hooks|services|models|controllers|routes|middleware|api)/[a-zA-Z0-9_./*?{}-]+\.[a-zA-Z0-9]{1,8}|\./[a-zA-Z0-9_./*?{}-]+\.[a-zA-Z0-9]{1,8}|[a-zA-Z0-9_.-]+\.(md|markdown|txt|json|ya?ml|sh|bash|ts|tsx|js|jsx|mjs|cjs|css|scss|html|py|rb|go|rs|java|kt|swift|sql|toml))' 2>/dev/null \
         | sed 's#^\./##' \
+        | grep -vE '^\.[^/]*$' \
         | head -100 \
         | sort -u || true
 }
@@ -117,6 +118,17 @@ extract_tangle_result_coverage_corpus() {
     ' "$result_file" 2>/dev/null || true
 }
 
+extract_tangle_result_worktree_claims() {
+    local result_file="$1"
+
+    awk '
+        /^## Worktree Changes[[:space:]]*$/ { capture = 1; next }
+        /^## [A-Za-z0-9 _\/-]+[[:space:]]*$/ && capture { capture = 0 }
+        /^## Status:/ { capture = 0 }
+        capture { print }
+    ' "$result_file" 2>/dev/null || true
+}
+
 check_explicit_file_coverage() {
     local original_prompt="$1"
     local output_corpus="$2"
@@ -162,13 +174,72 @@ check_file_ref_list_coverage() {
 
     while IFS= read -r ref; do
         [[ -z "$ref" ]] && continue
-        case $'\n'"$covered_refs"$'\n' in
-            *$'\n'"$ref"$'\n'*) ;;
-            *) missing+="${ref}"$'\n' ;;
-        esac
+        local matched=0 cov
+        while IFS= read -r cov; do
+            [[ -z "$cov" ]] && continue
+            if file_ref_matches_path "$ref" "$cov"; then
+                matched=1
+                break
+            fi
+        done <<< "$covered_refs"
+        [[ "$matched" -eq 0 ]] && missing+="${ref}"$'\n'
     done <<< "$required_refs"
 
     printf '%s' "$missing"
+}
+
+file_ref_is_glob() {
+    local ref="$1"
+
+    case "$ref" in
+        *'*'*|*'?'*|*'['*|*']'*|*'{'*|*'}'*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+file_ref_matches_path() {
+    local ref="$1"
+    local path="$2"
+    local normalized_ref
+
+    if file_ref_is_glob "$ref"; then
+        # shellcheck disable=SC2053
+        [[ "$path" == $ref ]] && return 0
+        if [[ "$ref" == *"**/"* ]]; then
+            normalized_ref="${ref//\*\*\//}"
+            # shellcheck disable=SC2053
+            [[ "$path" == $normalized_ref ]] && return 0
+        fi
+        return 1
+    fi
+
+    [[ "$path" == "$ref" ]]
+}
+
+check_path_list_within_file_refs() {
+    local paths="$1"
+    local allowed_refs="$2"
+    local out_of_scope=""
+    local path
+
+    [[ -z "$allowed_refs" ]] && return 0
+
+    while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        local matched=0 ref
+        while IFS= read -r ref; do
+            [[ -z "$ref" ]] && continue
+            if file_ref_matches_path "$ref" "$path"; then
+                matched=1
+                break
+            fi
+        done <<< "$allowed_refs"
+        [[ "$matched" -eq 0 ]] && out_of_scope+="${path}"$'\n'
+    done <<< "$paths"
+
+    printf '%s' "$out_of_scope"
 }
 
 extract_tangle_result_prompt_context() {
@@ -185,6 +256,26 @@ extract_tangle_result_prompt_context() {
         /^## Output[[:space:]]*$/ { capture = 0 }
         capture { print }
     ' "$result_file" 2>/dev/null || true
+}
+
+extract_tangle_result_assigned_scope_refs() {
+    local result_file="$1"
+    local prompt_context assigned_subtask scoped_refs
+
+    prompt_context=$(extract_tangle_result_prompt_context "$result_file")
+    assigned_subtask=$(printf '%s\n' "$prompt_context" | awk '
+        /^Assigned subtask:[[:space:]]*$/ { capture = 1; next }
+        /^Execution instructions:[[:space:]]*$/ { capture = 0 }
+        capture { print }
+    ')
+
+    if [[ -n "$assigned_subtask" ]]; then
+        scoped_refs=$(extract_explicit_file_refs "$assigned_subtask")
+        if [[ -n "$scoped_refs" ]]; then
+            printf '%s\n' "$scoped_refs" | sort -u
+            return 0
+        fi
+    fi
 }
 
 extract_tangle_result_scope_refs() {
@@ -394,6 +485,7 @@ validate_tangle_results() {
         local results=""
         local result_outputs=""
         local result_coverage_outputs=""
+        local result_worktree_claim_outputs=""
         local success_count=0
         local fail_count=0
         local implementation_timeout_count=0
@@ -403,6 +495,7 @@ validate_tangle_results() {
         local report_integrity_fail_count=0
         local report_integrity_issues=""
         local success_scope_refs=""
+        local coverage_scope_source="fallback"
         FAILED_SUBTASKS=""  # Reset for this validation pass (string-based)
 
         for result in "$RESULTS_DIR"/*-tangle-${task_group}*.md; do
@@ -476,9 +569,16 @@ validate_tangle_results() {
             results+="$(<"$result")\n\n---\n\n"
             result_outputs+="$(extract_tangle_result_output "$result")"$'\n'
             result_coverage_outputs+="$(extract_tangle_result_coverage_corpus "$result")"$'\n'
+            result_worktree_claim_outputs+="$(extract_tangle_result_worktree_claims "$result")"$'\n'
             if [[ "$counts_for_implementation" == "true" && "$result_succeeded" == "true" ]]; then
-                local result_scope_refs
-                result_scope_refs=$(extract_tangle_result_scope_refs "$result" "$original_prompt")
+                local result_scope_refs assigned_scope_refs
+                assigned_scope_refs=$(extract_tangle_result_assigned_scope_refs "$result")
+                if [[ -n "$assigned_scope_refs" ]]; then
+                    result_scope_refs="$assigned_scope_refs"
+                    coverage_scope_source="assigned"
+                else
+                    result_scope_refs=$(extract_tangle_result_scope_refs "$result" "$original_prompt")
+                fi
                 if [[ -n "$result_scope_refs" ]]; then
                     success_scope_refs=$(printf '%s\n%s\n' "$success_scope_refs" "$result_scope_refs" | sed '/^$/d' | sort -u)
                 fi
@@ -494,10 +594,15 @@ validate_tangle_results() {
         local missing_explicit_files result_output_refs
         result_output_refs=$(extract_file_refs_from_text "$result_coverage_outputs")
         missing_explicit_files=$(check_file_ref_list_coverage "$explicit_file_coverage_refs" "$result_output_refs")
+        local claimed_worktree_refs claimed_missing_worktree_files=""
+        claimed_worktree_refs=$(extract_file_refs_from_text "$result_worktree_claim_outputs")
         local worktree_changes=""
         local current_worktree_evidence=""
         local worktree_change_mode="new"
         local missing_worktree_explicit_files=""
+        local declared_untouched_explicit_files=""
+        local out_of_scope_worktree_changes=""
+        local advisory_out_of_scope_worktree_changes=""
         local requires_worktree_changes=false
         if [[ -n "$worktree_before_file" && -f "$worktree_before_file" ]] && \
            tangle_prompt_requires_worktree_changes "$original_prompt"; then
@@ -511,7 +616,19 @@ validate_tangle_results() {
                 fi
             fi
             if [[ -n "$worktree_changes" ]]; then
-                missing_worktree_explicit_files=$(check_file_ref_list_coverage "$explicit_file_coverage_refs" "$worktree_changes")
+                if [[ "$coverage_scope_source" == "assigned" ]]; then
+                    declared_untouched_explicit_files=$(check_file_ref_list_coverage "$explicit_file_coverage_refs" "$worktree_changes")
+                else
+                    missing_worktree_explicit_files=$(check_file_ref_list_coverage "$explicit_file_coverage_refs" "$worktree_changes")
+                fi
+                out_of_scope_worktree_changes=$(check_path_list_within_file_refs "$worktree_changes" "$explicit_file_coverage_refs")
+                claimed_missing_worktree_files=$(check_file_ref_list_coverage "$claimed_worktree_refs" "$worktree_changes")
+                if [[ "$worktree_change_mode" == "current" ]]; then
+                    advisory_out_of_scope_worktree_changes="$out_of_scope_worktree_changes"
+                    [[ -n "$claimed_missing_worktree_files" ]] && advisory_out_of_scope_worktree_changes=$(printf '%s\n%s\n' "$advisory_out_of_scope_worktree_changes" "$claimed_missing_worktree_files" | sed '/^$/d' | sort -u)
+                    claimed_missing_worktree_files=""
+                    out_of_scope_worktree_changes=""
+                fi
             fi
         fi
 
@@ -586,10 +703,26 @@ validate_tangle_results() {
         fi
 
         if [[ "$coverage_evidence_available" == "true" ]]; then
+            if [[ -n "$out_of_scope_worktree_changes" ]]; then
+                gate_status="FAILED"
+                gate_color="${RED}"
+                log WARN "Tangle produced out-of-scope worktree changes: $(echo "$out_of_scope_worktree_changes" | tr '\n' ' ')" 2>/dev/null || true
+            fi
+            if [[ -n "$claimed_missing_worktree_files" ]]; then
+                gate_status="FAILED"
+                gate_color="${RED}"
+                log WARN "Tangle worker claimed worktree changes missing from git evidence: $(echo "$claimed_missing_worktree_files" | tr '\n' ' ')" 2>/dev/null || true
+            fi
             if [[ -n "$missing_worktree_explicit_files" ]]; then
                 gate_status="FAILED"
                 gate_color="${RED}"
                 log WARN "Tangle missing worktree evidence for explicit files: $(echo "$missing_worktree_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+            fi
+            if [[ -n "$declared_untouched_explicit_files" ]]; then
+                log WARN "advisory: declared scope files were not touched by tangle worktree changes: $(echo "$declared_untouched_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
+            fi
+            if [[ -n "$advisory_out_of_scope_worktree_changes" ]]; then
+                log WARN "advisory: current worktree evidence includes out-of-scope paths, but no baseline exists to attribute them to tangle: $(echo "$advisory_out_of_scope_worktree_changes" | tr '\n' ' ')" 2>/dev/null || true
             fi
             if [[ -n "$missing_explicit_files" ]]; then
                 log WARN "advisory: required files not enumerated in worker prose (covered by worktree): $(echo "$missing_explicit_files" | tr '\n' ' ')" 2>/dev/null || true
@@ -709,12 +842,40 @@ $challenge_result
 - Retry Attempts: ${quality_retry_count}/${MAX_QUALITY_RETRIES}
 
 ### Explicit File Coverage
-$(if [[ "$coverage_evidence_available" == "true" && -n "$missing_worktree_explicit_files" ]]; then
+$(if [[ "$coverage_evidence_available" == "true" && -n "$out_of_scope_worktree_changes" ]]; then
+    echo "#### Out-of-Scope Worktree Changes"
+    echo "$out_of_scope_worktree_changes" | sed '/^$/d; s/^/- /'
+    if [[ -n "$claimed_missing_worktree_files$missing_worktree_explicit_files" ]]; then
+        echo
+        echo "#### Missing Worktree Evidence For Explicit Files"
+        printf '%s\n%s\n' "$claimed_missing_worktree_files" "$missing_worktree_explicit_files" | sed '/^$/d' | sort -u | sed 's/^/- /'
+    fi
+    if [[ -n "$declared_untouched_explicit_files" ]]; then
+        echo
+        echo "#### Declared-but-untouched (advisory)"
+        echo "$declared_untouched_explicit_files" | sed '/^$/d; s/^/- /'
+    fi
+elif [[ "$coverage_evidence_available" == "true" && -n "$claimed_missing_worktree_files$missing_worktree_explicit_files" ]]; then
     echo "#### Missing Worktree Evidence For Explicit Files"
-    echo "$missing_worktree_explicit_files" | sed '/^$/d; s/^/- /'
+    printf '%s\n%s\n' "$claimed_missing_worktree_files" "$missing_worktree_explicit_files" | sed '/^$/d' | sort -u | sed 's/^/- /'
+    if [[ -n "$declared_untouched_explicit_files" ]]; then
+        echo
+        echo "#### Declared-but-untouched (advisory)"
+        echo "$declared_untouched_explicit_files" | sed '/^$/d; s/^/- /'
+    fi
 elif [[ "$coverage_evidence_available" != "true" && -n "$missing_explicit_files" ]]; then
     echo "#### Missing Explicit File Coverage"
     echo "$missing_explicit_files" | sed '/^$/d; s/^/- /'
+elif [[ "$coverage_evidence_available" == "true" && -n "$declared_untouched_explicit_files$advisory_out_of_scope_worktree_changes" ]]; then
+    if [[ -n "$declared_untouched_explicit_files" ]]; then
+        echo "#### Declared-but-untouched (advisory)"
+        echo "$declared_untouched_explicit_files" | sed '/^$/d; s/^/- /'
+    fi
+    if [[ -n "$advisory_out_of_scope_worktree_changes" ]]; then
+        [[ -n "$declared_untouched_explicit_files" ]] && echo
+        echo "#### Out-of-Scope Worktree Changes (advisory)"
+        echo "$advisory_out_of_scope_worktree_changes" | sed '/^$/d; s/^/- /'
+    fi
 else
     echo "All explicit file references from the assigned implementation scope were covered by tangle outputs."
 fi)

@@ -31,7 +31,16 @@ un fichier `canary.txt`, un `task.md`, puis un script et un log dans
 ### Run produit CoproOS
 
 Pour un vrai Embrace sur CoproOS, ne pas creer la branche ni le checkout produit
-dans `/private/tmp`. La branche de travail doit exister dans le checkout produit:
+dans `/private/tmp`. `/private/tmp` sert uniquement au script de lancement et au
+log `tee`.
+
+Il y a deux modes valides.
+
+#### Mode A — checkout CoproOS principal disponible
+
+Utiliser ce mode quand `/Users/sourouche/Documents/CoproOS` n'est pas utilise
+pour un autre travail en parallele. La branche de travail existe alors dans le
+checkout produit principal:
 
 `/Users/sourouche/Documents/CoproOS`
 
@@ -53,6 +62,71 @@ Process valide le 2026-05-30:
 Exemple de commande finale pour un run produit: le script et le log peuvent
 rester dans `/private/tmp`, mais `REPO` doit pointer vers
 `/Users/sourouche/Documents/CoproOS`.
+
+#### Mode B — travail parallele sur CoproOS en cours
+
+Utiliser ce mode quand le checkout principal est deja utilise pour une autre
+tache. Ne pas lancer Embrace dans `/Users/sourouche/Documents/CoproOS` et ne pas
+faire de `git switch` dans ce checkout.
+
+Process valide le 2026-06-08:
+
+1. Creer un clone local durable et dedie, hors `/private/tmp`, par exemple:
+   `/Users/sourouche/Documents/CoproOS-embrace-gmail-<plugin>`.
+2. Dans ce clone isole, creer une branche dediee au run depuis le commit de base
+   attendu, par exemple:
+   `embrace/gmail-threading-debug-rerun-<plugin>`.
+3. Si un run precedent dans le clone isole a laisse un diff utile, le preserver
+   avant de repartir de la base (`git commit -m "wip(embrace): preserve ..."`).
+4. Verifier que le clone isole est sur la branche attendue, au commit attendu,
+   et clean avant lancement.
+5. Verifier que le plugin actif est au commit attendu et clean. Si le plugin a
+   recu un fix, le commit doit etre fait avant de preparer le script de run.
+6. Le script de lancement dans `/private/tmp` doit pointer `REPO` vers le clone
+   isole, pas vers `/Users/sourouche/Documents/CoproOS`.
+7. Le prompt du script doit interdire explicitement de toucher au checkout actif:
+   `/Users/sourouche/Documents/CoproOS`.
+8. Si le clone ne contient pas `node_modules`, utiliser un symlink vers le
+   `node_modules` du checkout principal plutot que de lancer une install longue,
+   si les versions de fichiers/package sont compatibles.
+
+Exemple de preflight pour le mode B:
+
+```bash
+git clone --no-hardlinks /Users/sourouche/Documents/CoproOS /Users/sourouche/Documents/CoproOS-embrace-gmail-<plugin>
+cd /Users/sourouche/Documents/CoproOS-embrace-gmail-<plugin>
+git switch -c embrace/gmail-threading-debug-rerun-<plugin> <base-commit>
+ln -s /Users/sourouche/Documents/CoproOS/node_modules node_modules
+git status --short --branch
+```
+
+Le script doit inclure des guards equivalent a:
+
+```bash
+REPO="/Users/sourouche/Documents/CoproOS-embrace-gmail-<plugin>"
+EXPECTED_REPO_BRANCH="embrace/gmail-threading-debug-rerun-<plugin>"
+EXPECTED_REPO_COMMIT="<base-commit>"
+EXPECTED_PLUGIN_COMMIT="<plugin>"
+```
+
+#### Commande finale: toujours une seule ligne
+
+La commande remise a Claude doit tenir sur une seule ligne. Ne jamais couper le
+chemin du log `tee` sur deux lignes: cela produit des faux `exit 127` parce que
+le shell interprete la seconde ligne comme une nouvelle commande.
+
+Correct:
+
+```bash
+bash /private/tmp/run-octo-embrace-coproos-gmail-threading-rerun-<plugin>.sh 2>&1 | tee /private/tmp/octo-embrace-coproos-gmail-threading-rerun-<plugin>.log
+```
+
+Incorrect:
+
+```bash
+bash /private/tmp/run-octo-embrace-coproos-gmail-threading-rerun-<plugin>.sh 2>&1 | tee /private/tmp/octo-
+embrace-coproos-gmail-threading-rerun-<plugin>.log
+```
 
 ## Preconditions canary
 
